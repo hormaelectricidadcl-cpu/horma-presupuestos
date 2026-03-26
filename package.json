@@ -1,0 +1,25 @@
+{
+  "name": "horma-presupuestos-v2",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3",
+    "vite": "^7.1.7"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
+    "openai": "^6.2.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  }
+}
