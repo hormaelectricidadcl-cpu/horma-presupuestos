@@ -47,6 +47,7 @@ Reglas obligatorias:
 - Usa "MANO DE OBRA" para instalación, armado, configuración, reemplazo, montaje, canalización, alambrado, revisión o diagnóstico.
 - Mantén siglas técnicas como NVR.
 - Corrige ortografía básica en la descripción.
+- IMPORTANTE: Si un ítem NO tiene precio explícito en el texto, NO lo incluyas en el resultado. Solo incluye ítems con un valor numérico de precio claramente mencionado.
 - Formato exacto:
 
 [
@@ -143,15 +144,17 @@ ${texto}
       };
     }
 
-    const itemsNormalizados = items.map((item) => ({
-      categoria:
-        String(item.categoria || '').toUpperCase() === 'MANO DE OBRA'
-          ? 'MANO DE OBRA'
-          : 'MATERIALES',
-      descripcion: String(item.descripcion || '').trim(),
-      cantidad: Number(item.cantidad) > 0 ? Number(item.cantidad) : 1,
-      precioUnitario: Number(item.precioUnitario) > 0 ? Number(item.precioUnitario) : 0
-    }));
+    const itemsNormalizados = items
+      .filter((item) => Number(item.precioUnitario) > 0)
+      .map((item) => ({
+        categoria:
+          String(item.categoria || '').toUpperCase() === 'MANO DE OBRA'
+            ? 'MANO DE OBRA'
+            : 'MATERIALES',
+        descripcion: String(item.descripcion || '').trim(),
+        cantidad: Number(item.cantidad) > 0 ? Number(item.cantidad) : 1,
+        precioUnitario: Number(item.precioUnitario),
+      }));
 
     return {
       statusCode: 200,
