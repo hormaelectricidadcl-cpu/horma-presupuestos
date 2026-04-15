@@ -1,9 +1,4 @@
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
+/* ── Variables globales (no afectan al presupuestador) ── */
 :root {
   --primary: #E69A21;
   --primary-dark: #c4841c;
@@ -25,7 +20,16 @@
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-body {
+/* ── Todo lo demás SOLO dentro de .pendientes ─────────── */
+/* Esto evita interferir con el presupuestador            */
+
+.pendientes *, .pendientes *::before, .pendientes *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.pendientes {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -35,7 +39,7 @@ body {
 }
 
 /* ── Badges ─────────────────────────────────────────── */
-.badge {
+.pendientes .badge {
   display: inline-block;
   padding: 3px 10px;
   border-radius: 20px;
@@ -44,16 +48,16 @@ body {
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
-.badge-pendiente    { background: #fff3e0; color: #e67e22; }
-.badge-recordatorio { background: #fdecea; color: #c0392b; }
-.badge-respondido   { background: #e8f8ef; color: #27ae60; }
-.badge-visita       { background: #e3f2fd; color: #1565c0; }
-.badge-fotos        { background: #f3e5f5; color: #6a1b9a; }
-.badge-presupuesto  { background: #e8f5e9; color: #2e7d32; }
-.badge-otro         { background: #f5f5f5; color: #616161; }
+.pendientes .badge-pendiente    { background: #fff3e0; color: #e67e22; }
+.pendientes .badge-recordatorio { background: #fdecea; color: #c0392b; }
+.pendientes .badge-respondido   { background: #e8f8ef; color: #27ae60; }
+.pendientes .badge-visita       { background: #e3f2fd; color: #1565c0; }
+.pendientes .badge-fotos        { background: #f3e5f5; color: #6a1b9a; }
+.pendientes .badge-presupuesto  { background: #e8f5e9; color: #2e7d32; }
+.pendientes .badge-otro         { background: #f5f5f5; color: #616161; }
 
 /* ── Buttons ─────────────────────────────────────────── */
-.btn {
+.pendientes .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -67,20 +71,21 @@ body {
   transition: opacity 0.15s, transform 0.1s;
   text-decoration: none;
   white-space: nowrap;
+  font-family: inherit;
 }
-.btn:active { transform: scale(0.97); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pendientes .btn:active { transform: scale(0.97); }
+.pendientes .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.btn-primary   { background: var(--primary); color: #fff; }
-.btn-primary:hover:not(:disabled)  { background: var(--primary-dark); }
-.btn-secondary { background: var(--white); color: var(--secondary); border: 1px solid var(--border); }
-.btn-secondary:hover:not(:disabled) { background: var(--bg); }
-.btn-danger    { background: var(--danger-bg); color: var(--danger); border: 1px solid #f5c6c6; }
-.btn-danger:hover:not(:disabled) { background: #fbe9e9; }
-.btn-ghost     { background: transparent; color: var(--muted); }
-.btn-ghost:hover:not(:disabled) { background: var(--border); }
+.pendientes .btn-primary   { background: var(--primary); color: #fff; }
+.pendientes .btn-primary:hover:not(:disabled)  { background: var(--primary-dark); }
+.pendientes .btn-secondary { background: var(--white); color: var(--secondary); border: 1px solid var(--border); }
+.pendientes .btn-secondary:hover:not(:disabled) { background: var(--bg); }
+.pendientes .btn-danger    { background: var(--danger-bg); color: var(--danger); border: 1px solid #f5c6c6; }
+.pendientes .btn-danger:hover:not(:disabled) { background: #fbe9e9; }
+.pendientes .btn-ghost     { background: transparent; color: var(--muted); }
+.pendientes .btn-ghost:hover:not(:disabled) { background: var(--border); }
 
-.btn-lg {
+.pendientes .btn-lg {
   padding: 15px 24px;
   font-size: 16px;
   border-radius: var(--radius);
@@ -88,19 +93,21 @@ body {
 }
 
 /* ── Form elements ───────────────────────────────────── */
-.field {
+.pendientes .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.field label {
+.pendientes .field label {
   font-size: 13px;
   font-weight: 600;
   color: var(--secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-input, textarea, select {
+.pendientes input,
+.pendientes textarea,
+.pendientes select {
   width: 100%;
   padding: 10px 14px;
   border: 1.5px solid var(--border);
@@ -114,13 +121,15 @@ input, textarea, select {
   -webkit-appearance: none;
   appearance: none;
 }
-input:focus, textarea:focus, select:focus {
+.pendientes input:focus,
+.pendientes textarea:focus,
+.pendientes select:focus {
   border-color: var(--primary);
 }
-textarea { resize: vertical; min-height: 80px; }
+.pendientes textarea { resize: vertical; min-height: 80px; }
 
 /* ── Cards ───────────────────────────────────────────── */
-.card {
+.pendientes .card {
   background: var(--white);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -128,7 +137,7 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 /* ── Loader ──────────────────────────────────────────── */
-.spinner {
+.pendientes .spinner {
   width: 28px;
   height: 28px;
   border: 3px solid var(--border);
@@ -141,6 +150,6 @@ textarea { resize: vertical; min-height: 80px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Deadline helpers ────────────────────────────────── */
-.deadline-ok      { color: var(--success); }
-.deadline-warn    { color: var(--warning); }
-.deadline-over    { color: var(--danger); font-weight: 700; }
+.pendientes .deadline-ok   { color: var(--success); }
+.pendientes .deadline-warn { color: var(--warning); }
+.pendientes .deadline-over { color: var(--danger); font-weight: 700; }

@@ -389,7 +389,7 @@ export default function Admin() {
     return () => clearInterval(interval)
   }, [authed, loadPendientes])
 
-  if (!authed) return <LoginForm onLogin={() => setAuthed(true)} />
+  if (!authed) return <div className="pendientes"><LoginForm onLogin={() => setAuthed(true)} /></div>
 
   const activos = pendientes.filter(p => p.estado !== 'respondido')
   const respondidos = pendientes.filter(p => p.estado === 'respondido')
@@ -397,6 +397,7 @@ export default function Admin() {
   const displayed = tab === 'activos' ? activos : respondidos
 
   return (
+    <div className="pendientes" style={{ background: 'var(--bg)', minHeight: '100vh' }}>
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '1.5rem 1rem' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 12 }}>
@@ -485,6 +486,7 @@ export default function Admin() {
       <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 24 }}>
         Actualización automática cada 30 segundos
       </p>
+    </div>
     </div>
   )
 }

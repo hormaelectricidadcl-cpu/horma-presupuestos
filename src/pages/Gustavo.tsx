@@ -368,7 +368,7 @@ export default function Gustavo({ token }: Props) {
 
   if (!tokenValido) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
+      <div className="pendientes" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
         <h2 style={{ fontWeight: 700, marginBottom: 8 }}>Link inválido</h2>
         <p style={{ color: 'var(--muted)', fontSize: 15 }}>Pídele a Alexandra que te mande el link por WhatsApp.</p>
@@ -377,6 +377,7 @@ export default function Gustavo({ token }: Props) {
   }
 
   return (
+    <div className="pendientes">
     <div style={{ maxWidth: 500, margin: '0 auto', padding: '1.25rem 14px 3rem' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.5rem' }}>
@@ -404,6 +405,7 @@ export default function Gustavo({ token }: Props) {
           <PendienteCardGustavo key={p.id} p={p} onRespondido={loadPendientes} />
         ))
       )}
+    </div>
     </div>
   )
 }
