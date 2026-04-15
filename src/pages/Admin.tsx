@@ -31,10 +31,22 @@ function formatItemsResumen(items: ItemPresupuesto[]): string {
   return `${items.length} ítems (${mat} mat / ${mo} MO) — $${total.toLocaleString('es-CL')}`
 }
 
-function calendarLink(clienteNombre: string, respuesta: string): string {
-  const title = encodeURIComponent(`Visita - ${clienteNombre}`)
-  const details = encodeURIComponent(respuesta || '')
-  return `https://calendar.google.com/calendar/r/eventedit?text=${title}&details=${details}`
+function calendarLink(p: Pendiente): string {
+  const title = encodeURIComponent(`Visita - ${p.cliente_nombre}`)
+  const parts = [p.descripcion, p.direccion].filter(Boolean)
+  const details = encodeURIComponent(parts.join('\n') || '')
+  const location = encodeURIComponent(p.direccion || '')
+
+  // Fechas en formato YYYYMMDDTHHmmSSZ para Google Calendar
+  let dates = ''
+  if (p.fecha_trabajo) {
+    const start = new Date(p.fecha_trabajo)
+    const end = new Date(start.getTime() + 60 * 60 * 1000) // +1 hora por defecto
+    const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+    dates = `&dates=${fmt(start)}/${fmt(end)}`
+  }
+
+  return `https://calendar.google.com/calendar/r/eventedit?text=${title}&details=${details}&location=${location}${dates}`
 }
 
 /* ─── Auth gate ─────────────────────────────────────── */
@@ -81,6 +93,7 @@ interface FormState {
   descripcion: string
   fecha_limite: string
   fecha_trabajo: string
+  direccion: string
   drive_links: string[]
 }
 
@@ -93,6 +106,7 @@ function emptyForm(): FormState {
     descripcion: '',
     fecha_limite: now.toISOString().slice(0, 16),
     fecha_trabajo: '',
+    direccion: '',
     drive_links: [''],
   }
 }
@@ -131,6 +145,7 @@ function CrearForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: (
       descripcion: form.descripcion.trim(),
       fecha_limite: new Date(form.fecha_limite).toISOString(),
       fecha_trabajo: form.fecha_trabajo ? new Date(form.fecha_trabajo).toISOString() : null,
+      direccion: form.direccion.trim() || null,
       drive_links: form.drive_links.filter(l => l.trim()),
     }
 
@@ -192,6 +207,17 @@ function CrearForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: (
           )}
         </div>
 
+        {form.tipo === 'confirmar_visita' && (
+          <div className="field">
+            <label>Dirección 📍</label>
+            <input
+              value={form.direccion}
+              onChange={e => setField('direccion', e.target.value)}
+              placeholder="Ej: Juan Montalvo 75, Las Condes"
+            />
+          </div>
+        )}
+
         <div className="field">
           <label>Links de Drive (fotos / docs)</label>
           {form.drive_links.map((link, i) => (
@@ -226,6 +252,7 @@ interface EditState {
   descripcion: string
   fecha_limite: string
   fecha_trabajo: string
+  direccion: string
 }
 
 function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void; onCancel: () => void }) {
@@ -234,6 +261,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
     descripcion: p.descripcion || '',
     fecha_limite: new Date(p.fecha_limite).toISOString().slice(0, 16),
     fecha_trabajo: p.fecha_trabajo ? new Date(p.fecha_trabajo).toISOString().slice(0, 16) : '',
+    direccion: p.direccion || '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -245,6 +273,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
       descripcion: form.descripcion.trim(),
       fecha_limite: new Date(form.fecha_limite).toISOString(),
       fecha_trabajo: form.fecha_trabajo ? new Date(form.fecha_trabajo).toISOString() : null,
+      direccion: form.direccion.trim() || null,
     }).eq('id', p.id)
     setSaving(false)
     onSaved()
@@ -268,10 +297,16 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
         </div>
       </div>
       {form.tipo === 'confirmar_visita' && (
-        <div className="field">
-          <label>Fecha del trabajo 🔨</label>
-          <input type="datetime-local" value={form.fecha_trabajo} onChange={e => setForm(f => ({ ...f, fecha_trabajo: e.target.value }))} />
-        </div>
+        <>
+          <div className="field">
+            <label>Fecha del trabajo 🔨</label>
+            <input type="datetime-local" value={form.fecha_trabajo} onChange={e => setForm(f => ({ ...f, fecha_trabajo: e.target.value }))} />
+          </div>
+          <div className="field">
+            <label>Dirección 📍</label>
+            <input value={form.direccion} onChange={e => setForm(f => ({ ...f, direccion: e.target.value }))} placeholder="Ej: Juan Montalvo 75, Las Condes" />
+          </div>
+        </>
       )}
       <div className="field">
         <label>Descripción</label>
@@ -414,22 +449,39 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
             />
           ) : (
             <>
-              {p.fecha_trabajo && (
-                <div style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 'var(--radius-sm)', padding: '8px 14px' }}>
-                  <span style={{ fontSize: 16 }}>🔨</span>
-                  <div>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: '#b8860b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Fecha del trabajo</p>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
-                      {new Date(p.fecha_trabajo).toLocaleString('es-CL', {
-                        timeZone: 'America/Santiago',
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'long',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
+              {(p.fecha_trabajo || p.direccion) && (
+                <div style={{ marginTop: 12, background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 'var(--radius-sm)', padding: '10px 14px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 18, marginTop: 2 }}>🔨</span>
+                    <div>
+                      {p.fecha_trabajo && (
+                        <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+                          {new Date(p.fecha_trabajo).toLocaleString('es-CL', {
+                            timeZone: 'America/Santiago',
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      )}
+                      {p.direccion && (
+                        <p style={{ fontSize: 13, color: 'var(--secondary)', marginTop: 2 }}>
+                          📍 {p.direccion}
+                        </p>
+                      )}
+                    </div>
                   </div>
+                  <a
+                    href={calendarLink(p)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-secondary"
+                    style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
+                  >
+                    📅 Agendar en Calendar
+                  </a>
                 </div>
               )}
 
@@ -458,18 +510,6 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                     <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{p.respuesta}</p>
                   )}
 
-                  {/* Calendar button for visita confirmations */}
-                  {p.tipo === 'confirmar_visita' && p.respuesta && (
-                    <a
-                      href={calendarLink(p.cliente_nombre, p.respuesta)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn btn-secondary"
-                      style={{ marginTop: 10, fontSize: 13, padding: '7px 14px', display: 'inline-flex' }}
-                    >
-                      📅 Agendar en Calendar
-                    </a>
-                  )}
 
                   {/* Presupuesto: items from Supabase or IA-generated */}
                   {p.tipo === 'presupuesto' && (

@@ -84,7 +84,9 @@ export async function handler() {
     partes.push('🔨 *Trabajos de hoy:*')
     for (const t of trabajosHoy) {
       const hora = formatHora(t.fecha_trabajo)
-      partes.push(`  • ${hora} — ${t.cliente_nombre}${t.descripcion ? ` (${t.descripcion.slice(0, 60)})` : ''}`)
+      let linea = `  • ${hora} — ${t.cliente_nombre}`
+      if (t.direccion) linea += `\n    📍 ${t.direccion}`
+      partes.push(linea)
     }
     partes.push('')
   }
