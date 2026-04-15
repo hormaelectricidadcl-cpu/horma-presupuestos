@@ -7,3 +7,7 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Recordatorio automático cada 2 horas
+[functions."recordatorio"]
+  schedule = "0 */2 * * *"
