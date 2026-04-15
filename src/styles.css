@@ -1,4 +1,14 @@
-/* ── Variables globales (no afectan al presupuestador) ── */
+/* ── Global: restaura centrado original del presupuestador ── */
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#app {
+  text-align: center;
+}
+
+/* ── Variables globales ────────────────────────────────── */
 :root {
   --primary: #E69A21;
   --primary-dark: #c4841c;
@@ -36,6 +46,7 @@
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-align: left;
 }
 
 /* ── Badges ─────────────────────────────────────────── */
