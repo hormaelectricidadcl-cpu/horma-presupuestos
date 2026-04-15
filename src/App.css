@@ -1,0 +1,77 @@
+.app {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f1;
+  color: #615e5b;
+}
+
+h1 {
+  text-align: center;
+  color: #e69a21;
+}
+
+.client-form, .item-form, .item-list, .summary {
+  margin-bottom: 20px;
+  padding: 15px;
+  border: 1px solid #93918e;
+  border-radius: 5px;
+  background-color: white;
+}
+
+.client-form input, .item-form input, .item-form select {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px;
+  border: 1px solid #93918e;
+  border-radius: 3px;
+}
+
+.item-form button, button {
+  background-color: #e69a21;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.item-form button:hover, button:hover {
+  background-color: #d1881f;
+}
+
+.item-list ul {
+  list-style: none;
+  padding: 0;
+}
+
+.item-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #93918e;
+}
+
+.item-list li button {
+  background-color: #615e5b;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.item-list li button:hover {
+  background-color: #4a4846;
+}
+
+.summary p {
+  margin: 5px 0;
+}
+
+.summary strong {
+  font-size: 1.2em;
+}
