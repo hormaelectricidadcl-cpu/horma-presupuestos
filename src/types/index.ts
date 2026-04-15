@@ -15,6 +15,7 @@ export interface Pendiente {
   tipo: TipoPendiente
   descripcion: string | null
   fecha_limite: string
+  fecha_trabajo: string | null
   drive_links: string[]
   estado: EstadoPendiente
   recordatorio_enviado_at: string | null
@@ -28,5 +29,6 @@ export interface NuevoPendiente {
   tipo: TipoPendiente
   descripcion: string
   fecha_limite: string
+  fecha_trabajo: string | null
   drive_links: string[]
 }

@@ -11,3 +11,7 @@
 # Recordatorio automático cada 2 horas
 [functions."recordatorio"]
   schedule = "0 */2 * * *"
+
+# Resumen diario a las 9am Santiago (12:00 UTC = 09:00 Chile UTC-3)
+[functions."resumen-diario"]
+  schedule = "0 12 * * *"

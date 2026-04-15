@@ -80,6 +80,7 @@ interface FormState {
   tipo: TipoPendiente
   descripcion: string
   fecha_limite: string
+  fecha_trabajo: string
   drive_links: string[]
 }
 
@@ -91,6 +92,7 @@ function emptyForm(): FormState {
     tipo: 'confirmar_visita',
     descripcion: '',
     fecha_limite: now.toISOString().slice(0, 16),
+    fecha_trabajo: '',
     drive_links: [''],
   }
 }
@@ -128,6 +130,7 @@ function CrearForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: (
       tipo: form.tipo,
       descripcion: form.descripcion.trim(),
       fecha_limite: new Date(form.fecha_limite).toISOString(),
+      fecha_trabajo: form.fecha_trabajo ? new Date(form.fecha_trabajo).toISOString() : null,
       drive_links: form.drive_links.filter(l => l.trim()),
     }
 
@@ -176,9 +179,17 @@ function CrearForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: (
           <textarea value={form.descripcion} onChange={e => setField('descripcion', e.target.value)} placeholder="Describe qué necesitas de Gustavo..." rows={3} />
         </div>
 
-        <div className="field">
-          <label>Fecha límite</label>
-          <input type="datetime-local" value={form.fecha_limite} onChange={e => setField('fecha_limite', e.target.value)} required />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="field">
+            <label>Fecha límite (responder antes de)</label>
+            <input type="datetime-local" value={form.fecha_limite} onChange={e => setField('fecha_limite', e.target.value)} required />
+          </div>
+          {form.tipo === 'confirmar_visita' && (
+            <div className="field">
+              <label>Fecha del trabajo 🔨</label>
+              <input type="datetime-local" value={form.fecha_trabajo} onChange={e => setField('fecha_trabajo', e.target.value)} />
+            </div>
+          )}
         </div>
 
         <div className="field">
@@ -214,6 +225,7 @@ interface EditState {
   tipo: TipoPendiente
   descripcion: string
   fecha_limite: string
+  fecha_trabajo: string
 }
 
 function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void; onCancel: () => void }) {
@@ -221,6 +233,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
     tipo: p.tipo,
     descripcion: p.descripcion || '',
     fecha_limite: new Date(p.fecha_limite).toISOString().slice(0, 16),
+    fecha_trabajo: p.fecha_trabajo ? new Date(p.fecha_trabajo).toISOString().slice(0, 16) : '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -231,6 +244,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
       tipo: form.tipo,
       descripcion: form.descripcion.trim(),
       fecha_limite: new Date(form.fecha_limite).toISOString(),
+      fecha_trabajo: form.fecha_trabajo ? new Date(form.fecha_trabajo).toISOString() : null,
     }).eq('id', p.id)
     setSaving(false)
     onSaved()
@@ -253,6 +267,12 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
           <input type="datetime-local" value={form.fecha_limite} onChange={e => setForm(f => ({ ...f, fecha_limite: e.target.value }))} required />
         </div>
       </div>
+      {form.tipo === 'confirmar_visita' && (
+        <div className="field">
+          <label>Fecha del trabajo 🔨</label>
+          <input type="datetime-local" value={form.fecha_trabajo} onChange={e => setForm(f => ({ ...f, fecha_trabajo: e.target.value }))} />
+        </div>
+      )}
       <div className="field">
         <label>Descripción</label>
         <textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} rows={2} placeholder="Contexto para Gustavo..." />
@@ -394,6 +414,25 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
             />
           ) : (
             <>
+              {p.fecha_trabajo && (
+                <div style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 'var(--radius-sm)', padding: '8px 14px' }}>
+                  <span style={{ fontSize: 16 }}>🔨</span>
+                  <div>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: '#b8860b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Fecha del trabajo</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                      {new Date(p.fecha_trabajo).toLocaleString('es-CL', {
+                        timeZone: 'America/Santiago',
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {p.descripcion && (
                 <p style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6, color: 'var(--secondary)' }}>{p.descripcion}</p>
               )}
