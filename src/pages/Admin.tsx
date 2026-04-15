@@ -31,6 +31,12 @@ function formatItemsResumen(items: ItemPresupuesto[]): string {
   return `${items.length} ítems (${mat} mat / ${mo} MO) — $${total.toLocaleString('es-CL')}`
 }
 
+function calendarLink(clienteNombre: string, respuesta: string): string {
+  const title = encodeURIComponent(`Visita - ${clienteNombre}`)
+  const details = encodeURIComponent(respuesta || '')
+  return `https://calendar.google.com/calendar/r/eventedit?text=${title}&details=${details}`
+}
+
 /* ─── Auth gate ─────────────────────────────────────── */
 function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [pwd, setPwd] = useState('')
@@ -132,7 +138,6 @@ function CrearForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: (
       return
     }
 
-    // Notify Gustavo via WhatsApp (non-blocking)
     fetch('/.netlify/functions/notificar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -204,10 +209,73 @@ function CrearForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: (
   )
 }
 
+/* ─── Edit form (inline) ────────────────────────────── */
+interface EditState {
+  tipo: TipoPendiente
+  descripcion: string
+  fecha_limite: string
+}
+
+function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void; onCancel: () => void }) {
+  const [form, setForm] = useState<EditState>({
+    tipo: p.tipo,
+    descripcion: p.descripcion || '',
+    fecha_limite: new Date(p.fecha_limite).toISOString().slice(0, 16),
+  })
+  const [saving, setSaving] = useState(false)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    await supabase.from('pendientes').update({
+      tipo: form.tipo,
+      descripcion: form.descripcion.trim(),
+      fecha_limite: new Date(form.fecha_limite).toISOString(),
+    }).eq('id', p.id)
+    setSaving(false)
+    onSaved()
+  }
+
+  return (
+    <form onSubmit={submit} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, padding: '14px', background: 'var(--bg)', borderRadius: 'var(--radius-sm)' }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 2 }}>Editar pendiente</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div className="field">
+          <label>Tipo</label>
+          <select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value as TipoPendiente }))}>
+            {(Object.entries(TIPO_LABELS) as [TipoPendiente, string][]).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>Fecha límite</label>
+          <input type="datetime-local" value={form.fecha_limite} onChange={e => setForm(f => ({ ...f, fecha_limite: e.target.value }))} required />
+        </div>
+      </div>
+      <div className="field">
+        <label>Descripción</label>
+        <textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} rows={2} placeholder="Contexto para Gustavo..." />
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="submit" className="btn btn-primary" disabled={saving} style={{ fontSize: 13, padding: '7px 16px' }}>
+          {saving ? 'Guardando...' : '✓ Guardar'}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={onCancel} style={{ fontSize: 13, padding: '7px 14px' }}>
+          Cancelar
+        </button>
+      </div>
+    </form>
+  )
+}
+
 /* ─── Pendiente card ────────────────────────────────── */
 function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) {
   const [expanded, setExpanded] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [sending, setSending] = useState(false)
+  const [aiItems, setAiItems] = useState<ItemPresupuesto[] | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
 
   const dl = formatDeadline(p.fecha_limite)
 
@@ -258,13 +326,46 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
     onUpdate()
   }
 
+  async function generarItemsIA() {
+    if (!p.respuesta) return
+    setAiLoading(true)
+    try {
+      const res = await fetch('/.netlify/functions/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: p.respuesta }),
+      })
+      const data = await res.json()
+      if (!res.ok || !Array.isArray(data.items) || data.items.length === 0) {
+        alert('La IA no pudo generar ítems. Revisa el texto de la respuesta.')
+        return
+      }
+      const generados: ItemPresupuesto[] = data.items.map((it: {
+        categoria: string; descripcion: string; cantidad: number; precioUnitario: number
+      }) => ({
+        categoria: it.categoria?.toUpperCase() === 'MANO DE OBRA' ? 'MANO DE OBRA' : 'MATERIALES',
+        descripcion: it.descripcion || '',
+        cantidad: Number(it.cantidad) || 1,
+        precioUnitario: Number(it.precioUnitario) || 0,
+      }))
+      setAiItems(generados)
+    } catch {
+      alert('Error al contactar la IA. Intenta de nuevo.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   const borderColor = p.estado === 'respondido' ? 'var(--success)' :
     new Date(p.fecha_limite) < new Date() ? 'var(--danger)' : 'var(--primary)'
+
+  // Items a mostrar: los que vienen de Supabase o los generados con IA en esta sesión
+  const itemsActivos = aiItems ?? (p.items?.length > 0 ? p.items : null)
 
   return (
     <div className="card" style={{ borderLeft: `4px solid ${borderColor}`, marginBottom: 12 }}>
       <div
-        onClick={() => setExpanded(x => !x)}
+        onClick={() => { if (!editing) setExpanded(x => !x) }}
         style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -283,93 +384,156 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
 
       {expanded && (
         <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
-          {p.descripcion && (
-            <p style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6, color: 'var(--secondary)' }}>{p.descripcion}</p>
-          )}
 
-          {p.drive_links?.length > 0 && (
-            <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {p.drive_links.map((link, i) => (
-                <a key={i} href={link} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ fontSize: 13, padding: '6px 12px' }}>
-                  📎 Archivo {i + 1}
-                </a>
-              ))}
-            </div>
-          )}
+          {/* Edit form */}
+          {editing ? (
+            <EditForm
+              p={p}
+              onSaved={() => { setEditing(false); onUpdate() }}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+            <>
+              {p.descripcion && (
+                <p style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6, color: 'var(--secondary)' }}>{p.descripcion}</p>
+              )}
 
-          {p.estado === 'respondido' && (
-            <div style={{ marginTop: 12, background: 'var(--success-bg)', borderRadius: 'var(--radius-sm)', padding: '10px 14px' }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 4 }}>
-                ✓ Respondido {p.respondido_at ? new Date(p.respondido_at).toLocaleString('es-CL', { timeZone: 'America/Santiago' }) : ''}
-              </p>
-              {p.respuesta && <p style={{ fontSize: 14, color: 'var(--text)' }}>{p.respuesta}</p>}
-              {p.items?.length > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-                    <p style={{ fontSize: 13, fontWeight: 600 }}>{formatItemsResumen(p.items)}</p>
-                    <button
-                      className="btn btn-primary"
-                      style={{ fontSize: 13, padding: '7px 14px' }}
-                      onClick={() => generatePDF(
-                        { name: p.cliente_nombre, rut: '', email: '', address: '' },
-                        p.items.map((it, i) => ({
-                          id: i,
-                          categoria: it.categoria,
-                          description: it.descripcion,
-                          price: it.precioUnitario,
-                          quantity: it.cantidad,
-                          total: it.cantidad * it.precioUnitario,
-                        })),
-                        10
-                      )}
-                    >
-                      📄 Generar PDF
-                    </button>
-                  </div>
-                  <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--bg)' }}>
-                        {['Categoría', 'Descripción', 'Cant.', 'P. Unit.', 'Total'].map(h => (
-                          <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--secondary)' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {p.items.map((item, i) => (
-                        <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td style={{ padding: '6px 10px' }}>
-                            <span className={`badge ${item.categoria === 'MATERIALES' ? 'badge-visita' : 'badge-fotos'}`} style={{ fontSize: 11 }}>
-                              {item.categoria === 'MATERIALES' ? 'MAT' : 'MO'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '6px 10px' }}>{item.descripcion}</td>
-                          <td style={{ padding: '6px 10px' }}>{item.cantidad}</td>
-                          <td style={{ padding: '6px 10px' }}>${item.precioUnitario.toLocaleString('es-CL')}</td>
-                          <td style={{ padding: '6px 10px', fontWeight: 600 }}>${(item.cantidad * item.precioUnitario).toLocaleString('es-CL')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {p.drive_links?.length > 0 && (
+                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {p.drive_links.map((link, i) => (
+                    <a key={i} href={link} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ fontSize: 13, padding: '6px 12px' }}>
+                      📎 Archivo {i + 1}
+                    </a>
+                  ))}
                 </div>
               )}
-            </div>
-          )}
 
-          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {p.estado !== 'respondido' && (
-              <>
-                <button className="btn btn-secondary" onClick={enviarRecordatorio} disabled={sending} style={{ fontSize: 13, padding: '7px 14px' }}>
-                  {sending ? '...' : '📲 Recordatorio'}
+              {/* Respondido section */}
+              {p.estado === 'respondido' && (
+                <div style={{ marginTop: 12, background: 'var(--success-bg)', borderRadius: 'var(--radius-sm)', padding: '12px 14px' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 6 }}>
+                    ✓ Respondido {p.respondido_at ? new Date(p.respondido_at).toLocaleString('es-CL', { timeZone: 'America/Santiago' }) : ''}
+                  </p>
+
+                  {p.respuesta && (
+                    <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{p.respuesta}</p>
+                  )}
+
+                  {/* Calendar button for visita confirmations */}
+                  {p.tipo === 'confirmar_visita' && p.respuesta && (
+                    <a
+                      href={calendarLink(p.cliente_nombre, p.respuesta)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-secondary"
+                      style={{ marginTop: 10, fontSize: 13, padding: '7px 14px', display: 'inline-flex' }}
+                    >
+                      📅 Agendar en Calendar
+                    </a>
+                  )}
+
+                  {/* Presupuesto: items from Supabase or IA-generated */}
+                  {p.tipo === 'presupuesto' && (
+                    <div style={{ marginTop: 10 }}>
+                      {itemsActivos ? (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                            <p style={{ fontSize: 13, fontWeight: 600 }}>{formatItemsResumen(itemsActivos)}</p>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              {aiItems && (
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ fontSize: 12, padding: '5px 10px' }}
+                                  onClick={() => setAiItems(null)}
+                                >
+                                  ✕ Descartar
+                                </button>
+                              )}
+                              <button
+                                className="btn btn-primary"
+                                style={{ fontSize: 13, padding: '7px 14px' }}
+                                onClick={() => generatePDF(
+                                  { name: p.cliente_nombre, rut: '', email: '', address: '' },
+                                  itemsActivos.map((it, i) => ({
+                                    id: i,
+                                    categoria: it.categoria,
+                                    description: it.descripcion,
+                                    price: it.precioUnitario,
+                                    quantity: it.cantidad,
+                                    total: it.cantidad * it.precioUnitario,
+                                  })),
+                                  10
+                                )}
+                              >
+                                📄 Generar PDF
+                              </button>
+                            </div>
+                          </div>
+                          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ background: 'var(--bg)' }}>
+                                {['Categoría', 'Descripción', 'Cant.', 'P. Unit.', 'Total'].map(h => (
+                                  <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--secondary)' }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {itemsActivos.map((item, i) => (
+                                <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                                  <td style={{ padding: '6px 10px' }}>
+                                    <span className={`badge ${item.categoria === 'MATERIALES' ? 'badge-visita' : 'badge-fotos'}`} style={{ fontSize: 11 }}>
+                                      {item.categoria === 'MATERIALES' ? 'MAT' : 'MO'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '6px 10px' }}>{item.descripcion}</td>
+                                  <td style={{ padding: '6px 10px' }}>{item.cantidad}</td>
+                                  <td style={{ padding: '6px 10px' }}>${item.precioUnitario.toLocaleString('es-CL')}</td>
+                                  <td style={{ padding: '6px 10px', fontWeight: 600 }}>${(item.cantidad * item.precioUnitario).toLocaleString('es-CL')}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </>
+                      ) : p.respuesta ? (
+                        <button
+                          className="btn btn-secondary"
+                          style={{ fontSize: 13, padding: '7px 14px', marginTop: 4 }}
+                          onClick={generarItemsIA}
+                          disabled={aiLoading}
+                        >
+                          {aiLoading ? '⏳ Generando...' : '✨ Generar ítems con IA'}
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {p.estado !== 'respondido' && (
+                  <>
+                    <button className="btn btn-secondary" onClick={enviarRecordatorio} disabled={sending} style={{ fontSize: 13, padding: '7px 14px' }}>
+                      {sending ? '...' : '📲 Recordatorio'}
+                    </button>
+                    <button className="btn btn-secondary" onClick={marcarRespondido} style={{ fontSize: 13, padding: '7px 14px', color: 'var(--success)' }}>
+                      ✓ Marcar respondido
+                    </button>
+                  </>
+                )}
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setEditing(true)}
+                  style={{ fontSize: 13, padding: '7px 14px' }}
+                >
+                  ✏️ Editar
                 </button>
-                <button className="btn btn-secondary" onClick={marcarRespondido} style={{ fontSize: 13, padding: '7px 14px', color: 'var(--success)' }}>
-                  ✓ Marcar respondido
+                <button className="btn btn-danger" onClick={eliminar} style={{ fontSize: 13, padding: '7px 14px', marginLeft: 'auto' }}>
+                  Eliminar
                 </button>
-              </>
-            )}
-            <button className="btn btn-danger" onClick={eliminar} style={{ fontSize: 13, padding: '7px 14px', marginLeft: 'auto' }}>
-              Eliminar
-            </button>
-          </div>
+              </div>
+            </>
+          )}
 
           <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 10 }}>
             Creado {new Date(p.created_at).toLocaleString('es-CL', { timeZone: 'America/Santiago' })}
