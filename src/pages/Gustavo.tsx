@@ -28,161 +28,11 @@ function formatDeadlineShort(iso: string): { text: string; urgent: boolean } {
   return { text: `Vence en ${d} día${d !== 1 ? 's' : ''}`, urgent: false }
 }
 
-/* ─── Items form (for presupuesto type) ─────────────── */
-function emptyItem(): ItemPresupuesto {
-  return { categoria: 'MATERIALES', descripcion: '', cantidad: 1, precioUnitario: 0 }
-}
-
-function ItemsForm({
-  items,
-  onChange,
-}: {
-  items: ItemPresupuesto[]
-  onChange: (items: ItemPresupuesto[]) => void
-}) {
-  function update(i: number, field: keyof ItemPresupuesto, value: string | number) {
-    const next = items.map((item, j) => j === i ? { ...item, [field]: value } : item)
-    onChange(next)
-  }
-
-  function toggleCategoria(i: number) {
-    update(i, 'categoria', items[i].categoria === 'MATERIALES' ? 'MANO DE OBRA' : 'MATERIALES')
-  }
-
-  function addItem() { onChange([...items, emptyItem()]) }
-
-  function removeItem(i: number) { onChange(items.filter((_, j) => j !== i)) }
-
-  const total = items.reduce((s, it) => s + it.cantidad * it.precioUnitario, 0)
-
-  return (
-    <div style={{ marginTop: 16 }}>
-      {items.map((item, i) => (
-        <div key={i} style={{
-          background: 'var(--bg)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '12px 14px',
-          marginBottom: 10,
-          position: 'relative',
-          border: '1px solid var(--border)',
-        }}>
-          {/* Delete button */}
-          <button
-            type="button"
-            onClick={() => removeItem(i)}
-            style={{
-              position: 'absolute', top: 10, right: 10,
-              background: 'none', border: 'none', fontSize: 18,
-              color: 'var(--muted)', cursor: 'pointer', lineHeight: 1,
-              padding: '2px 6px',
-            }}
-          >×</button>
-
-          {/* Category toggle */}
-          <button
-            type="button"
-            onClick={() => toggleCategoria(i)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 12px',
-              borderRadius: 20,
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: 12,
-              marginBottom: 10,
-              ...(item.categoria === 'MATERIALES'
-                ? { background: '#e3f2fd', color: '#1565c0' }
-                : { background: '#f3e5f5', color: '#6a1b9a' }),
-            }}
-          >
-            {item.categoria === 'MATERIALES' ? '🔩 MATERIALES' : '👷 MANO DE OBRA'}
-            <span style={{ fontSize: 10, opacity: 0.7 }}>↔ cambiar</span>
-          </button>
-
-          {/* Description */}
-          <input
-            type="text"
-            value={item.descripcion}
-            onChange={e => update(i, 'descripcion', e.target.value)}
-            placeholder="Descripción del ítem"
-            style={{ marginBottom: 10, fontSize: 16 }}
-          />
-
-          {/* Cantidad + Precio */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div className="field">
-              <label>Cantidad</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min="1"
-                value={item.cantidad || ''}
-                onChange={e => update(i, 'cantidad', parseInt(e.target.value) || 0)}
-                style={{ fontSize: 16 }}
-              />
-            </div>
-            <div className="field">
-              <label>Precio unitario ($)</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min="0"
-                step="100"
-                value={item.precioUnitario || ''}
-                onChange={e => update(i, 'precioUnitario', parseInt(e.target.value) || 0)}
-                placeholder="0"
-                style={{ fontSize: 16 }}
-              />
-            </div>
-          </div>
-
-          {item.cantidad > 0 && item.precioUnitario > 0 && (
-            <p style={{ marginTop: 8, fontSize: 13, color: 'var(--secondary)', fontWeight: 600 }}>
-              Subtotal: ${(item.cantidad * item.precioUnitario).toLocaleString('es-CL')}
-            </p>
-          )}
-        </div>
-      ))}
-
-      <button
-        type="button"
-        className="btn btn-secondary"
-        onClick={addItem}
-        style={{ width: '100%', marginBottom: 12, fontSize: 15, padding: '12px' }}
-      >
-        + Agregar ítem
-      </button>
-
-      {items.length > 0 && total > 0 && (
-        <div style={{
-          background: 'var(--white)',
-          border: '2px solid var(--primary)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '10px 14px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 8,
-        }}>
-          <span style={{ fontWeight: 600, color: 'var(--secondary)' }}>Total sin IVA</span>
-          <span style={{ fontWeight: 800, fontSize: 18, color: 'var(--primary)' }}>
-            ${total.toLocaleString('es-CL')}
-          </span>
-        </div>
-      )}
-    </div>
-  )
-}
-
 /* ─── Pendiente card for Gustavo ────────────────────── */
 function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido: () => void }) {
   const [respuesta, setRespuesta] = useState('')
   const [nota, setNota] = useState('')
-  const [items, setItems] = useState<ItemPresupuesto[]>([emptyItem()])
-  const [presupuestoMode, setPresupuestoMode] = useState<'manual' | 'ia'>('manual')
+  const [items, setItems] = useState<ItemPresupuesto[]>([])
   const [aiText, setAiText] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -217,8 +67,6 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
       }))
       setItems(generados)
       setAiText('')
-      // Switch to manual so Gustavo can review/edit the generated items
-      setPresupuestoMode('manual')
     } catch {
       alert('Error al contactar la IA. Intenta de nuevo.')
     } finally {
@@ -232,8 +80,8 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
     const isPresupuesto = p.tipo === 'presupuesto'
     const itemsValidos = items.filter(i => i.descripcion.trim() && i.precioUnitario > 0)
 
-    if (isPresupuesto && itemsValidos.length === 0) {
-      alert('Agrega al menos un ítem con descripción y precio.')
+    if (isPresupuesto && itemsValidos.length === 0 && !respuesta.trim()) {
+      alert('Escribe una respuesta o genera los ítems con IA antes de enviar.')
       setSaving(false)
       return
     }
@@ -250,10 +98,8 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
     }
 
     if (isPresupuesto) {
-      update.items = itemsValidos
-      const partes = [`${itemsValidos.length} ítems ingresados`]
-      if (nota.trim()) partes.push(nota.trim())
-      update.respuesta = partes.join(' — ')
+      if (itemsValidos.length > 0) update.items = itemsValidos
+      update.respuesta = respuesta.trim() || (itemsValidos.length > 0 ? `${itemsValidos.length} ítems ingresados` : '')
     } else {
       const partes = [respuesta.trim(), nota.trim()].filter(Boolean)
       update.respuesta = partes.join('\n\n')
@@ -348,95 +194,111 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
 
           {p.tipo === 'presupuesto' ? (
             <>
-              {/* Mode tabs */}
-              <div style={{ display: 'flex', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1.5px solid var(--border)', marginBottom: 14 }}>
-                {(['manual', 'ia'] as const).map(mode => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setPresupuestoMode(mode)}
-                    style={{
-                      flex: 1,
-                      padding: '10px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      fontSize: 14,
-                      fontFamily: 'inherit',
-                      background: presupuestoMode === mode ? 'var(--primary)' : 'var(--white)',
-                      color: presupuestoMode === mode ? '#fff' : 'var(--secondary)',
-                      transition: 'background 0.15s',
-                    }}
-                  >
-                    {mode === 'manual' ? '✏️ Manual' : '✨ Generar con IA'}
-                  </button>
-                ))}
+              {/* Free text — for simple answers like "agenda a tal hora" */}
+              <div className="field" style={{ marginBottom: 14 }}>
+                <label>Respuesta (opcional)</label>
+                <textarea
+                  value={respuesta}
+                  onChange={e => setRespuesta(e.target.value)}
+                  placeholder="Ej: Agendalo para el jueves, hay que revisar primero el tablero..."
+                  rows={3}
+                  style={{ fontSize: 15 }}
+                />
               </div>
 
-              {presupuestoMode === 'ia' ? (
-                <div>
-                  <p style={{ fontSize: 14, color: 'var(--secondary)', marginBottom: 10, lineHeight: 1.5 }}>
-                    Pega el texto del cliente o tus notas del trabajo. La IA crea los ítems automáticamente.
-                  </p>
-                  <textarea
-                    value={aiText}
-                    onChange={e => setAiText(e.target.value)}
-                    placeholder="Ej: Tablero eléctrico 50.000 - Cableado de 3 circuitos - Instalación diferencial..."
-                    rows={5}
-                    style={{ fontSize: 15, marginBottom: 10, width: '100%' }}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-lg"
-                    onClick={generarConIA}
-                    disabled={aiLoading}
-                    style={{ fontSize: 16, marginBottom: 8 }}
-                  >
-                    {aiLoading ? '⏳ Generando...' : '✨ Generar ítems'}
-                  </button>
-                  {items.some(i => i.descripcion) && (
-                    <p style={{ fontSize: 13, color: 'var(--success)', fontWeight: 600, marginBottom: 4 }}>
-                      ✓ {items.filter(i => i.descripcion).length} ítems generados — cambia a Manual para revisar
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--secondary)', marginBottom: 8 }}>
-                    Ítems del presupuesto:
-                  </p>
-                  <ItemsForm items={items} onChange={setItems} />
-                </>
-              )}
+              {/* IA section */}
+              <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius-sm)', padding: '12px 14px', marginBottom: 14 }}>
+                <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>✨ Generar ítems con IA</p>
+                <p style={{ fontSize: 13, color: 'var(--secondary)', marginBottom: 10, lineHeight: 1.5 }}>
+                  Pega el texto del cliente o tus notas. La IA arma los ítems del presupuesto.
+                </p>
+                <textarea
+                  value={aiText}
+                  onChange={e => setAiText(e.target.value)}
+                  placeholder="Tablero eléctrico 50.000 - Cableado 3 circuitos - Instalación diferencial..."
+                  rows={4}
+                  style={{ fontSize: 15, marginBottom: 10, width: '100%' }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-lg"
+                  onClick={generarConIA}
+                  disabled={aiLoading}
+                  style={{ fontSize: 15, marginBottom: items.length > 0 ? 10 : 0 }}
+                >
+                  {aiLoading ? '⏳ Generando...' : '✨ Generar ítems'}
+                </button>
+
+                {/* Items preview after IA generation */}
+                {items.length > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>
+                        ✓ {items.length} ítems listos
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setItems([])}
+                        style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit' }}
+                      >
+                        Borrar y regenerar
+                      </button>
+                    </div>
+                    {items.map((it, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--border)', fontSize: 13 }}>
+                        <span>
+                          <span style={{
+                            display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 10, marginRight: 6,
+                            background: it.categoria === 'MATERIALES' ? '#e3f2fd' : '#f3e5f5',
+                            color: it.categoria === 'MATERIALES' ? '#1565c0' : '#6a1b9a',
+                          }}>
+                            {it.categoria === 'MATERIALES' ? 'MAT' : 'MO'}
+                          </span>
+                          {it.descripcion}
+                        </span>
+                        <span style={{ fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
+                          ${(it.cantidad * it.precioUnitario).toLocaleString('es-CL')}
+                        </span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', marginTop: 4, borderTop: '2px solid var(--primary)', fontWeight: 700, fontSize: 14 }}>
+                      <span>Total sin IVA</span>
+                      <span style={{ color: 'var(--primary)' }}>
+                        ${items.reduce((s, it) => s + it.cantidad * it.precioUnitario, 0).toLocaleString('es-CL')}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
-            <div className="field" style={{ marginBottom: 14 }}>
-              <label>Tu respuesta</label>
-              <textarea
-                value={respuesta}
-                onChange={e => setRespuesta(e.target.value)}
-                placeholder={
-                  p.tipo === 'confirmar_visita' ? 'Ej: Confirmado para el martes 15 a las 10am' :
-                  p.tipo === 'revisar_fotos' ? 'Ej: El tablero necesita reemplazo del diferencial...' :
-                  'Escribe aquí...'
-                }
-                rows={4}
-                style={{ fontSize: 16 }}
-              />
-            </div>
+            <>
+              <div className="field" style={{ marginBottom: 14 }}>
+                <label>Tu respuesta</label>
+                <textarea
+                  value={respuesta}
+                  onChange={e => setRespuesta(e.target.value)}
+                  placeholder={
+                    p.tipo === 'confirmar_visita' ? 'Ej: Confirmado para el martes 15 a las 10am' :
+                    p.tipo === 'revisar_fotos' ? 'Ej: El tablero necesita reemplazo del diferencial...' :
+                    'Escribe aquí...'
+                  }
+                  rows={4}
+                  style={{ fontSize: 16 }}
+                />
+              </div>
+              <div className="field" style={{ marginBottom: 14 }}>
+                <label>Nota adicional (opcional)</label>
+                <textarea
+                  value={nota}
+                  onChange={e => setNota(e.target.value)}
+                  placeholder="Algo más que quieras agregar..."
+                  rows={2}
+                  style={{ fontSize: 15 }}
+                />
+              </div>
+            </>
           )}
-
-          {/* Nota libre — available for all types */}
-          <div className="field" style={{ marginBottom: 16, marginTop: p.tipo === 'presupuesto' ? 8 : 0 }}>
-            <label>Nota adicional (opcional)</label>
-            <textarea
-              value={nota}
-              onChange={e => setNota(e.target.value)}
-              placeholder="Algo más que quieras agregar..."
-              rows={2}
-              style={{ fontSize: 15 }}
-            />
-          </div>
 
           <button
             className="btn btn-primary btn-lg"
@@ -444,7 +306,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
             disabled={saving}
             style={{ fontSize: 17, fontWeight: 800 }}
           >
-            {saving ? 'Enviando...' : p.tipo === 'presupuesto' ? '✓ Enviar ítems' : '✓ Enviar respuesta'}
+            {saving ? 'Enviando...' : p.tipo === 'presupuesto' ? '✓ Enviar' : '✓ Enviar respuesta'}
           </button>
         </div>
       </div>

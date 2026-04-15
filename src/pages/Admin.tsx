@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { generatePDF } from '../utils/pdfGenerator'
 import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto } from '../types'
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD as string
@@ -304,7 +305,27 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
               {p.respuesta && <p style={{ fontSize: 14, color: 'var(--text)' }}>{p.respuesta}</p>}
               {p.items?.length > 0 && (
                 <div style={{ marginTop: 8 }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{formatItemsResumen(p.items)}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600 }}>{formatItemsResumen(p.items)}</p>
+                    <button
+                      className="btn btn-primary"
+                      style={{ fontSize: 13, padding: '7px 14px' }}
+                      onClick={() => generatePDF(
+                        { name: p.cliente_nombre, rut: '', email: '', address: '' },
+                        p.items.map((it, i) => ({
+                          id: i,
+                          categoria: it.categoria,
+                          description: it.descripcion,
+                          price: it.precioUnitario,
+                          quantity: it.cantidad,
+                          total: it.cantidad * it.precioUnitario,
+                        })),
+                        10
+                      )}
+                    >
+                      📄 Generar PDF
+                    </button>
+                  </div>
                   <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--bg)' }}>
