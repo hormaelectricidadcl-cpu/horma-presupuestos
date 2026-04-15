@@ -180,11 +180,51 @@ function ItemsForm({
 /* ─── Pendiente card for Gustavo ────────────────────── */
 function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido: () => void }) {
   const [respuesta, setRespuesta] = useState('')
+  const [nota, setNota] = useState('')
   const [items, setItems] = useState<ItemPresupuesto[]>([emptyItem()])
+  const [presupuestoMode, setPresupuestoMode] = useState<'manual' | 'ia'>('manual')
+  const [aiText, setAiText] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
 
   const dl = formatDeadlineShort(p.fecha_limite)
+
+  async function generarConIA() {
+    if (!aiText.trim()) {
+      alert('Pega primero el texto del trabajo o mensaje del cliente.')
+      return
+    }
+    setAiLoading(true)
+    try {
+      const res = await fetch('/.netlify/functions/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: aiText }),
+      })
+      const data = await res.json()
+      if (!res.ok || !Array.isArray(data.items) || data.items.length === 0) {
+        alert('La IA no pudo generar ítems. Revisa el texto o usa el modo manual.')
+        return
+      }
+      const generados: ItemPresupuesto[] = data.items.map((it: {
+        categoria: string; descripcion: string; cantidad: number; precioUnitario: number
+      }) => ({
+        categoria: it.categoria?.toUpperCase() === 'MANO DE OBRA' ? 'MANO DE OBRA' : 'MATERIALES',
+        descripcion: it.descripcion || '',
+        cantidad: Number(it.cantidad) || 1,
+        precioUnitario: Number(it.precioUnitario) || 0,
+      }))
+      setItems(generados)
+      setAiText('')
+      // Switch to manual so Gustavo can review/edit the generated items
+      setPresupuestoMode('manual')
+    } catch {
+      alert('Error al contactar la IA. Intenta de nuevo.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   async function enviar() {
     setSaving(true)
@@ -198,6 +238,12 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
       return
     }
 
+    if (!isPresupuesto && !respuesta.trim() && !nota.trim()) {
+      alert('Escribe una respuesta antes de enviar.')
+      setSaving(false)
+      return
+    }
+
     const update: Partial<Pendiente> = {
       estado: 'respondido',
       respondido_at: new Date().toISOString(),
@@ -205,14 +251,12 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
 
     if (isPresupuesto) {
       update.items = itemsValidos
-      update.respuesta = `${itemsValidos.length} ítems ingresados`
+      const partes = [`${itemsValidos.length} ítems ingresados`]
+      if (nota.trim()) partes.push(nota.trim())
+      update.respuesta = partes.join(' — ')
     } else {
-      if (!respuesta.trim()) {
-        alert('Escribe una respuesta antes de enviar.')
-        setSaving(false)
-        return
-      }
-      update.respuesta = respuesta.trim()
+      const partes = [respuesta.trim(), nota.trim()].filter(Boolean)
+      update.respuesta = partes.join('\n\n')
     }
 
     const { error } = await supabase.from('pendientes').update(update).eq('id', p.id)
@@ -301,12 +345,69 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
       {/* Response section */}
       <div style={{ padding: '0 16px 18px' }}>
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+
           {p.tipo === 'presupuesto' ? (
             <>
-              <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--secondary)', marginBottom: 4 }}>
-                Ingresa los ítems del presupuesto:
-              </p>
-              <ItemsForm items={items} onChange={setItems} />
+              {/* Mode tabs */}
+              <div style={{ display: 'flex', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1.5px solid var(--border)', marginBottom: 14 }}>
+                {(['manual', 'ia'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setPresupuestoMode(mode)}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      fontSize: 14,
+                      fontFamily: 'inherit',
+                      background: presupuestoMode === mode ? 'var(--primary)' : 'var(--white)',
+                      color: presupuestoMode === mode ? '#fff' : 'var(--secondary)',
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    {mode === 'manual' ? '✏️ Manual' : '✨ Generar con IA'}
+                  </button>
+                ))}
+              </div>
+
+              {presupuestoMode === 'ia' ? (
+                <div>
+                  <p style={{ fontSize: 14, color: 'var(--secondary)', marginBottom: 10, lineHeight: 1.5 }}>
+                    Pega el texto del cliente o tus notas del trabajo. La IA crea los ítems automáticamente.
+                  </p>
+                  <textarea
+                    value={aiText}
+                    onChange={e => setAiText(e.target.value)}
+                    placeholder="Ej: Tablero eléctrico 50.000 - Cableado de 3 circuitos - Instalación diferencial..."
+                    rows={5}
+                    style={{ fontSize: 15, marginBottom: 10, width: '100%' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-lg"
+                    onClick={generarConIA}
+                    disabled={aiLoading}
+                    style={{ fontSize: 16, marginBottom: 8 }}
+                  >
+                    {aiLoading ? '⏳ Generando...' : '✨ Generar ítems'}
+                  </button>
+                  {items.some(i => i.descripcion) && (
+                    <p style={{ fontSize: 13, color: 'var(--success)', fontWeight: 600, marginBottom: 4 }}>
+                      ✓ {items.filter(i => i.descripcion).length} ítems generados — cambia a Manual para revisar
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--secondary)', marginBottom: 8 }}>
+                    Ítems del presupuesto:
+                  </p>
+                  <ItemsForm items={items} onChange={setItems} />
+                </>
+              )}
             </>
           ) : (
             <div className="field" style={{ marginBottom: 14 }}>
@@ -324,6 +425,18 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
               />
             </div>
           )}
+
+          {/* Nota libre — available for all types */}
+          <div className="field" style={{ marginBottom: 16, marginTop: p.tipo === 'presupuesto' ? 8 : 0 }}>
+            <label>Nota adicional (opcional)</label>
+            <textarea
+              value={nota}
+              onChange={e => setNota(e.target.value)}
+              placeholder="Algo más que quieras agregar..."
+              rows={2}
+              style={{ fontSize: 15 }}
+            />
+          </div>
 
           <button
             className="btn btn-primary btn-lg"
