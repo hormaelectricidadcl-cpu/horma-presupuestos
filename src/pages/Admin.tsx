@@ -557,20 +557,20 @@ export default function Admin() {
     if (saved === ADMIN_PASSWORD) setAuthed(true)
   }, [])
 
-  const loadPendientes = useCallback(async () => {
-    setLoading(true)
+  const loadPendientes = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true)
     const { data } = await supabase
       .from('pendientes')
       .select('*')
       .order('fecha_limite', { ascending: true })
     setPendientes((data as Pendiente[]) || [])
-    setLoading(false)
+    if (showSpinner) setLoading(false)
   }, [])
 
   useEffect(() => {
     if (!authed) return
-    loadPendientes()
-    const interval = setInterval(loadPendientes, 30000)
+    loadPendientes(true)                              // primera carga: muestra spinner
+    const interval = setInterval(() => loadPendientes(false), 60000)  // refresco silencioso cada 60s
     return () => clearInterval(interval)
   }, [authed, loadPendientes])
 
