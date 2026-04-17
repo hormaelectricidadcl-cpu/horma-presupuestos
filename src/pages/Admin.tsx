@@ -60,6 +60,14 @@ function calendarLink(p: Pendiente): string {
   return `https://calendar.google.com/calendar/r/eventedit?text=${title}&details=${details}&location=${location}${dates}`
 }
 
+function fmtFecha(iso: string) {
+  return new Date(iso).toLocaleString('es-CL', {
+    timeZone: 'America/Santiago',
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
 /* ─── Auth gate ─────────────────────────────────────── */
 function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [pwd, setPwd] = useState('')
@@ -97,6 +105,152 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   )
 }
 
+/* ─── Historial modal ───────────────────────────────── */
+function HistorialModal({
+  cliente,
+  todos,
+  onClose,
+  onSeguimiento,
+}: {
+  cliente: string
+  todos: Pendiente[]
+  onClose: () => void
+  onSeguimiento: (nombre: string) => void
+}) {
+  const historial = todos
+    .filter(p => p.cliente_nombre === cliente)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+        zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      }}
+    >
+      <div style={{
+        background: 'var(--white)', borderRadius: '16px 16px 0 0',
+        width: '100%', maxWidth: 860, maxHeight: '85vh',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 -4px 32px rgba(0,0,0,0.15)',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+        }}>
+          <div>
+            <h2 style={{ fontSize: 17, fontWeight: 800 }}>👤 {cliente}</h2>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+              {historial.length} interacción{historial.length !== 1 ? 'es' : ''} registradas
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Timeline */}
+        <div style={{ overflowY: 'auto', padding: '1.25rem 1.5rem', flex: 1 }}>
+          {historial.length === 0 ? (
+            <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>Sin historial registrado.</p>
+          ) : (
+            <div style={{ position: 'relative' }}>
+              {/* vertical line */}
+              <div style={{ position: 'absolute', left: 15, top: 8, bottom: 8, width: 2, background: 'var(--border)' }} />
+
+              {historial.map((p, idx) => {
+                const isLast = idx === historial.length - 1
+                return (
+                  <div key={p.id} style={{ position: 'relative', paddingLeft: 44, marginBottom: isLast ? 0 : 24 }}>
+                    {/* dot */}
+                    <div style={{
+                      position: 'absolute', left: 7, top: 4,
+                      width: 18, height: 18, borderRadius: '50%',
+                      background: p.estado === 'respondido' ? 'var(--success)' : 'var(--primary)',
+                      border: '3px solid var(--white)',
+                      boxShadow: '0 0 0 2px ' + (p.estado === 'respondido' ? 'var(--success)' : 'var(--primary)'),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 8, color: '#fff',
+                    }}>
+                      {p.estado === 'respondido' ? '✓' : '•'}
+                    </div>
+
+                    <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius-sm)', padding: '12px 14px' }}>
+                      {/* meta */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtFecha(p.created_at)}</span>
+                        <span className={`badge badge-${p.tipo === 'confirmar_visita' ? 'visita' : p.tipo === 'presupuesto' ? 'presupuesto' : p.tipo === 'revisar_fotos' ? 'fotos' : 'otro'}`} style={{ fontSize: 11 }}>
+                          {TIPO_LABELS[p.tipo]}
+                        </span>
+                        {p.estado === 'respondido' && (
+                          <span className="badge badge-respondido" style={{ fontSize: 11 }}>Respondido</span>
+                        )}
+                      </div>
+
+                      {/* description */}
+                      {p.descripcion && (
+                        <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: p.estado === 'respondido' ? 8 : 0 }}>
+                          {p.descripcion}
+                        </p>
+                      )}
+
+                      {/* response */}
+                      {p.estado === 'respondido' && p.respuesta && (
+                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: p.descripcion ? 0 : 0 }}>
+                          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 4 }}>
+                            ✓ Gustavo respondió — {p.respondido_at ? fmtFecha(p.respondido_at) : ''}
+                          </p>
+                          <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{p.respuesta}</p>
+                        </div>
+                      )}
+
+                      {p.estado === 'respondido' && p.audio_url && (
+                        <div style={{ marginTop: 8 }}>
+                          <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>🎙️ Nota de voz</p>
+                          <audio controls src={p.audio_url} style={{ width: '100%', height: 36 }} />
+                        </div>
+                      )}
+
+                      {/* items summary */}
+                      {p.items?.length > 0 && (
+                        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                          📋 {formatItemsResumen(p.items)}
+                        </p>
+                      )}
+
+                      {/* acciones */}
+                      {p.acciones && p.acciones.length > 0 && (
+                        <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {p.acciones.map((a, i) => (
+                            <span key={i} style={{ fontSize: 11, color: 'var(--muted)' }} title={ACCION_LABELS[a.tipo]}>
+                              {ACCION_EMOJI[a.tipo]} {fmtFecha(a.timestamp)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%', fontWeight: 700 }}
+            onClick={() => { onSeguimiento(cliente); onClose() }}
+          >
+            + Crear nuevo pendiente para {cliente}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Create form ───────────────────────────────────── */
 interface FormState {
   cliente_nombre: string
@@ -108,11 +262,11 @@ interface FormState {
   drive_links: string[]
 }
 
-function emptyForm(): FormState {
+function emptyForm(clienteInicial = ''): FormState {
   const now = new Date()
   now.setHours(now.getHours() + 4)
   return {
-    cliente_nombre: '',
+    cliente_nombre: clienteInicial,
     tipo: 'confirmar_visita',
     descripcion: '',
     fecha_limite: now.toISOString().slice(0, 16),
@@ -122,8 +276,16 @@ function emptyForm(): FormState {
   }
 }
 
-function CrearForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
-  const [form, setForm] = useState<FormState>(emptyForm)
+function CrearForm({
+  onCreated,
+  onCancel,
+  clienteInicial = '',
+}: {
+  onCreated: () => void
+  onCancel: () => void
+  clienteInicial?: string
+}) {
+  const [form, setForm] = useState<FormState>(() => emptyForm(clienteInicial))
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -183,12 +345,19 @@ function CrearForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: (
 
   return (
     <div style={{ background: 'var(--white)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow-md)', marginBottom: '1.5rem', border: '2px solid var(--primary)' }}>
-      <h3 style={{ marginBottom: '1.25rem', fontSize: 16, fontWeight: 700 }}>Nuevo pendiente</h3>
+      <h3 style={{ marginBottom: '1.25rem', fontSize: 16, fontWeight: 700 }}>
+        {clienteInicial ? `Nuevo pendiente — ${clienteInicial}` : 'Nuevo pendiente'}
+      </h3>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div className="field">
             <label>Cliente</label>
-            <input value={form.cliente_nombre} onChange={e => setField('cliente_nombre', e.target.value)} placeholder="Nombre del cliente" required />
+            <input
+              value={form.cliente_nombre}
+              onChange={e => setField('cliente_nombre', e.target.value)}
+              placeholder="Nombre del cliente"
+              required
+            />
           </div>
           <div className="field">
             <label>Tipo de acción</label>
@@ -221,11 +390,7 @@ function CrearForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: (
         {form.tipo === 'confirmar_visita' && (
           <div className="field">
             <label>Dirección 📍</label>
-            <input
-              value={form.direccion}
-              onChange={e => setField('direccion', e.target.value)}
-              placeholder="Ej: Juan Montalvo 75, Las Condes"
-            />
+            <input value={form.direccion} onChange={e => setField('direccion', e.target.value)} placeholder="Ej: Juan Montalvo 75, Las Condes" />
           </div>
         )}
 
@@ -336,7 +501,17 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
 }
 
 /* ─── Pendiente card ────────────────────────────────── */
-function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) {
+function PendienteCard({
+  p,
+  onUpdate,
+  onVerHistorial,
+  onSeguimiento,
+}: {
+  p: Pendiente
+  onUpdate: () => void
+  onVerHistorial: (nombre: string) => void
+  onSeguimiento: (nombre: string) => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [sending, setSending] = useState(false)
@@ -344,6 +519,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
   const [aiLoading, setAiLoading] = useState(false)
 
   const dl = formatDeadline(p.fecha_limite)
+  const respondido = p.estado === 'respondido'
 
   const estadoBadge = {
     pendiente: 'badge badge-pendiente',
@@ -378,11 +554,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
     await fetch('/.netlify/functions/notificar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clienteNombre: p.cliente_nombre,
-        tipo: p.tipo,
-        fechaLimite: p.fecha_limite,
-      }),
+      body: JSON.stringify({ clienteNombre: p.cliente_nombre, tipo: p.tipo, fechaLimite: p.fecha_limite }),
     })
     await supabase.from('pendientes').update({
       estado: 'recordatorio_enviado',
@@ -421,7 +593,6 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
         cantidad: Number(it.cantidad) || 1,
         precioUnitario: Number(it.precioUnitario) || 0,
       }))
-      // Persist to Supabase so items survive page reloads
       await supabase.from('pendientes').update({ items: generados }).eq('id', p.id)
       await registrarAccion('items_generados')
       setAiItems(generados)
@@ -433,7 +604,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
     }
   }
 
-  const borderColor = p.estado === 'respondido' ? 'var(--success)' :
+  const borderColor = respondido ? 'var(--success)' :
     new Date(p.fecha_limite) < new Date() ? 'var(--danger)' : 'var(--primary)'
 
   const itemsActivos = aiItems ?? (p.items?.length > 0 ? p.items : null)
@@ -453,10 +624,18 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
               p.estado === 'recordatorio_enviado' ? 'Recordatorio enviado' : 'Respondido'
             }</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className={dl.cls} style={{ fontSize: 13 }}>{dl.text}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {/* Solo mostrar deadline si NO está respondido */}
+            {!respondido && (
+              <span className={dl.cls} style={{ fontSize: 13 }}>{dl.text}</span>
+            )}
+            {respondido && p.respondido_at && (
+              <span style={{ fontSize: 12, color: 'var(--success)' }}>
+                ✓ {fmtFecha(p.respondido_at)}
+              </span>
+            )}
             {p.acciones && p.acciones.length > 0 && (
-              <span style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 2 }} title="Acciones realizadas">
+              <span style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 2 }}>
                 {p.acciones.map((a, i) => (
                   <span key={i} title={ACCION_LABELS[a.tipo]}>{ACCION_EMOJI[a.tipo] || '•'}</span>
                 ))}
@@ -525,10 +704,10 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
               )}
 
               {/* Respondido section */}
-              {p.estado === 'respondido' && (
+              {respondido && (
                 <div style={{ marginTop: 12, background: 'var(--success-bg)', borderRadius: 'var(--radius-sm)', padding: '12px 14px' }}>
                   <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 6 }}>
-                    ✓ Respondido {p.respondido_at ? new Date(p.respondido_at).toLocaleString('es-CL', { timeZone: 'America/Santiago' }) : ''}
+                    ✓ Respondido {p.respondido_at ? fmtFecha(p.respondido_at) : ''}
                   </p>
 
                   {p.respuesta && (
@@ -551,11 +730,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                             <p style={{ fontSize: 13, fontWeight: 600 }}>{formatItemsResumen(itemsActivos)}</p>
                             <div style={{ display: 'flex', gap: 8 }}>
                               {aiItems && (
-                                <button
-                                  className="btn btn-secondary"
-                                  style={{ fontSize: 12, padding: '5px 10px' }}
-                                  onClick={() => setAiItems(null)}
-                                >
+                                <button className="btn btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={() => setAiItems(null)}>
                                   ✕ Descartar
                                 </button>
                               )}
@@ -566,12 +741,9 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                                   generatePDF(
                                     { name: p.cliente_nombre, rut: '', email: '', address: '' },
                                     itemsActivos.map((it, i) => ({
-                                      id: i,
-                                      categoria: it.categoria,
-                                      description: it.descripcion,
-                                      price: it.precioUnitario,
-                                      quantity: it.cantidad,
-                                      total: it.cantidad * it.precioUnitario,
+                                      id: i, categoria: it.categoria,
+                                      description: it.descripcion, price: it.precioUnitario,
+                                      quantity: it.cantidad, total: it.cantidad * it.precioUnitario,
                                     })),
                                     10
                                   )
@@ -632,13 +804,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 3 }}>
                       <span>{ACCION_EMOJI[a.tipo] || '•'}</span>
                       <span style={{ color: 'var(--secondary)' }}>{ACCION_LABELS[a.tipo] || a.tipo}</span>
-                      <span style={{ color: 'var(--muted)', marginLeft: 'auto' }}>
-                        {new Date(a.timestamp).toLocaleString('es-CL', {
-                          timeZone: 'America/Santiago',
-                          day: '2-digit', month: '2-digit',
-                          hour: '2-digit', minute: '2-digit',
-                        })}
-                      </span>
+                      <span style={{ color: 'var(--muted)', marginLeft: 'auto' }}>{fmtFecha(a.timestamp)}</span>
                     </div>
                   ))}
                 </div>
@@ -646,7 +812,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
 
               {/* Action buttons */}
               <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {p.estado !== 'respondido' && (
+                {!respondido && (
                   <>
                     <button className="btn btn-secondary" onClick={enviarRecordatorio} disabled={sending} style={{ fontSize: 13, padding: '7px 14px' }}>
                       {sending ? '...' : '📲 Recordatorio'}
@@ -656,6 +822,21 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                     </button>
                   </>
                 )}
+                {/* Historial y seguimiento */}
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => onVerHistorial(p.cliente_nombre)}
+                  style={{ fontSize: 13, padding: '7px 14px' }}
+                >
+                  🕐 Ver historial
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => onSeguimiento(p.cliente_nombre)}
+                  style={{ fontSize: 13, padding: '7px 14px', color: 'var(--primary)', fontWeight: 600 }}
+                >
+                  + Seguimiento
+                </button>
                 <button className="btn btn-secondary" onClick={() => setEditing(true)} style={{ fontSize: 13, padding: '7px 14px' }}>
                   ✏️ Editar
                 </button>
@@ -667,7 +848,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
           )}
 
           <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 10 }}>
-            Creado {new Date(p.created_at).toLocaleString('es-CL', { timeZone: 'America/Santiago' })}
+            Creado {fmtFecha(p.created_at)}
           </p>
         </div>
       )}
@@ -681,7 +862,9 @@ export default function Admin() {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [clienteInicial, setClienteInicial] = useState('')
   const [tab, setTab] = useState<'activos' | 'respondidos'>('activos')
+  const [historialCliente, setHistorialCliente] = useState<string | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('horma_admin')
@@ -704,6 +887,12 @@ export default function Admin() {
     const interval = setInterval(() => loadPendientes(false), 60000)
     return () => clearInterval(interval)
   }, [authed, loadPendientes])
+
+  function abrirSeguimiento(nombre: string) {
+    setClienteInicial(nombre)
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   if (!authed) return <div className="pendientes"><LoginForm onLogin={() => setAuthed(true)} /></div>
 
@@ -731,7 +920,7 @@ export default function Admin() {
             <p style={{ fontSize: 13, color: 'var(--muted)' }}>Horma Electricidad</p>
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(x => !x)}>
+        <button className="btn btn-primary" onClick={() => { setClienteInicial(''); setShowForm(x => !x) }}>
           {showForm ? '✕ Cancelar' : '+ Nuevo pendiente'}
         </button>
       </div>
@@ -759,8 +948,9 @@ export default function Admin() {
       {/* Create form */}
       {showForm && (
         <CrearForm
-          onCreated={() => { setShowForm(false); loadPendientes() }}
-          onCancel={() => setShowForm(false)}
+          clienteInicial={clienteInicial}
+          onCreated={() => { setShowForm(false); setClienteInicial(''); loadPendientes() }}
+          onCancel={() => { setShowForm(false); setClienteInicial('') }}
         />
       )}
 
@@ -811,10 +1001,24 @@ export default function Admin() {
                 <span>🔗</span>
                 <span>{cliente}</span>
                 <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
+                <button
+                  onClick={() => setHistorialCliente(cliente)}
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
+                >
+                  Ver historial →
+                </button>
               </div>
             )}
             <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
-              {items.map(p => <PendienteCard key={p.id} p={p} onUpdate={loadPendientes} />)}
+              {items.map(p => (
+                <PendienteCard
+                  key={p.id}
+                  p={p}
+                  onUpdate={loadPendientes}
+                  onVerHistorial={setHistorialCliente}
+                  onSeguimiento={abrirSeguimiento}
+                />
+              ))}
             </div>
           </div>
         ))
@@ -824,6 +1028,16 @@ export default function Admin() {
         Actualización automática cada 60 segundos
       </p>
     </div>
+
+    {/* Historial modal */}
+    {historialCliente && (
+      <HistorialModal
+        cliente={historialCliente}
+        todos={pendientes}
+        onClose={() => setHistorialCliente(null)}
+        onSeguimiento={abrirSeguimiento}
+      />
+    )}
     </div>
   )
 }
