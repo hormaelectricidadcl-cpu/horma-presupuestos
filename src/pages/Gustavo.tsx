@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Pendiente, TipoPendiente } from '../types'
 
@@ -35,6 +35,12 @@ function formatDeadlineShort(iso: string): { text: string; urgent: boolean } {
   return { text: `Vence en ${d} día${d !== 1 ? 's' : ''}`, urgent: false }
 }
 
+function formatTimer(s: number) {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
 /* ─── Pendiente card ────────────────────────────────── */
 function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido: () => void }) {
   const [respuesta, setRespuesta] = useState('')
@@ -42,21 +48,85 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
 
+  // Voice recording
+  const [grabando, setGrabando] = useState(false)
+  const [segundos, setSegundos] = useState(0)
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const dl = formatDeadlineShort(p.fecha_limite)
+
+  async function iniciarGrabacion() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      const mr = new MediaRecorder(stream, { mimeType })
+      mediaRecorderRef.current = mr
+      chunksRef.current = []
+
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType })
+        setAudioBlob(blob)
+        setAudioPreviewUrl(URL.createObjectURL(blob))
+        stream.getTracks().forEach(t => t.stop())
+      }
+
+      mr.start()
+      setGrabando(true)
+      setSegundos(0)
+      timerRef.current = setInterval(() => setSegundos(s => s + 1), 1000)
+    } catch {
+      alert('No se pudo acceder al micrófono. Verifica los permisos en tu navegador.')
+    }
+  }
+
+  function detenerGrabacion() {
+    if (timerRef.current) clearInterval(timerRef.current)
+    mediaRecorderRef.current?.stop()
+    setGrabando(false)
+  }
+
+  function descartarAudio() {
+    if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl)
+    setAudioBlob(null)
+    setAudioPreviewUrl(null)
+    setSegundos(0)
+  }
 
   async function enviar() {
     const texto = [respuesta.trim(), nota.trim()].filter(Boolean).join('\n\n')
-    if (!texto) {
-      alert('Escribe una respuesta antes de enviar.')
+    if (!texto && !audioBlob) {
+      alert('Escribe una respuesta o grabá una nota de voz antes de enviar.')
       return
     }
     setSaving(true)
 
-    const { error } = await supabase.from('pendientes').update({
+    // Upload audio if recorded
+    let savedAudioUrl: string | null = null
+    if (audioBlob) {
+      const ext = audioBlob.type.includes('mp4') ? 'mp4' : 'webm'
+      const filename = `${p.id}-${Date.now()}.${ext}`
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('audio-notas')
+        .upload(filename, audioBlob, { contentType: audioBlob.type })
+      if (!uploadErr && uploadData) {
+        const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(uploadData.path)
+        savedAudioUrl = urlData.publicUrl
+      }
+    }
+
+    const updatePayload: Record<string, unknown> = {
       estado: 'respondido',
       respondido_at: new Date().toISOString(),
-      respuesta: texto,
-    }).eq('id', p.id)
+      respuesta: texto || '(Solo nota de voz)',
+    }
+    if (savedAudioUrl) updatePayload.audio_url = savedAudioUrl
+
+    const { error } = await supabase.from('pendientes').update(updatePayload).eq('id', p.id)
 
     if (error) {
       alert('Error al guardar. Intenta de nuevo.')
@@ -64,14 +134,13 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
       return
     }
 
-    // Notificar a Alexandra (sin bloquear)
     fetch('/.netlify/functions/notificar-respuesta', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         clienteNombre: p.cliente_nombre,
         tipo: p.tipo,
-        respuesta: texto,
+        respuesta: texto || '(Nota de voz)',
       }),
     }).catch(() => {})
 
@@ -105,25 +174,18 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
             </div>
           </div>
           <span style={{
-            fontSize: 12,
-            fontWeight: 700,
+            fontSize: 12, fontWeight: 700,
             color: dl.urgent ? 'var(--danger)' : 'var(--muted)',
-            textAlign: 'right',
-            flexShrink: 0,
-            marginTop: 4,
+            textAlign: 'right', flexShrink: 0, marginTop: 4,
           }}>{dl.text}</span>
         </div>
 
         {/* Description */}
         {p.descripcion && (
           <p style={{
-            fontSize: 15,
-            lineHeight: 1.6,
-            color: 'var(--secondary)',
-            marginBottom: 14,
-            padding: '10px 12px',
-            background: 'var(--bg)',
-            borderRadius: 'var(--radius-sm)',
+            fontSize: 15, lineHeight: 1.6, color: 'var(--secondary)',
+            marginBottom: 14, padding: '10px 12px',
+            background: 'var(--bg)', borderRadius: 'var(--radius-sm)',
           }}>
             {p.descripcion}
           </p>
@@ -139,16 +201,10 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
                 target="_blank"
                 rel="noreferrer"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '12px 14px',
-                  background: '#e3f2fd',
-                  borderRadius: 'var(--radius-sm)',
-                  color: '#1565c0',
-                  fontWeight: 600,
-                  fontSize: 15,
-                  textDecoration: 'none',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '12px 14px', background: '#e3f2fd',
+                  borderRadius: 'var(--radius-sm)', color: '#1565c0',
+                  fontWeight: 600, fontSize: 15, textDecoration: 'none',
                 }}
               >
                 <span style={{ fontSize: 20 }}>📁</span>
@@ -173,7 +229,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
             />
           </div>
 
-          <div className="field" style={{ marginBottom: 16 }}>
+          <div className="field" style={{ marginBottom: 14 }}>
             <label>Nota adicional (opcional)</label>
             <textarea
               value={nota}
@@ -182,6 +238,50 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
               rows={2}
               style={{ fontSize: 15 }}
             />
+          </div>
+
+          {/* Voice recording */}
+          <div style={{ marginBottom: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--secondary)', marginBottom: 10 }}>
+              O grabá una nota de voz
+            </p>
+            {!audioPreviewUrl ? (
+              <button
+                type="button"
+                onClick={grabando ? detenerGrabacion : iniciarGrabacion}
+                style={{
+                  width: '100%', padding: '16px',
+                  borderRadius: 12,
+                  border: `2px solid ${grabando ? 'var(--danger)' : 'var(--border)'}`,
+                  background: grabando ? '#fff5f5' : 'var(--bg)',
+                  fontSize: 16, fontWeight: 700,
+                  color: grabando ? 'var(--danger)' : 'var(--secondary)',
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+                  transition: 'all 0.15s',
+                }}
+              >
+                <span style={{ fontSize: 26 }}>{grabando ? '⏹️' : '🎙️'}</span>
+                {grabando
+                  ? `Grabando ${formatTimer(segundos)} — Toca para detener`
+                  : 'Grabar nota de voz'}
+              </button>
+            ) : (
+              <div>
+                <audio controls src={audioPreviewUrl} style={{ width: '100%', marginBottom: 8 }} />
+                <p style={{ fontSize: 13, color: 'var(--success)', textAlign: 'center', marginBottom: 8 }}>
+                  ✓ Nota de voz lista — se enviará junto con tu respuesta
+                </p>
+                <button
+                  type="button"
+                  onClick={descartarAudio}
+                  className="btn btn-secondary"
+                  style={{ fontSize: 13, width: '100%' }}
+                >
+                  ✕ Descartar y grabar de nuevo
+                </button>
+              </div>
+            )}
           </div>
 
           <button
@@ -229,12 +329,9 @@ export default function Gustavo({ token }: Props) {
     return (
       <div className="pendientes" style={{
         minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '2rem',
-        textAlign: 'center',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '2rem', textAlign: 'center',
       }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
         <h2 style={{ fontWeight: 700, marginBottom: 8 }}>Link inválido</h2>
@@ -250,8 +347,7 @@ export default function Gustavo({ token }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.5rem' }}>
           <div style={{
             width: 44, height: 44,
-            background: 'var(--primary)',
-            borderRadius: 12,
+            background: 'var(--primary)', borderRadius: 12,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
           }}>H</div>

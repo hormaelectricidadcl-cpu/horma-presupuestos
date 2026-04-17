@@ -8,6 +8,11 @@ export interface ItemPresupuesto {
   precioUnitario: number
 }
 
+export interface AccionPendiente {
+  tipo: 'recordatorio' | 'items_generados' | 'pdf_generado' | 'visita_agendada'
+  timestamp: string
+}
+
 export interface Pendiente {
   id: string
   created_at: string
@@ -23,6 +28,8 @@ export interface Pendiente {
   respondido_at: string | null
   respuesta: string | null
   items: ItemPresupuesto[]
+  acciones?: AccionPendiente[]
+  audio_url?: string | null
 }
 
 export interface NuevoPendiente {

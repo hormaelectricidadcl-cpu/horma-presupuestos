@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto } from '../types'
+import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente } from '../types'
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD as string
 
@@ -10,6 +10,20 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
   revisar_fotos: 'Revisar fotos',
   presupuesto: 'Ingresar presupuesto',
   otro: 'Otro',
+}
+
+const ACCION_LABELS: Record<string, string> = {
+  recordatorio: 'Recordatorio enviado',
+  items_generados: 'Ítems generados con IA',
+  pdf_generado: 'PDF generado',
+  visita_agendada: 'Visita agendada en Calendar',
+}
+
+const ACCION_EMOJI: Record<string, string> = {
+  recordatorio: '📲',
+  items_generados: '✨',
+  pdf_generado: '📄',
+  visita_agendada: '📅',
 }
 
 function formatDeadline(iso: string): { text: string; cls: string } {
@@ -36,16 +50,13 @@ function calendarLink(p: Pendiente): string {
   const parts = [p.descripcion, p.direccion].filter(Boolean)
   const details = encodeURIComponent(parts.join('\n') || '')
   const location = encodeURIComponent(p.direccion || '')
-
-  // Fechas en formato YYYYMMDDTHHmmSSZ para Google Calendar
   let dates = ''
   if (p.fecha_trabajo) {
     const start = new Date(p.fecha_trabajo)
-    const end = new Date(start.getTime() + 60 * 60 * 1000) // +1 hora por defecto
+    const end = new Date(start.getTime() + 60 * 60 * 1000)
     const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
     dates = `&dates=${fmt(start)}/${fmt(end)}`
   }
-
   return `https://calendar.google.com/calendar/r/eventedit?text=${title}&details=${details}&location=${location}${dates}`
 }
 
@@ -347,6 +358,12 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
     otro: 'badge badge-otro',
   }[p.tipo]
 
+  async function registrarAccion(tipo: AccionPendiente['tipo']) {
+    const nueva: AccionPendiente = { tipo, timestamp: new Date().toISOString() }
+    const actuales = [...(p.acciones || []), nueva]
+    await supabase.from('pendientes').update({ acciones: actuales }).eq('id', p.id)
+  }
+
   async function marcarRespondido() {
     await supabase.from('pendientes').update({
       estado: 'respondido',
@@ -371,6 +388,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
       estado: 'recordatorio_enviado',
       recordatorio_enviado_at: new Date().toISOString(),
     }).eq('id', p.id)
+    await registrarAccion('recordatorio')
     setSending(false)
     onUpdate()
   }
@@ -403,7 +421,11 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
         cantidad: Number(it.cantidad) || 1,
         precioUnitario: Number(it.precioUnitario) || 0,
       }))
+      // Persist to Supabase so items survive page reloads
+      await supabase.from('pendientes').update({ items: generados }).eq('id', p.id)
+      await registrarAccion('items_generados')
       setAiItems(generados)
+      onUpdate()
     } catch {
       alert('Error al contactar la IA. Intenta de nuevo.')
     } finally {
@@ -414,7 +436,6 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
   const borderColor = p.estado === 'respondido' ? 'var(--success)' :
     new Date(p.fecha_limite) < new Date() ? 'var(--danger)' : 'var(--primary)'
 
-  // Items a mostrar: los que vienen de Supabase o los generados con IA en esta sesión
   const itemsActivos = aiItems ?? (p.items?.length > 0 ? p.items : null)
 
   return (
@@ -432,7 +453,16 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
               p.estado === 'recordatorio_enviado' ? 'Recordatorio enviado' : 'Respondido'
             }</span>
           </div>
-          <span className={dl.cls} style={{ fontSize: 13 }}>{dl.text}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className={dl.cls} style={{ fontSize: 13 }}>{dl.text}</span>
+            {p.acciones && p.acciones.length > 0 && (
+              <span style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 2 }} title="Acciones realizadas">
+                {p.acciones.map((a, i) => (
+                  <span key={i} title={ACCION_LABELS[a.tipo]}>{ACCION_EMOJI[a.tipo] || '•'}</span>
+                ))}
+              </span>
+            )}
+          </div>
         </div>
         <span style={{ color: 'var(--muted)', fontSize: 18, flexShrink: 0 }}>{expanded ? '▲' : '▼'}</span>
       </div>
@@ -440,7 +470,6 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
       {expanded && (
         <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
 
-          {/* Edit form */}
           {editing ? (
             <EditForm
               p={p}
@@ -458,18 +487,13 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                         <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
                           {new Date(p.fecha_trabajo).toLocaleString('es-CL', {
                             timeZone: 'America/Santiago',
-                            weekday: 'long',
-                            day: 'numeric',
-                            month: 'long',
-                            hour: '2-digit',
-                            minute: '2-digit',
+                            weekday: 'long', day: 'numeric', month: 'long',
+                            hour: '2-digit', minute: '2-digit',
                           })}
                         </p>
                       )}
                       {p.direccion && (
-                        <p style={{ fontSize: 13, color: 'var(--secondary)', marginTop: 2 }}>
-                          📍 {p.direccion}
-                        </p>
+                        <p style={{ fontSize: 13, color: 'var(--secondary)', marginTop: 2 }}>📍 {p.direccion}</p>
                       )}
                     </div>
                   </div>
@@ -477,6 +501,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                     href={calendarLink(p)}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={() => registrarAccion('visita_agendada').then(onUpdate)}
                     className="btn btn-secondary"
                     style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
                   >
@@ -510,8 +535,14 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                     <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{p.respuesta}</p>
                   )}
 
+                  {p.audio_url && (
+                    <div style={{ marginTop: 10 }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 4 }}>🎙️ Nota de voz de Gustavo</p>
+                      <audio controls src={p.audio_url} style={{ width: '100%' }} />
+                    </div>
+                  )}
 
-                  {/* Presupuesto: items from Supabase or IA-generated */}
+                  {/* Presupuesto items */}
                   {p.tipo === 'presupuesto' && (
                     <div style={{ marginTop: 10 }}>
                       {itemsActivos ? (
@@ -531,18 +562,21 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                               <button
                                 className="btn btn-primary"
                                 style={{ fontSize: 13, padding: '7px 14px' }}
-                                onClick={() => generatePDF(
-                                  { name: p.cliente_nombre, rut: '', email: '', address: '' },
-                                  itemsActivos.map((it, i) => ({
-                                    id: i,
-                                    categoria: it.categoria,
-                                    description: it.descripcion,
-                                    price: it.precioUnitario,
-                                    quantity: it.cantidad,
-                                    total: it.cantidad * it.precioUnitario,
-                                  })),
-                                  10
-                                )}
+                                onClick={() => {
+                                  generatePDF(
+                                    { name: p.cliente_nombre, rut: '', email: '', address: '' },
+                                    itemsActivos.map((it, i) => ({
+                                      id: i,
+                                      categoria: it.categoria,
+                                      description: it.descripcion,
+                                      price: it.precioUnitario,
+                                      quantity: it.cantidad,
+                                      total: it.cantidad * it.precioUnitario,
+                                    })),
+                                    10
+                                  )
+                                  registrarAccion('pdf_generado').then(onUpdate)
+                                }}
                               >
                                 📄 Generar PDF
                               </button>
@@ -588,6 +622,28 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                 </div>
               )}
 
+              {/* Action history */}
+              {p.acciones && p.acciones.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                    Acciones realizadas
+                  </p>
+                  {p.acciones.map((a, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 3 }}>
+                      <span>{ACCION_EMOJI[a.tipo] || '•'}</span>
+                      <span style={{ color: 'var(--secondary)' }}>{ACCION_LABELS[a.tipo] || a.tipo}</span>
+                      <span style={{ color: 'var(--muted)', marginLeft: 'auto' }}>
+                        {new Date(a.timestamp).toLocaleString('es-CL', {
+                          timeZone: 'America/Santiago',
+                          day: '2-digit', month: '2-digit',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Action buttons */}
               <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {p.estado !== 'respondido' && (
@@ -600,11 +656,7 @@ function PendienteCard({ p, onUpdate }: { p: Pendiente; onUpdate: () => void }) 
                     </button>
                   </>
                 )}
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setEditing(true)}
-                  style={{ fontSize: 13, padding: '7px 14px' }}
-                >
+                <button className="btn btn-secondary" onClick={() => setEditing(true)} style={{ fontSize: 13, padding: '7px 14px' }}>
                   ✏️ Editar
                 </button>
                 <button className="btn btn-danger" onClick={eliminar} style={{ fontSize: 13, padding: '7px 14px', marginLeft: 'auto' }}>
@@ -648,8 +700,8 @@ export default function Admin() {
 
   useEffect(() => {
     if (!authed) return
-    loadPendientes(true)                              // primera carga: muestra spinner
-    const interval = setInterval(() => loadPendientes(false), 60000)  // refresco silencioso cada 60s
+    loadPendientes(true)
+    const interval = setInterval(() => loadPendientes(false), 60000)
     return () => clearInterval(interval)
   }, [authed, loadPendientes])
 
@@ -659,6 +711,13 @@ export default function Admin() {
   const respondidos = pendientes.filter(p => p.estado === 'respondido')
   const vencidos = activos.filter(p => new Date(p.fecha_limite) < new Date())
   const displayed = tab === 'activos' ? activos : respondidos
+
+  // Group by client name — preserves deadline sort order within each group
+  const clienteGroups = displayed.reduce<Record<string, Pendiente[]>>((acc, p) => {
+    if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
+    acc[p.cliente_nombre].push(p)
+    return acc
+  }, {})
 
   return (
     <div className="pendientes" style={{ background: 'var(--bg)', minHeight: '100vh' }}>
@@ -712,12 +771,8 @@ export default function Admin() {
             key={k}
             onClick={() => setTab(k)}
             style={{
-              padding: '8px 16px',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: tab === k ? 700 : 500,
+              padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 14, fontWeight: tab === k ? 700 : 500,
               color: tab === k ? 'var(--primary)' : 'var(--muted)',
               borderBottom: `2px solid ${tab === k ? 'var(--primary)' : 'transparent'}`,
               marginBottom: -2,
@@ -728,7 +783,7 @@ export default function Admin() {
         ))}
       </div>
 
-      {/* List */}
+      {/* List grouped by client */}
       {loading ? (
         <div className="spinner" />
       ) : displayed.length === 0 ? (
@@ -744,11 +799,29 @@ export default function Admin() {
           )}
         </div>
       ) : (
-        displayed.map(p => <PendienteCard key={p.id} p={p} onUpdate={loadPendientes} />)
+        Object.entries(clienteGroups).map(([cliente, items]) => (
+          <div key={cliente}>
+            {items.length > 1 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '7px 12px', marginBottom: 6,
+                background: '#f0f4ff', border: '1px solid #c7d2fe',
+                borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
+              }}>
+                <span>🔗</span>
+                <span>{cliente}</span>
+                <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
+              </div>
+            )}
+            <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
+              {items.map(p => <PendienteCard key={p.id} p={p} onUpdate={loadPendientes} />)}
+            </div>
+          </div>
+        ))
       )}
 
       <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 24 }}>
-        Actualización automática cada 30 segundos
+        Actualización automática cada 60 segundos
       </p>
     </div>
     </div>
