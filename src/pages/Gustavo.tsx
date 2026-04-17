@@ -41,12 +41,90 @@ function formatTimer(s: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
+const TIPO_LABELS_SHORT: Record<TipoPendiente, string> = {
+  confirmar_visita: 'Visita',
+  revisar_fotos: 'Fotos',
+  presupuesto: 'Presupuesto',
+  otro: 'Otro',
+}
+
+function fmtFecha(iso: string) {
+  return new Date(iso).toLocaleString('es-CL', {
+    timeZone: 'America/Santiago',
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+/* ─── Historial inline ──────────────────────────────── */
+function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string; excluirId: string }) {
+  const [historial, setHistorial] = useState<Pendiente[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('pendientes')
+      .select('*')
+      .eq('cliente_nombre', clienteNombre)
+      .neq('id', excluirId)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setHistorial((data as Pendiente[]) || [])
+        setLoading(false)
+      })
+  }, [clienteNombre, excluirId])
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '8px 0' }}><div className="spinner" style={{ width: 20, height: 20, margin: '0 auto' }} /></div>
+
+  if (historial.length === 0) return (
+    <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '8px 0' }}>
+      Primera vez que aparece este cliente.
+    </p>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {historial.map(h => (
+        <div key={h.id} style={{
+          background: 'var(--bg)', borderRadius: 10, padding: '10px 12px',
+          borderLeft: `3px solid ${h.estado === 'respondido' ? 'var(--success)' : 'var(--primary)'}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: h.estado === 'respondido' ? 'var(--success)' : 'var(--primary)' }}>
+              {h.estado === 'respondido' ? '✓' : '⏳'} {TIPO_LABELS_SHORT[h.tipo]}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtFecha(h.created_at)}</span>
+          </div>
+          {h.descripcion && (
+            <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: h.respuesta ? 6 : 0 }}>
+              {h.descripcion}
+            </p>
+          )}
+          {h.respuesta && (
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 2 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 3 }}>Tu respuesta:</p>
+              <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{h.respuesta}</p>
+            </div>
+          )}
+          {h.audio_url && (
+            <div style={{ marginTop: 6 }}>
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>🎙️ Nota de voz</p>
+              <audio controls src={h.audio_url} style={{ width: '100%', height: 36 }} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ─── Pendiente card ────────────────────────────────── */
 function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido: () => void }) {
   const [respuesta, setRespuesta] = useState('')
   const [nota, setNota] = useState('')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
+  const [verHistorial, setVerHistorial] = useState(false)
 
   // Voice recording
   const [grabando, setGrabando] = useState(false)
@@ -189,6 +267,32 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
           }}>
             {p.descripcion}
           </p>
+        )}
+
+        {/* Client history toggle */}
+        <button
+          type="button"
+          onClick={() => setVerHistorial(v => !v)}
+          style={{
+            width: '100%', marginBottom: 14,
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: '1.5px solid var(--border)',
+            background: verHistorial ? 'var(--bg)' : 'var(--white)',
+            fontSize: 14, fontWeight: 600,
+            color: 'var(--secondary)',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}
+        >
+          <span>🕐 Ver historial de {p.cliente_nombre}</span>
+          <span style={{ fontSize: 12 }}>{verHistorial ? '▲ Cerrar' : '▼ Ver'}</span>
+        </button>
+
+        {verHistorial && (
+          <div style={{ marginBottom: 14 }}>
+            <HistorialCliente clienteNombre={p.cliente_nombre} excluirId={p.id} />
+          </div>
         )}
 
         {/* Drive links */}
