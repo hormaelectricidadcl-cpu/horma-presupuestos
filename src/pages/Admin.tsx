@@ -68,6 +68,17 @@ function fmtFecha(iso: string) {
   })
 }
 
+function fmtHaceQuanto(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'hace un momento'
+  if (m < 60) return `hace ${m} min`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `hace ${h}h`
+  const d = Math.floor(h / 24)
+  return `hace ${d} día${d !== 1 ? 's' : ''}`
+}
+
 /* ─── Auth gate ─────────────────────────────────────── */
 function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [pwd, setPwd] = useState('')
@@ -630,8 +641,8 @@ function PendienteCard({
               <span className={dl.cls} style={{ fontSize: 13 }}>{dl.text}</span>
             )}
             {respondido && p.respondido_at && (
-              <span style={{ fontSize: 12, color: 'var(--success)' }}>
-                ✓ {fmtFecha(p.respondido_at)}
+              <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
+                ✓ Respondió {fmtHaceQuanto(p.respondido_at)}
               </span>
             )}
             {p.acciones && p.acciones.length > 0 && (
@@ -974,7 +985,9 @@ export default function Admin() {
   if (!authed) return <div className="pendientes"><LoginForm onLogin={() => setAuthed(true)} /></div>
 
   const activos = pendientes.filter(p => p.estado !== 'respondido')
-  const respondidos = pendientes.filter(p => p.estado === 'respondido')
+  const respondidos = pendientes
+    .filter(p => p.estado === 'respondido')
+    .sort((a, b) => new Date(b.respondido_at ?? b.created_at).getTime() - new Date(a.respondido_at ?? a.created_at).getTime())
   const vencidos = activos.filter(p => new Date(p.fecha_limite) < new Date())
   const displayed = tab === 'activos' ? activos : respondidos
 
