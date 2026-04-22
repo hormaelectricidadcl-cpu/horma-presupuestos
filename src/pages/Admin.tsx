@@ -856,6 +856,83 @@ function PendienteCard({
   )
 }
 
+/* ─── Notas rápidas ─────────────────────────────────── */
+interface Nota {
+  id: string
+  texto: string
+  hecho: boolean
+}
+
+function NotasRapidas() {
+  const [notas, setNotas] = useState<Nota[]>(() => {
+    try { return JSON.parse(localStorage.getItem('horma_notas') || '[]') }
+    catch { return [] }
+  })
+  const [input, setInput] = useState('')
+
+  function guardar(nuevas: Nota[]) {
+    setNotas(nuevas)
+    localStorage.setItem('horma_notas', JSON.stringify(nuevas))
+  }
+
+  function agregar() {
+    const texto = input.trim()
+    if (!texto) return
+    guardar([...notas, { id: Date.now().toString(), texto, hecho: false }])
+    setInput('')
+  }
+
+  const pendientes = notas.filter(n => !n.hecho)
+  const hechas = notas.filter(n => n.hecho)
+
+  return (
+    <div className="card" style={{ marginBottom: '1.25rem', padding: '1rem 1.25rem' }}>
+      <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        📌 Mis notas
+      </h3>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && agregar()}
+          placeholder="Escribí una nota y presioná Enter..."
+          style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14, background: 'var(--white)' }}
+        />
+        <button className="btn btn-primary" onClick={agregar} style={{ padding: '9px 18px', fontSize: 15, fontWeight: 700 }}>+</button>
+      </div>
+
+      {notas.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '4px 0 2px' }}>Ninguna nota por ahora.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {pendientes.map(nota => (
+            <div key={nota.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--white)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <input type="checkbox" checked={false} onChange={() => guardar(notas.map(n => n.id === nota.id ? { ...n, hecho: true } : n))} style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }} />
+              <span style={{ flex: 1, fontSize: 14, lineHeight: 1.4 }}>{nota.texto}</span>
+              <button onClick={() => guardar(notas.filter(n => n.id !== nota.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, color: 'var(--muted)', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>✕</button>
+            </div>
+          ))}
+          {hechas.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 3 }}>
+              {hechas.map(nota => (
+                <div key={nota.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', opacity: 0.5 }}>
+                  <input type="checkbox" checked={true} onChange={() => guardar(notas.map(n => n.id === nota.id ? { ...n, hecho: false } : n))} style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }} />
+                  <span style={{ flex: 1, fontSize: 13, textDecoration: 'line-through', color: 'var(--muted)' }}>{nota.texto}</span>
+                  <button onClick={() => guardar(notas.filter(n => n.id !== nota.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--muted)', lineHeight: 1, padding: '0 2px' }}>✕</button>
+                </div>
+              ))}
+              <button onClick={() => guardar(notas.filter(n => !n.hecho))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', padding: '4px 10px', width: '100%', textAlign: 'right' }}>
+                Limpiar completadas
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Admin page ────────────────────────────────────── */
 export default function Admin() {
   const [authed, setAuthed] = useState(false)
@@ -944,6 +1021,9 @@ export default function Admin() {
           </div>
         </div>
       )}
+
+      {/* Quick notes */}
+      <NotasRapidas />
 
       {/* Create form */}
       {showForm && (
