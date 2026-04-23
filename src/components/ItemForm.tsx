@@ -171,7 +171,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ addItem }) => {
     try {
       setIsProcessingAI(true);
 
-      const res = await fetch('/.netlify/functions/parse', {
+      const res = await fetch('/api/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ texto: aiText })

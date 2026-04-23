@@ -224,13 +224,14 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
       return
     }
 
-    fetch('/.netlify/functions/notificar-respuesta', {
+    fetch('/api/notificar-respuesta', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         clienteNombre: p.cliente_nombre,
         tipo: p.tipo,
         respuesta: texto || '(Nota de voz)',
+        destinatario: 'gustavo',
       }),
     }).catch(() => {})
 

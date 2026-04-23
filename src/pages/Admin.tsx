@@ -420,7 +420,7 @@ function CrearForm({
       return
     }
 
-    fetch('/.netlify/functions/notificar', {
+    fetch('/api/notificar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -688,7 +688,7 @@ function PendienteCard({
 
   async function enviarRecordatorio() {
     setSending(true)
-    await fetch('/.netlify/functions/notificar', {
+    await fetch('/api/notificar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clienteNombre: p.cliente_nombre, tipo: p.tipo, fechaLimite: p.fecha_limite }),
@@ -712,7 +712,7 @@ function PendienteCard({
     if (!p.respuesta) return
     setAiLoading(true)
     try {
-      const res = await fetch('/.netlify/functions/parse', {
+      const res = await fetch('/api/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ texto: p.respuesta }),
