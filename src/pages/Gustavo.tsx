@@ -9,6 +9,9 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
   revisar_fotos: 'Revisar fotos',
   presupuesto: 'Ingresar presupuesto',
   otro: 'Revisar',
+  emitir_boleta: 'Emitir boleta',
+  emitir_factura: 'Emitir factura',
+  cobro: 'Cobro pendiente',
 }
 
 const TIPO_EMOJI: Record<TipoPendiente, string> = {
@@ -16,6 +19,9 @@ const TIPO_EMOJI: Record<TipoPendiente, string> = {
   revisar_fotos: '📸',
   presupuesto: '📋',
   otro: '📌',
+  emitir_boleta: '🧾',
+  emitir_factura: '📄',
+  cobro: '💰',
 }
 
 const PLACEHOLDER: Record<TipoPendiente, string> = {
@@ -23,6 +29,9 @@ const PLACEHOLDER: Record<TipoPendiente, string> = {
   revisar_fotos: 'Ej: El tablero necesita reemplazo del diferencial, hay que cambiar 2 breakers...',
   presupuesto: 'Ej: Tablero nuevo 80k, cableado 3 circuitos 15k c/u, instalación diferencial 25k, mano de obra 40k...',
   otro: 'Escribe aquí tu respuesta...',
+  emitir_boleta: 'Escribe aquí tu respuesta...',
+  emitir_factura: 'Escribe aquí tu respuesta...',
+  cobro: 'Escribe aquí tu respuesta...',
 }
 
 function formatDeadlineShort(iso: string): { text: string; urgent: boolean } {
@@ -46,6 +55,9 @@ const TIPO_LABELS_SHORT: Record<TipoPendiente, string> = {
   revisar_fotos: 'Fotos',
   presupuesto: 'Presupuesto',
   otro: 'Otro',
+  emitir_boleta: 'Boleta',
+  emitir_factura: 'Factura',
+  cobro: 'Cobro',
 }
 
 function fmtFecha(iso: string) {

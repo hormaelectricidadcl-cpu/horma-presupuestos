@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente } from '../types'
+import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario } from '../types'
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD as string
 
@@ -10,7 +10,13 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
   revisar_fotos: 'Revisar fotos',
   presupuesto: 'Ingresar presupuesto',
   otro: 'Otro',
+  emitir_boleta: 'Emitir boleta',
+  emitir_factura: 'Emitir factura',
+  cobro: 'Cobro pendiente',
 }
+
+const TIPOS_GUSTAVO: TipoPendiente[] = ['confirmar_visita', 'revisar_fotos', 'presupuesto', 'otro']
+const TIPOS_IRAZU: TipoPendiente[] = ['emitir_boleta', 'emitir_factura', 'cobro', 'otro']
 
 const ACCION_LABELS: Record<string, string> = {
   recordatorio: 'Recordatorio enviado',
@@ -112,6 +118,69 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px' }}>Entrar</button>
         </form>
       </div>
+    </div>
+  )
+}
+
+/* ─── Tareas por cliente ────────────────────────────── */
+interface TareaCliente { id: string; texto: string; hecho: boolean }
+
+function getTareasCliente(nombre: string): TareaCliente[] {
+  try { return JSON.parse(localStorage.getItem('horma_tareas_clientes') || '{}')[nombre] || [] }
+  catch { return [] }
+}
+function setTareasCliente(nombre: string, tareas: TareaCliente[]) {
+  try {
+    const all = JSON.parse(localStorage.getItem('horma_tareas_clientes') || '{}')
+    all[nombre] = tareas
+    localStorage.setItem('horma_tareas_clientes', JSON.stringify(all))
+  } catch {}
+}
+
+function TareasCliente({ clienteNombre }: { clienteNombre: string }) {
+  const [tareas, setTareas] = useState<TareaCliente[]>(() => getTareasCliente(clienteNombre))
+  const [input, setInput] = useState('')
+
+  function guardar(nuevas: TareaCliente[]) {
+    setTareas(nuevas)
+    setTareasCliente(clienteNombre, nuevas)
+  }
+
+  function agregar() {
+    const texto = input.trim()
+    if (!texto) return
+    guardar([...tareas, { id: Date.now().toString(), texto, hecho: false }])
+    setInput('')
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        📋 Mis tareas para este cliente
+      </p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && agregar()}
+          placeholder="Ej: Enviar monto de boleta el viernes..."
+          style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 13, background: 'var(--white)' }}
+        />
+        <button className="btn btn-primary" onClick={agregar} style={{ padding: '8px 16px', fontSize: 14, fontWeight: 700 }}>+</button>
+      </div>
+      {tareas.length === 0 ? (
+        <p style={{ fontSize: 12, color: 'var(--muted)' }}>Sin tareas para este cliente.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {tareas.map(t => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: t.hecho ? 'transparent' : 'var(--white)', borderRadius: 8, border: '1px solid var(--border)', opacity: t.hecho ? 0.5 : 1 }}>
+              <input type="checkbox" checked={t.hecho} onChange={() => guardar(tareas.map(x => x.id === t.id ? { ...x, hecho: !x.hecho } : x))} style={{ width: 15, height: 15, accentColor: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 13, textDecoration: t.hecho ? 'line-through' : 'none' }}>{t.texto}</span>
+              <button onClick={() => guardar(tareas.filter(x => x.id !== t.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--muted)', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -247,6 +316,11 @@ function HistorialModal({
           )}
         </div>
 
+        {/* Client tasks */}
+        <div style={{ padding: '0 1.5rem', flexShrink: 0 }}>
+          <TareasCliente clienteNombre={cliente} />
+        </div>
+
         {/* Footer */}
         <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
           <button
@@ -267,10 +341,12 @@ interface FormState {
   cliente_nombre: string
   tipo: TipoPendiente
   descripcion: string
+  mensaje_cliente: string
   fecha_limite: string
   fecha_trabajo: string
   direccion: string
   drive_links: string[]
+  destinatario: Destinatario
 }
 
 function emptyForm(clienteInicial = ''): FormState {
@@ -280,10 +356,12 @@ function emptyForm(clienteInicial = ''): FormState {
     cliente_nombre: clienteInicial,
     tipo: 'confirmar_visita',
     descripcion: '',
+    mensaje_cliente: '',
     fecha_limite: now.toISOString().slice(0, 16),
     fecha_trabajo: '',
     direccion: '',
     drive_links: [''],
+    destinatario: 'gustavo',
   }
 }
 
@@ -327,10 +405,12 @@ function CrearForm({
       cliente_nombre: form.cliente_nombre.trim(),
       tipo: form.tipo,
       descripcion: form.descripcion.trim(),
+      mensaje_cliente: form.mensaje_cliente.trim(),
       fecha_limite: new Date(form.fecha_limite).toISOString(),
       fecha_trabajo: form.fecha_trabajo ? new Date(form.fecha_trabajo).toISOString() : null,
       direccion: form.direccion.trim() || null,
       drive_links: form.drive_links.filter(l => l.trim()),
+      destinatario: form.destinatario,
     }
 
     const { error } = await supabase.from('pendientes').insert(payload)
@@ -360,6 +440,28 @@ function CrearForm({
         {clienteInicial ? `Nuevo pendiente — ${clienteInicial}` : 'Nuevo pendiente'}
       </h3>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {/* Destinatario selector */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+          {(['gustavo', 'irazu'] as Destinatario[]).map(d => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => {
+                setField('destinatario', d)
+                setField('tipo', d === 'gustavo' ? 'confirmar_visita' : 'emitir_boleta')
+              }}
+              style={{
+                flex: 1, padding: '9px', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600,
+                border: `2px solid ${form.destinatario === d ? 'var(--primary)' : 'var(--border)'}`,
+                background: form.destinatario === d ? '#eff6ff' : 'var(--white)',
+                color: form.destinatario === d ? 'var(--primary)' : 'var(--muted)',
+              }}
+            >
+              {d === 'gustavo' ? '🔧 Gustavo' : '🧾 Irazú'}
+            </button>
+          ))}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div className="field">
             <label>Cliente</label>
@@ -373,16 +475,21 @@ function CrearForm({
           <div className="field">
             <label>Tipo de acción</label>
             <select value={form.tipo} onChange={e => setField('tipo', e.target.value as TipoPendiente)}>
-              {(Object.entries(TIPO_LABELS) as [TipoPendiente, string][]).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
+              {(form.destinatario === 'gustavo' ? TIPOS_GUSTAVO : TIPOS_IRAZU).map(k => (
+                <option key={k} value={k}>{TIPO_LABELS[k]}</option>
               ))}
             </select>
           </div>
         </div>
 
         <div className="field">
-          <label>Contexto / descripción</label>
-          <textarea value={form.descripcion} onChange={e => setField('descripcion', e.target.value)} placeholder="Describe qué necesitas de Gustavo..." rows={3} />
+          <label>📝 Mensaje del cliente (lo que te dijo)</label>
+          <textarea value={form.mensaje_cliente} onChange={e => setField('mensaje_cliente', e.target.value)} placeholder="Ej: 'Hola, necesito cambiar el tablero, hay chispas y se va la luz seguido...'" rows={3} />
+        </div>
+
+        <div className="field">
+          <label>🔧 Tu instrucción para {form.destinatario === 'gustavo' ? 'Gustavo' : 'Irazú'}</label>
+          <textarea value={form.descripcion} onChange={e => setField('descripcion', e.target.value)} placeholder={form.destinatario === 'gustavo' ? 'Ej: Ir a revisar el tablero y confirmar si necesita reemplazo completo...' : 'Ej: Emitir boleta por instalación de tablero, monto $85.000...'} rows={3} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -437,6 +544,8 @@ function CrearForm({
 interface EditState {
   tipo: TipoPendiente
   descripcion: string
+  mensaje_cliente: string
+  respuesta: string
   fecha_limite: string
   fecha_trabajo: string
   direccion: string
@@ -446,6 +555,8 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
   const [form, setForm] = useState<EditState>({
     tipo: p.tipo,
     descripcion: p.descripcion || '',
+    mensaje_cliente: p.mensaje_cliente || '',
+    respuesta: p.respuesta || '',
     fecha_limite: new Date(p.fecha_limite).toISOString().slice(0, 16),
     fecha_trabajo: p.fecha_trabajo ? new Date(p.fecha_trabajo).toISOString().slice(0, 16) : '',
     direccion: p.direccion || '',
@@ -458,6 +569,8 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
     await supabase.from('pendientes').update({
       tipo: form.tipo,
       descripcion: form.descripcion.trim(),
+      mensaje_cliente: form.mensaje_cliente.trim() || null,
+      respuesta: form.respuesta.trim() || null,
       fecha_limite: new Date(form.fecha_limite).toISOString(),
       fecha_trabajo: form.fecha_trabajo ? new Date(form.fecha_trabajo).toISOString() : null,
       direccion: form.direccion.trim() || null,
@@ -496,9 +609,19 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
         </>
       )}
       <div className="field">
-        <label>Descripción</label>
-        <textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} rows={2} placeholder="Contexto para Gustavo..." />
+        <label>📝 Mensaje del cliente</label>
+        <textarea value={form.mensaje_cliente} onChange={e => setForm(f => ({ ...f, mensaje_cliente: e.target.value }))} rows={2} placeholder="Lo que dijo el cliente..." />
       </div>
+      <div className="field">
+        <label>🔧 Tu instrucción</label>
+        <textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} rows={2} placeholder="Contexto / instrucción..." />
+      </div>
+      {p.estado === 'respondido' && (
+        <div className="field">
+          <label>✏️ Respuesta de Gustavo (editable)</label>
+          <textarea value={form.respuesta} onChange={e => setForm(f => ({ ...f, respuesta: e.target.value }))} rows={4} style={{ fontFamily: 'inherit' }} />
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="submit" className="btn btn-primary" disabled={saving} style={{ fontSize: 13, padding: '7px 16px' }}>
           {saving ? 'Guardando...' : '✓ Guardar'}
@@ -538,12 +661,15 @@ function PendienteCard({
     respondido: 'badge badge-respondido',
   }[p.estado]
 
-  const tipoBadge = {
+  const tipoBadge = ({
     confirmar_visita: 'badge badge-visita',
     revisar_fotos: 'badge badge-fotos',
     presupuesto: 'badge badge-presupuesto',
     otro: 'badge badge-otro',
-  }[p.tipo]
+    emitir_boleta: 'badge badge-otro',
+    emitir_factura: 'badge badge-otro',
+    cobro: 'badge badge-otro',
+  } as Record<TipoPendiente, string>)[p.tipo]
 
   async function registrarAccion(tipo: AccionPendiente['tipo']) {
     const nueva: AccionPendiente = { tipo, timestamp: new Date().toISOString() }
@@ -700,8 +826,18 @@ function PendienteCard({
                 </div>
               )}
 
+              {p.mensaje_cliente && (
+                <div style={{ marginTop: 12, padding: '10px 12px', background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #38bdf8' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cliente</p>
+                  <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)' }}>{p.mensaje_cliente}</p>
+                </div>
+              )}
+
               {p.descripcion && (
-                <p style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6, color: 'var(--secondary)' }}>{p.descripcion}</p>
+                <div style={{ marginTop: 8, padding: '10px 12px', background: '#fefce8', borderRadius: 8, borderLeft: '3px solid #eab308' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#854d0e', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Alexandra</p>
+                  <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)' }}>{p.descripcion}</p>
+                </div>
               )}
 
               {p.drive_links?.length > 0 && (

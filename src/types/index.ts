@@ -1,5 +1,6 @@
-export type TipoPendiente = 'confirmar_visita' | 'revisar_fotos' | 'presupuesto' | 'otro'
+export type TipoPendiente = 'confirmar_visita' | 'revisar_fotos' | 'presupuesto' | 'otro' | 'emitir_boleta' | 'emitir_factura' | 'cobro'
 export type EstadoPendiente = 'pendiente' | 'recordatorio_enviado' | 'respondido'
+export type Destinatario = 'gustavo' | 'irazu'
 
 export interface ItemPresupuesto {
   categoria: 'MATERIALES' | 'MANO DE OBRA'
@@ -19,6 +20,7 @@ export interface Pendiente {
   cliente_nombre: string
   tipo: TipoPendiente
   descripcion: string | null
+  mensaje_cliente: string | null
   fecha_limite: string
   fecha_trabajo: string | null
   direccion: string | null
@@ -30,14 +32,17 @@ export interface Pendiente {
   items: ItemPresupuesto[]
   acciones?: AccionPendiente[]
   audio_url?: string | null
+  destinatario?: Destinatario
 }
 
 export interface NuevoPendiente {
   cliente_nombre: string
   tipo: TipoPendiente
   descripcion: string
+  mensaje_cliente: string
   fecha_limite: string
   fecha_trabajo: string | null
   direccion: string | null
   drive_links: string[]
+  destinatario: Destinatario
 }

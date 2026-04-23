@@ -1,6 +1,7 @@
 import Presupuesto from './pages/Presupuesto'
 import Admin from './pages/Admin'
 import Gustavo from './pages/Gustavo'
+import Irazu from './pages/Irazu'
 
 export default function App() {
   const path = window.location.pathname
@@ -9,6 +10,11 @@ export default function App() {
   // Vista de Gustavo (móvil)
   if (path === '/g') {
     return <Gustavo token={params.get('t')} />
+  }
+
+  // Vista de Irazú (boletas/facturas)
+  if (path === '/i') {
+    return <Irazu token={params.get('t')} />
   }
 
   // Panel de Alexandra

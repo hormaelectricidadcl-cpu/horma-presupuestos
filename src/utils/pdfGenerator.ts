@@ -43,10 +43,10 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
     return `${day}-${month}-${year}`;
   };
 
-  // Helper function to get validity date (30 days from now)
+  // Helper function to get validity date (15 days from now)
   const getValidityDate = (): string => {
     const future = new Date();
-    future.setDate(future.getDate() + 30);
+    future.setDate(future.getDate() + 15);
     const day = String(future.getDate()).padStart(2, '0');
     const month = String(future.getMonth() + 1).padStart(2, '0');
     const year = future.getFullYear();
