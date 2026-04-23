@@ -278,7 +278,7 @@ function HistorialModal({
                       {p.estado === 'respondido' && p.respuesta && (
                         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: p.descripcion ? 0 : 0 }}>
                           <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 4 }}>
-                            ✓ Gustavo respondió — {p.respondido_at ? fmtFecha(p.respondido_at) : ''}
+                            ✓ {p.destinatario === 'irazu' ? 'Irazú' : 'Gustavo'} respondió — {p.respondido_at ? fmtFecha(p.respondido_at) : ''}
                           </p>
                           <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{p.respuesta}</p>
                         </div>
@@ -618,7 +618,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
       </div>
       {p.estado === 'respondido' && (
         <div className="field">
-          <label>✏️ Respuesta de Gustavo (editable)</label>
+          <label>✏️ Respuesta de {p.destinatario === 'irazu' ? 'Irazú' : 'Gustavo'} (editable)</label>
           <textarea value={form.respuesta} onChange={e => setForm(f => ({ ...f, respuesta: e.target.value }))} rows={4} style={{ fontFamily: 'inherit' }} />
         </div>
       )}
@@ -863,7 +863,7 @@ function PendienteCard({
 
                   {p.audio_url && (
                     <div style={{ marginTop: 10 }}>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 4 }}>🎙️ Nota de voz de Gustavo</p>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 4 }}>{p.destinatario === 'irazu' ? '📎 Archivo adjunto' : '🎙️ Nota de voz de Gustavo'}</p>
                       <audio controls src={p.audio_url} style={{ width: '100%' }} />
                     </div>
                   )}
@@ -1155,7 +1155,7 @@ export default function Admin() {
         {[
           { label: '📋 Admin', href: '/admin', active: true, color: 'var(--primary)' },
           { label: '🔧 Gustavo', href: `/g?t=${gustavoToken}`, active: false, color: '#0284c7' },
-          { label: '🧾 Irazú', href: `/i?t=${irazuToken}`, active: false, color: '#7c3aed' },
+          { label: '🧾 Irazú', href: `/i?t=${irazuToken}`, active: false, color: '#0891b2' },
           { label: '📊 Presupuestos', href: '/', active: false, color: '#059669' },
         ].map(item => (
           <a
@@ -1244,52 +1244,108 @@ export default function Admin() {
       {/* List grouped by client */}
       {loading ? (
         <div className="spinner" />
-      ) : displayed.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
-          {tab === 'activos' ? (
-            <>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-              <p style={{ fontWeight: 600 }}>Sin pendientes activos</p>
-              <p style={{ fontSize: 14, marginTop: 6 }}>Crea uno con el botón de arriba.</p>
-            </>
-          ) : (
-            <p>Aún no hay pendientes respondidos.</p>
-          )}
-        </div>
+      ) : tab === 'activos' ? (
+        activos.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+            <p style={{ fontWeight: 600 }}>Sin pendientes activos</p>
+            <p style={{ fontSize: 14, marginTop: 6 }}>Crea uno con el botón de arriba.</p>
+          </div>
+        ) : (
+          Object.entries(clienteGroups).map(([cliente, items]) => (
+            <div key={cliente}>
+              {items.length > 1 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '7px 12px', marginBottom: 6,
+                  background: '#f0f4ff', border: '1px solid #c7d2fe',
+                  borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
+                }}>
+                  <span>🔗</span>
+                  <span>{cliente}</span>
+                  <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
+                  <button
+                    onClick={() => setHistorialCliente(cliente)}
+                    style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
+                  >
+                    Ver historial →
+                  </button>
+                </div>
+              )}
+              <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
+                {items.map(p => (
+                  <PendienteCard
+                    key={p.id}
+                    p={p}
+                    onUpdate={loadPendientes}
+                    onVerHistorial={setHistorialCliente}
+                    onSeguimiento={abrirSeguimiento}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
+        )
+      ) : respondidos.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Aún no hay pendientes respondidos.</p>
       ) : (
-        Object.entries(clienteGroups).map(([cliente, items]) => (
-          <div key={cliente}>
-            {items.length > 1 && (
+        <>
+          {[
+            { label: '🔧 Gustavo', color: '#0284c7', bg: '#eff6ff', bdr: '#bfdbfe', lista: respondidos.filter(p => !p.destinatario || p.destinatario === 'gustavo') },
+            { label: '🧾 Irazú', color: '#0891b2', bg: '#ecfeff', bdr: '#a5f3fc', lista: respondidos.filter(p => p.destinatario === 'irazu') },
+          ].map(({ label, color, bg, bdr, lista }) => lista.length === 0 ? null : (
+            <div key={label} style={{ marginBottom: 24 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '7px 12px', marginBottom: 6,
-                background: '#f0f4ff', border: '1px solid #c7d2fe',
-                borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
+                padding: '8px 14px', marginBottom: 10,
+                background: bg, border: `1px solid ${bdr}`,
+                borderRadius: 8, fontSize: 14, fontWeight: 700, color,
               }}>
-                <span>🔗</span>
-                <span>{cliente}</span>
-                <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
-                <button
-                  onClick={() => setHistorialCliente(cliente)}
-                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
-                >
-                  Ver historial →
-                </button>
+                {label}
+                <span style={{ fontWeight: 400, color: 'var(--muted)', fontSize: 13 }}>— {lista.length} respondido{lista.length !== 1 ? 's' : ''}</span>
               </div>
-            )}
-            <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
-              {items.map(p => (
-                <PendienteCard
-                  key={p.id}
-                  p={p}
-                  onUpdate={loadPendientes}
-                  onVerHistorial={setHistorialCliente}
-                  onSeguimiento={abrirSeguimiento}
-                />
+              {Object.entries(
+                lista.reduce<Record<string, Pendiente[]>>((acc, p) => {
+                  if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
+                  acc[p.cliente_nombre].push(p)
+                  return acc
+                }, {})
+              ).map(([cliente, items]) => (
+                <div key={cliente}>
+                  {items.length > 1 && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '7px 12px', marginBottom: 6,
+                      background: '#f0f4ff', border: '1px solid #c7d2fe',
+                      borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
+                    }}>
+                      <span>🔗</span>
+                      <span>{cliente}</span>
+                      <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
+                      <button
+                        onClick={() => setHistorialCliente(cliente)}
+                        style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
+                      >
+                        Ver historial →
+                      </button>
+                    </div>
+                  )}
+                  <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
+                    {items.map(p => (
+                      <PendienteCard
+                        key={p.id}
+                        p={p}
+                        onUpdate={loadPendientes}
+                        onVerHistorial={setHistorialCliente}
+                        onSeguimiento={abrirSeguimiento}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
-        ))
+          ))}
+        </>
       )}
 
       <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 24 }}>
