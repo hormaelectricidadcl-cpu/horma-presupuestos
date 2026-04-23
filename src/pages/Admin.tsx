@@ -1134,8 +1134,47 @@ export default function Admin() {
     return acc
   }, {})
 
+  const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
+  const irazuToken = import.meta.env.VITE_IRAZU_TOKEN as string
+
   return (
     <div className="pendientes" style={{ background: 'var(--bg)', minHeight: '100vh' }}>
+
+      {/* Nav bar */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 100,
+        background: 'var(--white)', borderBottom: '1px solid var(--border)',
+        padding: '0 1rem',
+        display: 'flex', alignItems: 'center', gap: 4,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 8px 10px 0', marginRight: 8, borderRight: '1px solid var(--border)' }}>
+          <div style={{ width: 28, height: 28, background: 'var(--primary)', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fff', fontSize: 14 }}>H</div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Horma</span>
+        </div>
+        {[
+          { label: '📋 Admin', href: '/admin', active: true, color: 'var(--primary)' },
+          { label: '🔧 Gustavo', href: `/g?t=${gustavoToken}`, active: false, color: '#0284c7' },
+          { label: '🧾 Irazú', href: `/i?t=${irazuToken}`, active: false, color: '#7c3aed' },
+          { label: '📊 Presupuestos', href: '/', active: false, color: '#059669' },
+        ].map(item => (
+          <a
+            key={item.label}
+            href={item.href}
+            target={item.active ? undefined : '_blank'}
+            rel="noreferrer"
+            style={{
+              padding: '10px 12px', fontSize: 13, fontWeight: item.active ? 700 : 500,
+              color: item.active ? item.color : 'var(--muted)',
+              textDecoration: 'none', borderBottom: `2px solid ${item.active ? item.color : 'transparent'}`,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {item.label}
+          </a>
+        ))}
+      </div>
+
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '1.5rem 1rem' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 12 }}>
