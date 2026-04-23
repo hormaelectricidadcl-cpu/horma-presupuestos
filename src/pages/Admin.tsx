@@ -286,8 +286,22 @@ function HistorialModal({
 
                       {p.estado === 'respondido' && p.audio_url && (
                         <div style={{ marginTop: 8 }}>
-                          <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>🎙️ Nota de voz</p>
-                          <audio controls src={p.audio_url} style={{ width: '100%', height: 36 }} />
+                          {p.destinatario === 'irazu' ? (
+                            <>
+                              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>📎 Archivo adjunto</p>
+                              {/\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(p.audio_url) ? (
+                                <img src={p.audio_url} alt="Archivo" style={{ width: '100%', borderRadius: 6, marginBottom: 6 }} />
+                              ) : null}
+                              <a href={p.audio_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#0891b2' }}>
+                                Abrir archivo →
+                              </a>
+                            </>
+                          ) : (
+                            <>
+                              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>🎙️ Nota de voz</p>
+                              <audio controls src={p.audio_url} style={{ width: '100%', height: 36 }} />
+                            </>
+                          )}
                         </div>
                       )}
 
@@ -863,8 +877,28 @@ function PendienteCard({
 
                   {p.audio_url && (
                     <div style={{ marginTop: 10 }}>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 4 }}>{p.destinatario === 'irazu' ? '📎 Archivo adjunto' : '🎙️ Nota de voz de Gustavo'}</p>
-                      <audio controls src={p.audio_url} style={{ width: '100%' }} />
+                      {p.destinatario === 'irazu' ? (
+                        <>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 8 }}>📎 Archivo adjunto de Irazú</p>
+                          {/\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(p.audio_url) ? (
+                            <>
+                              <img src={p.audio_url} alt="Archivo adjunto" style={{ width: '100%', borderRadius: 8, marginBottom: 8, display: 'block' }} />
+                              <a href={p.audio_url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ fontSize: 13, padding: '6px 14px' }}>
+                                ⬇️ Abrir / descargar imagen
+                              </a>
+                            </>
+                          ) : (
+                            <a href={p.audio_url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ fontSize: 13, padding: '6px 14px' }}>
+                              📄 Abrir / descargar archivo
+                            </a>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 4 }}>🎙️ Nota de voz de Gustavo</p>
+                          <audio controls src={p.audio_url} style={{ width: '100%' }} />
+                        </>
+                      )}
                     </div>
                   )}
 
