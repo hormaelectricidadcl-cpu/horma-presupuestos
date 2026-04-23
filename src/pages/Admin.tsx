@@ -191,11 +191,13 @@ function HistorialModal({
   todos,
   onClose,
   onSeguimiento,
+  onPedirBoleta,
 }: {
   cliente: string
   todos: Pendiente[]
   onClose: () => void
   onSeguimiento: (nombre: string) => void
+  onPedirBoleta: (nombre: string) => void
 }) {
   const historial = todos
     .filter(p => p.cliente_nombre === cliente)
@@ -336,13 +338,20 @@ function HistorialModal({
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', flexShrink: 0, display: 'flex', gap: 10 }}>
+          <button
+            className="btn btn-secondary"
+            style={{ flex: 1, fontWeight: 600, fontSize: 14 }}
+            onClick={() => { onPedirBoleta(cliente); onClose() }}
+          >
+            🧾 Pedir boleta a Irazú
+          </button>
           <button
             className="btn btn-primary"
-            style={{ width: '100%', fontWeight: 700 }}
+            style={{ flex: 1, fontWeight: 700, fontSize: 14 }}
             onClick={() => { onSeguimiento(cliente); onClose() }}
           >
-            + Crear nuevo pendiente para {cliente}
+            + Nuevo pendiente
           </button>
         </div>
       </div>
@@ -363,19 +372,19 @@ interface FormState {
   destinatario: Destinatario
 }
 
-function emptyForm(clienteInicial = ''): FormState {
+function emptyForm(clienteInicial = '', destinatarioInicial: Destinatario = 'gustavo', tipoInicial: TipoPendiente = 'confirmar_visita'): FormState {
   const now = new Date()
   now.setHours(now.getHours() + 4)
   return {
     cliente_nombre: clienteInicial,
-    tipo: 'confirmar_visita',
+    tipo: tipoInicial,
     descripcion: '',
     mensaje_cliente: '',
     fecha_limite: now.toISOString().slice(0, 16),
     fecha_trabajo: '',
     direccion: '',
     drive_links: [''],
-    destinatario: 'gustavo',
+    destinatario: destinatarioInicial,
   }
 }
 
@@ -383,12 +392,16 @@ function CrearForm({
   onCreated,
   onCancel,
   clienteInicial = '',
+  destinatarioInicial = 'gustavo',
+  tipoInicial = 'confirmar_visita',
 }: {
   onCreated: () => void
   onCancel: () => void
   clienteInicial?: string
+  destinatarioInicial?: Destinatario
+  tipoInicial?: TipoPendiente
 }) {
-  const [form, setForm] = useState<FormState>(() => emptyForm(clienteInicial))
+  const [form, setForm] = useState<FormState>(() => emptyForm(clienteInicial, destinatarioInicial, tipoInicial))
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -1121,6 +1134,7 @@ export default function Admin() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
+  const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
   const [tab, setTab] = useState<'activos' | 'respondidos'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
 
@@ -1148,6 +1162,14 @@ export default function Admin() {
 
   function abrirSeguimiento(nombre: string) {
     setClienteInicial(nombre)
+    setFormInit({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function pedirBoleta(nombre: string) {
+    setClienteInicial(nombre)
+    setFormInit({ destinatario: 'irazu', tipo: 'emitir_boleta' })
     setShowForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -1251,6 +1273,8 @@ export default function Admin() {
       {showForm && (
         <CrearForm
           clienteInicial={clienteInicial}
+          destinatarioInicial={formInit.destinatario}
+          tipoInicial={formInit.tipo}
           onCreated={() => { setShowForm(false); setClienteInicial(''); loadPendientes() }}
           onCancel={() => { setShowForm(false); setClienteInicial('') }}
         />
@@ -1394,6 +1418,7 @@ export default function Admin() {
         todos={pendientes}
         onClose={() => setHistorialCliente(null)}
         onSeguimiento={abrirSeguimiento}
+        onPedirBoleta={pedirBoleta}
       />
     )}
     </div>

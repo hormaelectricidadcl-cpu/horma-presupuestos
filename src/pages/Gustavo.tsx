@@ -120,8 +120,22 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
           )}
           {h.audio_url && (
             <div style={{ marginTop: 6 }}>
-              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>🎙️ Nota de voz</p>
-              <audio controls src={h.audio_url} style={{ width: '100%', height: 36 }} />
+              {h.destinatario === 'irazu' ? (
+                <>
+                  <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>📎 Archivo de Irazú</p>
+                  {/\.(jpe?g|png|gif|webp)(\?|$)/i.test(h.audio_url) && (
+                    <img src={h.audio_url} alt="Archivo" style={{ width: '100%', borderRadius: 8, marginBottom: 6 }} />
+                  )}
+                  <a href={h.audio_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#0891b2', fontWeight: 600 }}>
+                    Abrir archivo →
+                  </a>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>🎙️ Nota de voz</p>
+                  <audio controls src={h.audio_url} style={{ width: '100%', height: 36 }} />
+                </>
+              )}
             </div>
           )}
         </div>
@@ -415,6 +429,163 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
   )
 }
 
+/* ─── Panel de clientes ─────────────────────────────── */
+function PanelClientes() {
+  const [clientes, setClientes] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [seleccionado, setSeleccionado] = useState<string | null>(null)
+  const [historial, setHistorial] = useState<Pendiente[]>([])
+  const [loadingH, setLoadingH] = useState(false)
+
+  useEffect(() => {
+    supabase
+      .from('pendientes')
+      .select('cliente_nombre')
+      .order('cliente_nombre')
+      .then(({ data }) => {
+        const unique = [...new Set((data || []).map((d: { cliente_nombre: string }) => d.cliente_nombre))].sort()
+        setClientes(unique)
+        setLoading(false)
+      })
+  }, [])
+
+  async function verCliente(nombre: string) {
+    setSeleccionado(nombre)
+    setLoadingH(true)
+    const { data } = await supabase
+      .from('pendientes')
+      .select('*')
+      .eq('cliente_nombre', nombre)
+      .order('created_at', { ascending: true })
+    setHistorial((data as Pendiente[]) || [])
+    setLoadingH(false)
+  }
+
+  if (seleccionado) {
+    return (
+      <div>
+        <button
+          onClick={() => setSeleccionado(null)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--secondary)', marginBottom: 16, padding: 0 }}
+        >
+          ← Volver a clientes
+        </button>
+        <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>👤 {seleccionado}</h2>
+
+        {loadingH ? (
+          <div className="spinner" />
+        ) : historial.length === 0 ? (
+          <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Sin historial.</p>
+        ) : (
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', left: 11, top: 8, bottom: 8, width: 2, background: 'var(--border)' }} />
+            {historial.map((h, idx) => {
+              const esIrazu = h.destinatario === 'irazu'
+              const isLast = idx === historial.length - 1
+              return (
+                <div key={h.id} style={{ position: 'relative', paddingLeft: 36, marginBottom: isLast ? 0 : 20 }}>
+                  <div style={{
+                    position: 'absolute', left: 3, top: 4,
+                    width: 18, height: 18, borderRadius: '50%',
+                    background: h.estado === 'respondido' ? 'var(--success)' : esIrazu ? '#0891b2' : 'var(--primary)',
+                    border: '3px solid var(--white)', fontSize: 8, color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {h.estado === 'respondido' ? '✓' : '•'}
+                  </div>
+                  <div style={{ background: 'var(--white)', borderRadius: 12, padding: '12px 14px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                      <span style={{
+                        fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                        color: esIrazu ? '#0891b2' : 'var(--primary)',
+                        background: esIrazu ? '#ecfeff' : '#eff6ff',
+                      }}>
+                        {esIrazu ? '🧾 ' : '🔧 '}{TIPO_LABELS[h.tipo]}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtFecha(h.created_at)}</span>
+                      {h.estado === 'respondido' && <span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>✓ Respondido</span>}
+                    </div>
+
+                    {!esIrazu && h.descripcion && (
+                      <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: h.respuesta ? 6 : 0 }}>
+                        {h.descripcion}
+                      </p>
+                    )}
+                    {esIrazu && h.mensaje_cliente && (
+                      <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: h.respuesta ? 6 : 0 }}>
+                        {h.mensaje_cliente}
+                      </p>
+                    )}
+
+                    {h.respuesta && (
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 3 }}>
+                          {esIrazu ? 'Irazú respondió:' : 'Tu respuesta:'}
+                        </p>
+                        <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{h.respuesta}</p>
+                      </div>
+                    )}
+
+                    {h.audio_url && (
+                      <div style={{ marginTop: 8 }}>
+                        {esIrazu ? (
+                          <>
+                            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>📎 Archivo adjunto</p>
+                            {/\.(jpe?g|png|gif|webp)(\?|$)/i.test(h.audio_url) && (
+                              <img src={h.audio_url} alt="Boleta" style={{ width: '100%', borderRadius: 8, marginBottom: 6 }} />
+                            )}
+                            <a href={h.audio_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#0891b2', fontWeight: 600 }}>
+                              Abrir archivo →
+                            </a>
+                          </>
+                        ) : (
+                          <>
+                            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>🎙️ Nota de voz</p>
+                            <audio controls src={h.audio_url} style={{ width: '100%', height: 36 }} />
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {loading ? (
+        <div className="spinner" />
+      ) : clientes.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Aún no hay clientes registrados.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {clientes.map(nombre => (
+            <button
+              key={nombre}
+              onClick={() => verCliente(nombre)}
+              style={{
+                width: '100%', padding: '14px 16px',
+                borderRadius: 12, border: '1.5px solid var(--border)',
+                background: 'var(--white)', fontSize: 15, fontWeight: 600,
+                color: 'var(--text)', cursor: 'pointer', textAlign: 'left',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}
+            >
+              <span>👤 {nombre}</span>
+              <span style={{ fontSize: 14, color: 'var(--muted)' }}>→</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Gustavo page ──────────────────────────────────── */
 interface Props {
   token: string | null
@@ -423,6 +594,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<'pendientes' | 'clientes'>('pendientes')
 
   const tokenValido = token === GUSTAVO_TOKEN
 
@@ -431,6 +603,7 @@ export default function Gustavo({ token }: Props) {
     const { data } = await supabase
       .from('pendientes')
       .select('*')
+      .eq('destinatario', 'gustavo')
       .neq('estado', 'respondido')
       .order('fecha_limite', { ascending: true })
     setPendientes((data as Pendiente[]) || [])
@@ -470,17 +643,34 @@ export default function Gustavo({ token }: Props) {
           }}>H</div>
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>Hola Gustavo</h1>
-            {!loading && (
+            {!loading && tab === 'pendientes' && (
               <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-                {pendientes.length === 0
-                  ? 'Sin pendientes'
-                  : `${pendientes.length} pendiente${pendientes.length !== 1 ? 's' : ''} para responder`}
+                {pendientes.length === 0 ? 'Sin pendientes' : `${pendientes.length} pendiente${pendientes.length !== 1 ? 's' : ''} para responder`}
               </p>
             )}
           </div>
         </div>
 
-        {loading ? (
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0 }}>
+          {([['pendientes', '📋 Mis tareas'], ['clientes', '👥 Clientes']] as const).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              style={{
+                padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 14, fontWeight: tab === k ? 700 : 500,
+                color: tab === k ? 'var(--primary)' : 'var(--muted)',
+                borderBottom: `2px solid ${tab === k ? 'var(--primary)' : 'transparent'}`,
+                marginBottom: -2,
+              }}
+            >{label}</button>
+          ))}
+        </div>
+
+        {tab === 'clientes' ? (
+          <PanelClientes />
+        ) : loading ? (
           <div className="spinner" />
         ) : pendientes.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem 1rem' }}>
