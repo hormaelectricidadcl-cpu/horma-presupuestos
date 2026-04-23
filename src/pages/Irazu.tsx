@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Pendiente, TipoPendiente } from '../types'
 
 const IRAZU_TOKEN = import.meta.env.VITE_IRAZU_TOKEN as string
+const COLOR = '#0891b2'
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
   confirmar_visita: 'Confirmar visita',
@@ -39,27 +40,58 @@ function IrazuCard({ p, onRespondido }: { p: Pendiente; onRespondido: () => void
   const [respuesta, setRespuesta] = useState('')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
+  const [archivo, setArchivo] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const dl = formatDeadlineShort(p.fecha_limite)
 
   async function enviar() {
     const texto = respuesta.trim()
-    if (!texto) {
-      alert('Escribe una respuesta antes de enviar.')
+    if (!texto && !archivo) {
+      alert('Escribe una respuesta o adjunta un archivo antes de enviar.')
       return
     }
     setSaving(true)
-    const { error } = await supabase.from('pendientes').update({
+
+    // Upload file if selected
+    let archivoUrl: string | null = null
+    if (archivo) {
+      const ext = archivo.name.split('.').pop() || 'bin'
+      const filename = `irazu-${p.id}-${Date.now()}.${ext}`
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('audio-notas')
+        .upload(filename, archivo, { contentType: archivo.type })
+      if (!uploadErr && uploadData) {
+        const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(uploadData.path)
+        archivoUrl = urlData.publicUrl
+      }
+    }
+
+    const updatePayload: Record<string, unknown> = {
       estado: 'respondido',
       respondido_at: new Date().toISOString(),
-      respuesta: texto,
-    }).eq('id', p.id)
+      respuesta: texto || '(Solo archivo adjunto)',
+    }
+    if (archivoUrl) updatePayload.audio_url = archivoUrl
+
+    const { error } = await supabase.from('pendientes').update(updatePayload).eq('id', p.id)
 
     if (error) {
       alert('Error al guardar. Intenta de nuevo.')
       setSaving(false)
       return
     }
+
+    fetch('/api/notificar-respuesta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clienteNombre: p.cliente_nombre,
+        tipo: p.tipo,
+        respuesta: texto || '(Archivo adjunto)',
+        destinatario: 'irazu',
+      }),
+    }).catch(() => {})
 
     setDone(true)
     setSaving(false)
@@ -76,10 +108,7 @@ function IrazuCard({ p, onRespondido }: { p: Pendiente; onRespondido: () => void
   }
 
   return (
-    <div className="card" style={{
-      marginBottom: 16,
-      borderTop: `4px solid ${dl.urgent ? 'var(--danger)' : '#8b5cf6'}`,
-    }}>
+    <div className="card" style={{ marginBottom: 16, borderTop: `4px solid ${dl.urgent ? 'var(--danger)' : COLOR}` }}>
       <div style={{ padding: '18px 16px 0' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
@@ -90,11 +119,9 @@ function IrazuCard({ p, onRespondido }: { p: Pendiente; onRespondido: () => void
               <span style={{ fontWeight: 600, color: 'var(--secondary)', fontSize: 15 }}>{TIPO_LABELS[p.tipo]}</span>
             </div>
           </div>
-          <span style={{
-            fontSize: 12, fontWeight: 700,
-            color: dl.urgent ? 'var(--danger)' : 'var(--muted)',
-            textAlign: 'right', flexShrink: 0, marginTop: 4,
-          }}>{dl.text}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: dl.urgent ? 'var(--danger)' : 'var(--muted)', textAlign: 'right', flexShrink: 0, marginTop: 4 }}>
+            {dl.text}
+          </span>
         </div>
 
         {/* Mensaje del cliente */}
@@ -117,18 +144,12 @@ function IrazuCard({ p, onRespondido }: { p: Pendiente; onRespondido: () => void
         {p.drive_links?.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
             {p.drive_links.map((link, i) => (
-              <a
-                key={i}
-                href={link}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '12px 14px', background: '#e3f2fd',
-                  borderRadius: 'var(--radius-sm)', color: '#1565c0',
-                  fontWeight: 600, fontSize: 15, textDecoration: 'none',
-                }}
-              >
+              <a key={i} href={link} target="_blank" rel="noreferrer" style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '12px 14px', background: '#e0f2fe',
+                borderRadius: 'var(--radius-sm)', color: COLOR,
+                fontWeight: 600, fontSize: 15, textDecoration: 'none',
+              }}>
                 <span style={{ fontSize: 20 }}>📁</span>
                 Ver archivo {p.drive_links.length > 1 ? i + 1 : ''}
               </a>
@@ -151,11 +172,56 @@ function IrazuCard({ p, onRespondido }: { p: Pendiente; onRespondido: () => void
             />
           </div>
 
+          {/* File attachment */}
+          <div style={{ marginBottom: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--secondary)', marginBottom: 10 }}>
+              Adjuntar archivo (boleta, factura, comprobante)
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.pdf"
+              style={{ display: 'none' }}
+              onChange={e => setArchivo(e.target.files?.[0] || null)}
+            />
+            {!archivo ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  width: '100%', padding: '14px',
+                  borderRadius: 12, border: '2px dashed var(--border)',
+                  background: 'var(--bg)', fontSize: 15, fontWeight: 600,
+                  color: 'var(--secondary)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                }}
+              >
+                <span style={{ fontSize: 22 }}>📎</span>
+                Seleccionar archivo
+              </button>
+            ) : (
+              <div style={{ padding: '12px 14px', background: '#ecfdf5', borderRadius: 10, border: '1px solid #6ee7b7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>{archivo.type.includes('pdf') ? '📄' : '🖼️'}</span>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)' }}>{archivo.name}</p>
+                    <p style={{ fontSize: 11, color: 'var(--muted)' }}>{(archivo.size / 1024).toFixed(0)} KB</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setArchivo(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--muted)' }}
+                >✕</button>
+              </div>
+            )}
+          </div>
+
           <button
             className="btn btn-primary btn-lg"
             onClick={enviar}
             disabled={saving}
-            style={{ fontSize: 17, fontWeight: 800, background: '#7c3aed', borderColor: '#7c3aed' }}
+            style={{ fontSize: 17, fontWeight: 800, background: COLOR, borderColor: COLOR }}
           >
             {saving ? 'Enviando...' : '✓ Enviar respuesta'}
           </button>
@@ -166,9 +232,7 @@ function IrazuCard({ p, onRespondido }: { p: Pendiente; onRespondido: () => void
 }
 
 /* ─── Irazú page ────────────────────────────────────── */
-interface Props {
-  token: string | null
-}
+interface Props { token: string | null }
 
 export default function Irazu({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
@@ -195,12 +259,7 @@ export default function Irazu({ token }: Props) {
 
   if (!tokenValido) {
     return (
-      <div className="pendientes" style={{
-        minHeight: '100vh',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        padding: '2rem', textAlign: 'center',
-      }}>
+      <div className="pendientes" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
         <h2 style={{ fontWeight: 700, marginBottom: 8 }}>Link inválido</h2>
         <p style={{ color: 'var(--muted)', fontSize: 15 }}>Pídele a Alexandra que te mande el link.</p>
@@ -211,21 +270,13 @@ export default function Irazu({ token }: Props) {
   return (
     <div className="pendientes">
       <div style={{ maxWidth: 500, margin: '0 auto', padding: '1.25rem 14px 3rem' }}>
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.5rem' }}>
-          <div style={{
-            width: 44, height: 44,
-            background: '#7c3aed', borderRadius: 12,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
-          }}>I</div>
+          <div style={{ width: 44, height: 44, background: COLOR, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0 }}>I</div>
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>Hola Irazú</h1>
             {!loading && (
               <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-                {pendientes.length === 0
-                  ? 'Sin pendientes'
-                  : `${pendientes.length} pendiente${pendientes.length !== 1 ? 's' : ''} para resolver`}
+                {pendientes.length === 0 ? 'Sin pendientes' : `${pendientes.length} pendiente${pendientes.length !== 1 ? 's' : ''} para resolver`}
               </p>
             )}
           </div>
@@ -240,9 +291,7 @@ export default function Irazu({ token }: Props) {
             <p style={{ color: 'var(--muted)', fontSize: 16 }}>No tienes pendientes por resolver.</p>
           </div>
         ) : (
-          pendientes.map(p => (
-            <IrazuCard key={p.id} p={p} onRespondido={loadPendientes} />
-          ))
+          pendientes.map(p => <IrazuCard key={p.id} p={p} onRespondido={loadPendientes} />)
         )}
       </div>
     </div>
