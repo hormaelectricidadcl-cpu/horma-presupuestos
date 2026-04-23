@@ -112,6 +112,29 @@ function IrazuCard({ p, onRespondido }: { p: Pendiente; onRespondido: () => void
             <p style={{ fontSize: 14, lineHeight: 1.5 }}>{p.descripcion}</p>
           </div>
         )}
+
+        {/* Links */}
+        {p.drive_links?.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+            {p.drive_links.map((link, i) => (
+              <a
+                key={i}
+                href={link}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '12px 14px', background: '#e3f2fd',
+                  borderRadius: 'var(--radius-sm)', color: '#1565c0',
+                  fontWeight: 600, fontSize: 15, textDecoration: 'none',
+                }}
+              >
+                <span style={{ fontSize: 20 }}>📁</span>
+                Ver archivo {p.drive_links.length > 1 ? i + 1 : ''}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Response section */}
