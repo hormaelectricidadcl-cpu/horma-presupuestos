@@ -667,11 +667,15 @@ function PendienteCard({
   onUpdate,
   onVerHistorial,
   onSeguimiento,
+  revisado = false,
+  onToggleRevisado,
 }: {
   p: Pendiente
   onUpdate: () => void
   onVerHistorial: (nombre: string) => void
   onSeguimiento: (nombre: string) => void
+  revisado?: boolean
+  onToggleRevisado?: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -768,13 +772,14 @@ function PendienteCard({
     }
   }
 
-  const borderColor = respondido ? 'var(--success)' :
-    new Date(p.fecha_limite) < new Date() ? 'var(--danger)' : 'var(--primary)'
+  const borderColor = respondido
+    ? (revisado ? '#6ee7b7' : 'var(--success)')
+    : new Date(p.fecha_limite) < new Date() ? 'var(--danger)' : 'var(--primary)'
 
   const itemsActivos = aiItems ?? (p.items?.length > 0 ? p.items : null)
 
   return (
-    <div className="card" style={{ borderLeft: `4px solid ${borderColor}`, marginBottom: 12 }}>
+    <div className="card" style={{ borderLeft: `4px solid ${borderColor}`, marginBottom: 12, opacity: revisado ? 0.6 : 1, transition: 'opacity 0.2s' }}>
       <div
         onClick={() => { if (!editing) setExpanded(x => !x) }}
         style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}
@@ -807,6 +812,20 @@ function PendienteCard({
             )}
           </div>
         </div>
+        {respondido && (
+          <button
+            onClick={e => { e.stopPropagation(); onToggleRevisado?.() }}
+            style={{
+              padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+              border: `1.5px solid ${revisado ? 'var(--success)' : 'var(--border)'}`,
+              background: revisado ? '#dcfce7' : 'var(--bg)',
+              color: revisado ? 'var(--success)' : 'var(--muted)',
+              cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+            }}
+          >
+            {revisado ? '✓ Listo' : '· Por revisar'}
+          </button>
+        )}
         <span style={{ color: 'var(--muted)', fontSize: 18, flexShrink: 0 }}>{expanded ? '▲' : '▼'}</span>
       </div>
 
@@ -1135,8 +1154,12 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  const [tab, setTab] = useState<'activos' | 'respondidos'>('activos')
+  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'respondidos_irazu'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
+  const [revisados, setRevisados] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('horma_revisados') || '{}') }
+    catch { return {} }
+  })
 
   useEffect(() => {
     const saved = localStorage.getItem('horma_admin')
@@ -1174,6 +1197,14 @@ export default function Admin() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  function toggleRevisado(id: string) {
+    setRevisados(prev => {
+      const updated = { ...prev, [id]: !prev[id] }
+      localStorage.setItem('horma_revisados', JSON.stringify(updated))
+      return updated
+    })
+  }
+
   if (!authed) return <div className="pendientes"><LoginForm onLogin={() => setAuthed(true)} /></div>
 
   const activos = pendientes.filter(p => p.estado !== 'respondido')
@@ -1181,14 +1212,58 @@ export default function Admin() {
     .filter(p => p.estado === 'respondido')
     .sort((a, b) => new Date(b.respondido_at ?? b.created_at).getTime() - new Date(a.respondido_at ?? a.created_at).getTime())
   const vencidos = activos.filter(p => new Date(p.fecha_limite) < new Date())
-  const displayed = tab === 'activos' ? activos : respondidos
+  const respondidosGustavo = respondidos.filter(p => !p.destinatario || p.destinatario === 'gustavo')
+  const respondidosIrazu = respondidos.filter(p => p.destinatario === 'irazu')
 
-  // Group by client name — preserves deadline sort order within each group
-  const clienteGroups = displayed.reduce<Record<string, Pendiente[]>>((acc, p) => {
+  const clienteGroups = activos.reduce<Record<string, Pendiente[]>>((acc, p) => {
     if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
     acc[p.cliente_nombre].push(p)
     return acc
   }, {})
+
+  function renderRespondidos(lista: Pendiente[]) {
+    if (lista.length === 0) return (
+      <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin respondidos aquí.</p>
+    )
+    const grupos = lista.reduce<Record<string, Pendiente[]>>((acc, p) => {
+      if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
+      acc[p.cliente_nombre].push(p)
+      return acc
+    }, {})
+    return Object.entries(grupos).map(([cliente, items]) => (
+      <div key={cliente}>
+        {items.length > 1 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '7px 12px', marginBottom: 6,
+            background: '#f0f4ff', border: '1px solid #c7d2fe',
+            borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
+          }}>
+            <span>🔗</span>
+            <span>{cliente}</span>
+            <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
+            <button
+              onClick={() => setHistorialCliente(cliente)}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
+            >Ver historial →</button>
+          </div>
+        )}
+        <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
+          {items.map(p => (
+            <PendienteCard
+              key={p.id}
+              p={p}
+              onUpdate={loadPendientes}
+              onVerHistorial={setHistorialCliente}
+              onSeguimiento={abrirSeguimiento}
+              revisado={revisados[p.id] ?? false}
+              onToggleRevisado={() => toggleRevisado(p.id)}
+            />
+          ))}
+        </div>
+      </div>
+    ))
+  }
 
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
   const irazuToken = import.meta.env.VITE_IRAZU_TOKEN as string
@@ -1247,24 +1322,29 @@ export default function Admin() {
       </div>
 
       {/* Stats */}
-      {activos.length > 0 && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-          <div className="card" style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--primary)' }}>{activos.length}</span>
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>activo{activos.length !== 1 ? 's' : ''}</span>
-          </div>
-          {vencidos.length > 0 && (
-            <div className="card" style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', borderLeft: '3px solid var(--danger)' }}>
-              <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--danger)' }}>{vencidos.length}</span>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>vencido{vencidos.length !== 1 ? 's' : ''}</span>
-            </div>
-          )}
-          <div className="card" style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--success)' }}>{respondidos.length}</span>
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>respondido{respondidos.length !== 1 ? 's' : ''}</span>
+      <div style={{ display: 'flex', gap: 12, marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <div className="card" onClick={() => setTab('activos')} style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: tab === 'activos' ? '3px solid var(--primary)' : undefined }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--primary)' }}>{activos.length}</span>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>Activos</p>
+            {vencidos.length > 0 && <p style={{ fontSize: 11, color: 'var(--danger)' }}>{vencidos.length} vencido{vencidos.length !== 1 ? 's' : ''}</p>}
           </div>
         </div>
-      )}
+        <div className="card" onClick={() => setTab('respondidos_gustavo')} style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: tab === 'respondidos_gustavo' ? '3px solid #0284c7' : undefined }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: '#0284c7' }}>{respondidosGustavo.length}</span>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#0284c7' }}>🔧 Gustavo</p>
+            <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondido{respondidosGustavo.length !== 1 ? 's' : ''}</p>
+          </div>
+        </div>
+        <div className="card" onClick={() => setTab('respondidos_irazu')} style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: tab === 'respondidos_irazu' ? '3px solid #0891b2' : undefined }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: '#0891b2' }}>{respondidosIrazu.length}</span>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#0891b2' }}>🧾 Irazú</p>
+            <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondido{respondidosIrazu.length !== 1 ? 's' : ''}</p>
+          </div>
+        </div>
+      </div>
 
       {/* Quick notes */}
       <NotasRapidas />
@@ -1281,25 +1361,27 @@ export default function Admin() {
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: '1rem', borderBottom: '2px solid var(--border)', paddingBottom: 0 }}>
-        {([['activos', `Activos (${activos.length})`], ['respondidos', `Respondidos (${respondidos.length})`]] as const).map(([k, label]) => (
+      <div style={{ display: 'flex', gap: 0, marginBottom: '1rem', borderBottom: '2px solid var(--border)' }}>
+        {([
+          ['activos', `Activos (${activos.length})`, 'var(--primary)'],
+          ['respondidos_gustavo', `🔧 Gustavo (${respondidosGustavo.length})`, '#0284c7'],
+          ['respondidos_irazu', `🧾 Irazú (${respondidosIrazu.length})`, '#0891b2'],
+        ] as const).map(([k, label, color]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
             style={{
-              padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
-              fontSize: 14, fontWeight: tab === k ? 700 : 500,
-              color: tab === k ? 'var(--primary)' : 'var(--muted)',
-              borderBottom: `2px solid ${tab === k ? 'var(--primary)' : 'transparent'}`,
-              marginBottom: -2,
+              padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 13, fontWeight: tab === k ? 700 : 500,
+              color: tab === k ? color : 'var(--muted)',
+              borderBottom: `2px solid ${tab === k ? color : 'transparent'}`,
+              marginBottom: -2, whiteSpace: 'nowrap',
             }}
-          >
-            {label}
-          </button>
+          >{label}</button>
         ))}
       </div>
 
-      {/* List grouped by client */}
+      {/* List */}
       {loading ? (
         <div className="spinner" />
       ) : tab === 'activos' ? (
@@ -1325,9 +1407,7 @@ export default function Admin() {
                   <button
                     onClick={() => setHistorialCliente(cliente)}
                     style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
-                  >
-                    Ver historial →
-                  </button>
+                  >Ver historial →</button>
                 </div>
               )}
               <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
@@ -1344,66 +1424,10 @@ export default function Admin() {
             </div>
           ))
         )
-      ) : respondidos.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Aún no hay pendientes respondidos.</p>
+      ) : tab === 'respondidos_gustavo' ? (
+        renderRespondidos(respondidosGustavo)
       ) : (
-        <>
-          {[
-            { label: '🔧 Gustavo', color: '#0284c7', bg: '#eff6ff', bdr: '#bfdbfe', lista: respondidos.filter(p => !p.destinatario || p.destinatario === 'gustavo') },
-            { label: '🧾 Irazú', color: '#0891b2', bg: '#ecfeff', bdr: '#a5f3fc', lista: respondidos.filter(p => p.destinatario === 'irazu') },
-          ].map(({ label, color, bg, bdr, lista }) => lista.length === 0 ? null : (
-            <div key={label} style={{ marginBottom: 24 }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 14px', marginBottom: 10,
-                background: bg, border: `1px solid ${bdr}`,
-                borderRadius: 8, fontSize: 14, fontWeight: 700, color,
-              }}>
-                {label}
-                <span style={{ fontWeight: 400, color: 'var(--muted)', fontSize: 13 }}>— {lista.length} respondido{lista.length !== 1 ? 's' : ''}</span>
-              </div>
-              {Object.entries(
-                lista.reduce<Record<string, Pendiente[]>>((acc, p) => {
-                  if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
-                  acc[p.cliente_nombre].push(p)
-                  return acc
-                }, {})
-              ).map(([cliente, items]) => (
-                <div key={cliente}>
-                  {items.length > 1 && (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '7px 12px', marginBottom: 6,
-                      background: '#f0f4ff', border: '1px solid #c7d2fe',
-                      borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
-                    }}>
-                      <span>🔗</span>
-                      <span>{cliente}</span>
-                      <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
-                      <button
-                        onClick={() => setHistorialCliente(cliente)}
-                        style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
-                      >
-                        Ver historial →
-                      </button>
-                    </div>
-                  )}
-                  <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
-                    {items.map(p => (
-                      <PendienteCard
-                        key={p.id}
-                        p={p}
-                        onUpdate={loadPendientes}
-                        onVerHistorial={setHistorialCliente}
-                        onSeguimiento={abrirSeguimiento}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))}
-        </>
+        renderRespondidos(respondidosIrazu)
       )}
 
       <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 24 }}>
