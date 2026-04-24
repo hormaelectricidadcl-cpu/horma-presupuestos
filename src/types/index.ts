@@ -33,6 +33,7 @@ export interface Pendiente {
   acciones?: AccionPendiente[]
   audio_url?: string | null
   destinatario?: Destinatario
+  revisado_admin?: boolean
 }
 
 export interface NuevoPendiente {

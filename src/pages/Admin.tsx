@@ -125,32 +125,31 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 /* ─── Tareas por cliente ────────────────────────────── */
 interface TareaCliente { id: string; texto: string; hecho: boolean }
 
-function getTareasCliente(nombre: string): TareaCliente[] {
-  try { return JSON.parse(localStorage.getItem('horma_tareas_clientes') || '{}')[nombre] || [] }
-  catch { return [] }
-}
-function setTareasCliente(nombre: string, tareas: TareaCliente[]) {
-  try {
-    const all = JSON.parse(localStorage.getItem('horma_tareas_clientes') || '{}')
-    all[nombre] = tareas
-    localStorage.setItem('horma_tareas_clientes', JSON.stringify(all))
-  } catch {}
-}
-
 function TareasCliente({ clienteNombre }: { clienteNombre: string }) {
-  const [tareas, setTareas] = useState<TareaCliente[]>(() => getTareasCliente(clienteNombre))
+  const [tareas, setTareas] = useState<TareaCliente[]>([])
   const [input, setInput] = useState('')
 
-  function guardar(nuevas: TareaCliente[]) {
-    setTareas(nuevas)
-    setTareasCliente(clienteNombre, nuevas)
-  }
+  useEffect(() => {
+    supabase.from('tareas_clientes').select('*').eq('cliente_nombre', clienteNombre).order('created_at')
+      .then(({ data }) => setTareas((data as TareaCliente[]) || []))
+  }, [clienteNombre])
 
-  function agregar() {
+  async function agregar() {
     const texto = input.trim()
     if (!texto) return
-    guardar([...tareas, { id: Date.now().toString(), texto, hecho: false }])
+    const { data } = await supabase.from('tareas_clientes').insert({ cliente_nombre: clienteNombre, texto, hecho: false }).select().single()
+    if (data) setTareas(prev => [...prev, data as TareaCliente])
     setInput('')
+  }
+
+  async function toggleHecho(t: TareaCliente) {
+    await supabase.from('tareas_clientes').update({ hecho: !t.hecho }).eq('id', t.id)
+    setTareas(prev => prev.map(x => x.id === t.id ? { ...x, hecho: !x.hecho } : x))
+  }
+
+  async function eliminar(id: string) {
+    await supabase.from('tareas_clientes').delete().eq('id', id)
+    setTareas(prev => prev.filter(x => x.id !== id))
   }
 
   return (
@@ -174,9 +173,9 @@ function TareasCliente({ clienteNombre }: { clienteNombre: string }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           {tareas.map(t => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: t.hecho ? 'transparent' : 'var(--white)', borderRadius: 8, border: '1px solid var(--border)', opacity: t.hecho ? 0.5 : 1 }}>
-              <input type="checkbox" checked={t.hecho} onChange={() => guardar(tareas.map(x => x.id === t.id ? { ...x, hecho: !x.hecho } : x))} style={{ width: 15, height: 15, accentColor: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }} />
+              <input type="checkbox" checked={t.hecho} onChange={() => toggleHecho(t)} style={{ width: 15, height: 15, accentColor: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: 13, textDecoration: t.hecho ? 'line-through' : 'none' }}>{t.texto}</span>
-              <button onClick={() => guardar(tareas.filter(x => x.id !== t.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--muted)', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>✕</button>
+              <button onClick={() => eliminar(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--muted)', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>✕</button>
             </div>
           ))}
         </div>
@@ -1070,29 +1069,39 @@ function PendienteCard({
 }
 
 /* ─── Notas rápidas ─────────────────────────────────── */
-interface Nota {
-  id: string
-  texto: string
-  hecho: boolean
-}
+interface Nota { id: string; texto: string; hecho: boolean }
 
 function NotasRapidas() {
-  const [notas, setNotas] = useState<Nota[]>(() => {
-    try { return JSON.parse(localStorage.getItem('horma_notas') || '[]') }
-    catch { return [] }
-  })
+  const [notas, setNotas] = useState<Nota[]>([])
   const [input, setInput] = useState('')
 
-  function guardar(nuevas: Nota[]) {
-    setNotas(nuevas)
-    localStorage.setItem('horma_notas', JSON.stringify(nuevas))
-  }
+  useEffect(() => {
+    supabase.from('notas_rapidas').select('*').order('created_at')
+      .then(({ data }) => setNotas((data as Nota[]) || []))
+  }, [])
 
-  function agregar() {
+  async function agregar() {
     const texto = input.trim()
     if (!texto) return
-    guardar([...notas, { id: Date.now().toString(), texto, hecho: false }])
+    const { data } = await supabase.from('notas_rapidas').insert({ texto, hecho: false }).select().single()
+    if (data) setNotas(prev => [...prev, data as Nota])
     setInput('')
+  }
+
+  async function toggleHecho(n: Nota) {
+    await supabase.from('notas_rapidas').update({ hecho: !n.hecho }).eq('id', n.id)
+    setNotas(prev => prev.map(x => x.id === n.id ? { ...x, hecho: !x.hecho } : x))
+  }
+
+  async function eliminar(id: string) {
+    await supabase.from('notas_rapidas').delete().eq('id', id)
+    setNotas(prev => prev.filter(x => x.id !== id))
+  }
+
+  async function limpiarCompletadas() {
+    const ids = notas.filter(n => n.hecho).map(n => n.id)
+    if (ids.length) await supabase.from('notas_rapidas').delete().in('id', ids)
+    setNotas(prev => prev.filter(n => !n.hecho))
   }
 
   const pendientes = notas.filter(n => !n.hecho)
@@ -1103,7 +1112,6 @@ function NotasRapidas() {
       <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
         📌 Mis notas
       </h3>
-
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <input
           value={input}
@@ -1114,28 +1122,27 @@ function NotasRapidas() {
         />
         <button className="btn btn-primary" onClick={agregar} style={{ padding: '9px 18px', fontSize: 15, fontWeight: 700 }}>+</button>
       </div>
-
       {notas.length === 0 ? (
         <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '4px 0 2px' }}>Ninguna nota por ahora.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           {pendientes.map(nota => (
             <div key={nota.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--white)', borderRadius: 8, border: '1px solid var(--border)' }}>
-              <input type="checkbox" checked={false} onChange={() => guardar(notas.map(n => n.id === nota.id ? { ...n, hecho: true } : n))} style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }} />
+              <input type="checkbox" checked={false} onChange={() => toggleHecho(nota)} style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }} />
               <span style={{ flex: 1, fontSize: 14, lineHeight: 1.4 }}>{nota.texto}</span>
-              <button onClick={() => guardar(notas.filter(n => n.id !== nota.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, color: 'var(--muted)', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>✕</button>
+              <button onClick={() => eliminar(nota.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, color: 'var(--muted)', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>✕</button>
             </div>
           ))}
           {hechas.length > 0 && (
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 3 }}>
               {hechas.map(nota => (
                 <div key={nota.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', opacity: 0.5 }}>
-                  <input type="checkbox" checked={true} onChange={() => guardar(notas.map(n => n.id === nota.id ? { ...n, hecho: false } : n))} style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }} />
+                  <input type="checkbox" checked={true} onChange={() => toggleHecho(nota)} style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }} />
                   <span style={{ flex: 1, fontSize: 13, textDecoration: 'line-through', color: 'var(--muted)' }}>{nota.texto}</span>
-                  <button onClick={() => guardar(notas.filter(n => n.id !== nota.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--muted)', lineHeight: 1, padding: '0 2px' }}>✕</button>
+                  <button onClick={() => eliminar(nota.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--muted)', lineHeight: 1, padding: '0 2px' }}>✕</button>
                 </div>
               ))}
-              <button onClick={() => guardar(notas.filter(n => !n.hecho))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', padding: '4px 10px', width: '100%', textAlign: 'right' }}>
+              <button onClick={limpiarCompletadas} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', padding: '4px 10px', width: '100%', textAlign: 'right' }}>
                 Limpiar completadas
               </button>
             </div>
@@ -1156,10 +1163,6 @@ export default function Admin() {
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
   const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'respondidos_irazu'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
-  const [revisados, setRevisados] = useState<Record<string, boolean>>(() => {
-    try { return JSON.parse(localStorage.getItem('horma_revisados') || '{}') }
-    catch { return {} }
-  })
 
   useEffect(() => {
     const saved = localStorage.getItem('horma_admin')
@@ -1197,12 +1200,9 @@ export default function Admin() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  function toggleRevisado(id: string) {
-    setRevisados(prev => {
-      const updated = { ...prev, [id]: !prev[id] }
-      localStorage.setItem('horma_revisados', JSON.stringify(updated))
-      return updated
-    })
+  async function toggleRevisado(p: Pendiente) {
+    await supabase.from('pendientes').update({ revisado_admin: !(p.revisado_admin ?? false) }).eq('id', p.id)
+    loadPendientes()
   }
 
   if (!authed) return <div className="pendientes"><LoginForm onLogin={() => setAuthed(true)} /></div>
@@ -1256,8 +1256,8 @@ export default function Admin() {
               onUpdate={loadPendientes}
               onVerHistorial={setHistorialCliente}
               onSeguimiento={abrirSeguimiento}
-              revisado={revisados[p.id] ?? false}
-              onToggleRevisado={() => toggleRevisado(p.id)}
+              revisado={p.revisado_admin ?? false}
+              onToggleRevisado={() => toggleRevisado(p)}
             />
           ))}
         </div>
