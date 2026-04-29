@@ -285,15 +285,20 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
           }}>{dl.text}</span>
         </div>
 
-        {/* Description */}
+        {/* Mensaje del cliente */}
+        {p.mensaje_cliente && (
+          <div style={{ marginBottom: 10, padding: '10px 12px', background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #38bdf8' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cliente</p>
+            <p style={{ fontSize: 14, lineHeight: 1.5 }}>{p.mensaje_cliente}</p>
+          </div>
+        )}
+
+        {/* Instrucción de Alexandra */}
         {p.descripcion && (
-          <p style={{
-            fontSize: 15, lineHeight: 1.6, color: 'var(--secondary)',
-            marginBottom: 14, padding: '10px 12px',
-            background: 'var(--bg)', borderRadius: 'var(--radius-sm)',
-          }}>
-            {p.descripcion}
-          </p>
+          <div style={{ marginBottom: 14, padding: '10px 12px', background: '#fefce8', borderRadius: 8, borderLeft: '3px solid #eab308' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#854d0e', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Alexandra</p>
+            <p style={{ fontSize: 14, lineHeight: 1.5 }}>{p.descripcion}</p>
+          </div>
         )}
 
         {/* Client history toggle */}
