@@ -282,9 +282,42 @@ function HistorialModal({
 
                       {/* description */}
                       {p.descripcion && (
-                        <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: p.estado === 'respondido' ? 8 : 0, whiteSpace: 'pre-wrap' }}>
+                        <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: 6, whiteSpace: 'pre-wrap' }}>
                           {p.descripcion}
                         </p>
+                      )}
+
+                      {p.mensaje_cliente && (
+                        <p style={{ fontSize: 13, color: '#0284c7', lineHeight: 1.5, marginBottom: 6, whiteSpace: 'pre-wrap' }}>
+                          💬 {p.mensaje_cliente}
+                        </p>
+                      )}
+
+                      {p.direccion && (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.direccion)}`}
+                          target="_blank" rel="noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 6, textDecoration: 'none' }}
+                        >
+                          📍 {p.direccion}
+                        </a>
+                      )}
+
+                      {p.drive_links?.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                          {p.drive_links.map((link, i) => (
+                            <a
+                              key={i}
+                              href={link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="btn btn-secondary"
+                              style={{ fontSize: 12, padding: '4px 10px' }}
+                            >
+                              📁 Archivo {p.drive_links.length > 1 ? i + 1 : ''}
+                            </a>
+                          ))}
+                        </div>
                       )}
 
                       {/* response */}
