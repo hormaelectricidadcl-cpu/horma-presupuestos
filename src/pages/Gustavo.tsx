@@ -559,15 +559,34 @@ function PanelClientes() {
                       {h.estado === 'respondido' && <span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>✓ Respondido</span>}
                     </div>
 
-                    {!esIrazu && h.descripcion && (
-                      <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: h.respuesta ? 6 : 0 }}>
+                    {h.descripcion && (
+                      <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: 4, whiteSpace: 'pre-wrap' }}>
                         {h.descripcion}
                       </p>
                     )}
-                    {esIrazu && h.mensaje_cliente && (
-                      <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: h.respuesta ? 6 : 0 }}>
-                        {h.mensaje_cliente}
+                    {h.mensaje_cliente && (
+                      <p style={{ fontSize: 13, color: '#0284c7', lineHeight: 1.5, marginBottom: 4, whiteSpace: 'pre-wrap' }}>
+                        💬 {h.mensaje_cliente}
                       </p>
+                    )}
+                    {h.direccion && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.direccion)}`}
+                        target="_blank" rel="noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 6, textDecoration: 'none' }}
+                      >
+                        📍 {h.direccion}
+                      </a>
+                    )}
+                    {h.drive_links && h.drive_links.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                        {h.drive_links.map((link, i) => (
+                          <a key={i} href={link} target="_blank" rel="noreferrer"
+                            style={{ fontSize: 12, color: '#1565c0', fontWeight: 600, padding: '3px 8px', background: '#e3f2fd', borderRadius: 6, textDecoration: 'none' }}>
+                            📁 Archivo {h.drive_links.length > 1 ? i + 1 : ''}
+                          </a>
+                        ))}
+                      </div>
                     )}
 
                     {h.respuesta && (
