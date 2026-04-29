@@ -282,7 +282,7 @@ function HistorialModal({
 
                       {/* description */}
                       {p.descripcion && (
-                        <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: p.estado === 'respondido' ? 8 : 0 }}>
+                        <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: p.estado === 'respondido' ? 8 : 0, whiteSpace: 'pre-wrap' }}>
                           {p.descripcion}
                         </p>
                       )}
@@ -912,14 +912,14 @@ function PendienteCard({
               {p.mensaje_cliente && (
                 <div style={{ marginTop: 12, padding: '10px 12px', background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #38bdf8' }}>
                   <p style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cliente</p>
-                  <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)' }}>{p.mensaje_cliente}</p>
+                  <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{p.mensaje_cliente}</p>
                 </div>
               )}
 
               {p.descripcion && (
                 <div style={{ marginTop: 8, padding: '10px 12px', background: '#fefce8', borderRadius: 8, borderLeft: '3px solid #eab308' }}>
                   <p style={{ fontSize: 11, fontWeight: 700, color: '#854d0e', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Alexandra</p>
-                  <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)' }}>{p.descripcion}</p>
+                  <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{p.descripcion}</p>
                 </div>
               )}
 
@@ -1252,6 +1252,8 @@ export default function Admin() {
   const vencidos = activos.filter(p => new Date(p.fecha_limite) < new Date())
   const respondidosGustavo = respondidos.filter(p => !p.destinatario || p.destinatario === 'gustavo')
   const respondidosIrazu = respondidos.filter(p => p.destinatario === 'irazu')
+  const activosGustavo = activos.filter(p => !p.destinatario || p.destinatario === 'gustavo')
+  const activosIrazu = activos.filter(p => p.destinatario === 'irazu')
 
   const clienteGroups = activos.reduce<Record<string, Pendiente[]>>((acc, p) => {
     if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
@@ -1385,14 +1387,24 @@ export default function Admin() {
           <span style={{ fontSize: 22, fontWeight: 800, color: '#0284c7' }}>{respondidosGustavo.length}</span>
           <div>
             <p style={{ fontSize: 12, fontWeight: 700, color: '#0284c7' }}>🔧 Gustavo</p>
-            <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondido{respondidosGustavo.length !== 1 ? 's' : ''}</p>
+            <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondidos</p>
+            {activosGustavo.length > 0 && (
+              <p style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
+                {activosGustavo.length} activo{activosGustavo.length !== 1 ? 's' : ''}
+              </p>
+            )}
           </div>
         </div>
         <div className="card" onClick={() => setTab('respondidos_irazu')} style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: tab === 'respondidos_irazu' ? '3px solid #0891b2' : undefined }}>
           <span style={{ fontSize: 22, fontWeight: 800, color: '#0891b2' }}>{respondidosIrazu.length}</span>
           <div>
             <p style={{ fontSize: 12, fontWeight: 700, color: '#0891b2' }}>🧾 Irazú</p>
-            <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondido{respondidosIrazu.length !== 1 ? 's' : ''}</p>
+            <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondidos</p>
+            {activosIrazu.length > 0 && (
+              <p style={{ fontSize: 11, color: '#0891b2', fontWeight: 600 }}>
+                {activosIrazu.length} activo{activosIrazu.length !== 1 ? 's' : ''}
+              </p>
+            )}
           </div>
         </div>
       </div>
