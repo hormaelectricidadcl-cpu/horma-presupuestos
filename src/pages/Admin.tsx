@@ -34,11 +34,23 @@ const ACCION_EMOJI: Record<string, string> = {
 
 function formatDeadline(iso: string): { text: string; cls: string } {
   const diff = new Date(iso).getTime() - Date.now()
-  const h = Math.floor(Math.abs(diff) / 3600000)
-  const m = Math.floor((Math.abs(diff) % 3600000) / 60000)
-  if (diff < 0) return { text: `Venció hace ${h}h ${m}m`, cls: 'deadline-over' }
-  if (diff < 2 * 3600000) return { text: `Vence en ${h}h ${m}m`, cls: 'deadline-warn' }
-  if (diff < 24 * 3600000) return { text: `Vence en ${h}h`, cls: 'deadline-warn' }
+  if (diff < 0) {
+    const abs = Math.abs(diff)
+    const d = Math.floor(abs / 86400000)
+    const h = Math.floor((abs % 86400000) / 3600000)
+    const m = Math.floor((abs % 3600000) / 60000)
+    const text = d > 0 ? `Venció hace ${d} día${d !== 1 ? 's' : ''} ${h}h` : `Venció hace ${h}h ${m}m`
+    return { text, cls: 'deadline-over' }
+  }
+  if (diff < 2 * 3600000) {
+    const h = Math.floor(diff / 3600000)
+    const m = Math.floor((diff % 3600000) / 60000)
+    return { text: `Vence en ${h}h ${m}m`, cls: 'deadline-warn' }
+  }
+  if (diff < 24 * 3600000) {
+    const h = Math.floor(diff / 3600000)
+    return { text: `Vence en ${h}h`, cls: 'deadline-warn' }
+  }
   const d = Math.floor(diff / 86400000)
   return { text: `Vence en ${d} día${d !== 1 ? 's' : ''}`, cls: 'deadline-ok' }
 }
@@ -575,6 +587,7 @@ interface EditState {
   fecha_limite: string
   fecha_trabajo: string
   direccion: string
+  drive_links: string[]
 }
 
 function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void; onCancel: () => void }) {
@@ -586,6 +599,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
     fecha_limite: new Date(p.fecha_limite).toISOString().slice(0, 16),
     fecha_trabajo: p.fecha_trabajo ? new Date(p.fecha_trabajo).toISOString().slice(0, 16) : '',
     direccion: p.direccion || '',
+    drive_links: p.drive_links?.length > 0 ? p.drive_links : [''],
   })
   const [saving, setSaving] = useState(false)
 
@@ -600,6 +614,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
       fecha_limite: new Date(form.fecha_limite).toISOString(),
       fecha_trabajo: form.fecha_trabajo ? new Date(form.fecha_trabajo).toISOString() : null,
       direccion: form.direccion.trim() || null,
+      drive_links: form.drive_links.filter(l => l.trim()),
     }).eq('id', p.id)
     setSaving(false)
     onSaved()
@@ -641,6 +656,29 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
       <div className="field">
         <label>🔧 Tu instrucción</label>
         <textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} rows={2} placeholder="Contexto / instrucción..." />
+      </div>
+      <div className="field">
+        <label>📎 Links de Drive</label>
+        {form.drive_links.map((link, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+            <input
+              value={link}
+              onChange={e => {
+                const links = [...form.drive_links]
+                links[i] = e.target.value
+                setForm(f => ({ ...f, drive_links: links }))
+              }}
+              placeholder="https://drive.google.com/..."
+              style={{ flex: 1 }}
+            />
+            {form.drive_links.length > 1 && (
+              <button type="button" className="btn btn-ghost" onClick={() => setForm(f => ({ ...f, drive_links: f.drive_links.filter((_, j) => j !== i) }))} style={{ padding: '8px 12px', flexShrink: 0 }}>×</button>
+            )}
+          </div>
+        ))}
+        <button type="button" className="btn btn-secondary" onClick={() => setForm(f => ({ ...f, drive_links: [...f.drive_links, ''] }))} style={{ fontSize: 13, padding: '6px 14px' }}>
+          + Agregar link
+        </button>
       </div>
       {p.estado === 'respondido' && (
         <div className="field">
