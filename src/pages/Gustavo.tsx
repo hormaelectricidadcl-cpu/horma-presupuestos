@@ -108,13 +108,39 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
             <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtFecha(h.created_at)}</span>
           </div>
           {h.descripcion && (
-            <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: h.respuesta ? 6 : 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: 4 }}>
               {h.descripcion}
             </p>
           )}
+          {h.mensaje_cliente && (
+            <p style={{ fontSize: 13, color: '#0284c7', lineHeight: 1.5, marginBottom: 4 }}>
+              💬 {h.mensaje_cliente}
+            </p>
+          )}
+          {h.direccion && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.direccion)}`}
+              target="_blank" rel="noreferrer"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 4, textDecoration: 'none' }}
+            >
+              📍 {h.direccion}
+            </a>
+          )}
+          {h.drive_links && h.drive_links.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
+              {h.drive_links.map((link, i) => (
+                <a key={i} href={link} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 12, color: '#1565c0', fontWeight: 600 }}>
+                  📁 Archivo {h.drive_links.length > 1 ? i + 1 : ''}
+                </a>
+              ))}
+            </div>
+          )}
           {h.respuesta && (
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 2 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 3 }}>Tu respuesta:</p>
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 3 }}>
+                {h.destinatario === 'irazu' ? 'Irazú respondió:' : 'Tu respuesta:'}
+              </p>
               <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{h.respuesta}</p>
             </div>
           )}
@@ -146,13 +172,12 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
 
 /* ─── Pendiente card ────────────────────────────────── */
 function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido: () => void }) {
+  const [cardTab, setCardTab] = useState<'responder' | 'historial' | 'archivos'>('responder')
   const [respuesta, setRespuesta] = useState('')
   const [nota, setNota] = useState('')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
-  const [verHistorial, setVerHistorial] = useState(false)
 
-  // Voice recording
   const [grabando, setGrabando] = useState(false)
   const [segundos, setSegundos] = useState(0)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
@@ -170,7 +195,6 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
       const mr = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mr
       chunksRef.current = []
-
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       mr.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType })
@@ -178,7 +202,6 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
         setAudioPreviewUrl(URL.createObjectURL(blob))
         stream.getTracks().forEach(t => t.stop())
       }
-
       mr.start()
       setGrabando(true)
       setSegundos(0)
@@ -209,7 +232,6 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
     }
     setSaving(true)
 
-    // Upload audio if recorded
     let savedAudioUrl: string | null = null
     if (audioBlob) {
       const ext = audioBlob.type.includes('mp4') ? 'mp4' : 'webm'
@@ -231,7 +253,6 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
     if (savedAudioUrl) updatePayload.audio_url = savedAudioUrl
 
     const { error } = await supabase.from('pendientes').update(updatePayload).eq('id', p.id)
-
     if (error) {
       alert('Error al guardar. Intenta de nuevo.')
       setSaving(false)
@@ -263,13 +284,23 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
     )
   }
 
+  const mapsUrl = p.direccion
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.direccion)}`
+    : null
+
+  const CARD_TABS = [
+    { key: 'responder' as const, label: '✓ Responder' },
+    { key: 'historial' as const, label: '🕐 Historial' },
+    { key: 'archivos' as const, label: `📁 Archivos${p.drive_links?.length ? ` (${p.drive_links.length})` : ''}` },
+  ]
+
   return (
     <div className="card" style={{
       marginBottom: 16,
       borderTop: `4px solid ${dl.urgent ? 'var(--danger)' : 'var(--primary)'}`,
     }}>
-      <div style={{ padding: '18px 16px 0' }}>
-        {/* Header */}
+      {/* ── Always-visible header ── */}
+      <div style={{ padding: '18px 16px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
           <div>
             <h2 style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.2 }}>{p.cliente_nombre}</h2>
@@ -287,7 +318,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
 
         {/* Mensaje del cliente */}
         {p.mensaje_cliente && (
-          <div style={{ marginBottom: 10, padding: '10px 12px', background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #38bdf8' }}>
+          <div style={{ marginBottom: 8, padding: '10px 12px', background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #38bdf8' }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cliente</p>
             <p style={{ fontSize: 14, lineHeight: 1.5 }}>{p.mensaje_cliente}</p>
           </div>
@@ -295,140 +326,157 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
 
         {/* Instrucción de Alexandra */}
         {p.descripcion && (
-          <div style={{ marginBottom: 14, padding: '10px 12px', background: '#fefce8', borderRadius: 8, borderLeft: '3px solid #eab308' }}>
+          <div style={{ marginBottom: 8, padding: '10px 12px', background: '#fefce8', borderRadius: 8, borderLeft: '3px solid #eab308' }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: '#854d0e', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Alexandra</p>
             <p style={{ fontSize: 14, lineHeight: 1.5 }}>{p.descripcion}</p>
           </div>
         )}
 
-        {/* Client history toggle */}
-        <button
-          type="button"
-          onClick={() => setVerHistorial(v => !v)}
-          style={{
-            width: '100%', marginBottom: 14,
-            padding: '10px 14px',
-            borderRadius: 10,
-            border: '1.5px solid var(--border)',
-            background: verHistorial ? 'var(--bg)' : 'var(--white)',
-            fontSize: 14, fontWeight: 600,
-            color: 'var(--secondary)',
-            cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}
-        >
-          <span>🕐 Ver historial de {p.cliente_nombre}</span>
-          <span style={{ fontSize: 12 }}>{verHistorial ? '▲ Cerrar' : '▼ Ver'}</span>
-        </button>
-
-        {verHistorial && (
-          <div style={{ marginBottom: 14 }}>
-            <HistorialCliente clienteNombre={p.cliente_nombre} excluirId={p.id} />
-          </div>
-        )}
-
-        {/* Drive links */}
-        {p.drive_links?.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-            {p.drive_links.map((link, i) => (
-              <a
-                key={i}
-                href={link}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '12px 14px', background: '#e3f2fd',
-                  borderRadius: 'var(--radius-sm)', color: '#1565c0',
-                  fontWeight: 600, fontSize: 15, textDecoration: 'none',
-                }}
-              >
-                <span style={{ fontSize: 20 }}>📁</span>
-                Ver archivo {p.drive_links.length > 1 ? i + 1 : ''}
-              </a>
-            ))}
-          </div>
+        {/* Dirección — always visible */}
+        {mapsUrl && (
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 12px', background: '#f0fdf4',
+              borderRadius: 8, borderLeft: '3px solid #22c55e',
+              textDecoration: 'none', color: '#15803d',
+              fontSize: 14, fontWeight: 600,
+            }}
+          >
+            <span style={{ fontSize: 18 }}>📍</span>
+            {p.direccion}
+            <span style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.7 }}>Ver en Maps →</span>
+          </a>
         )}
       </div>
 
-      {/* Response section */}
-      <div style={{ padding: '0 16px 18px' }}>
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-          <div className="field" style={{ marginBottom: 14 }}>
-            <label>Tu respuesta</label>
-            <textarea
-              value={respuesta}
-              onChange={e => setRespuesta(e.target.value)}
-              placeholder={PLACEHOLDER[p.tipo]}
-              rows={p.tipo === 'presupuesto' ? 5 : 4}
-              style={{ fontSize: 16 }}
-            />
-          </div>
+      {/* ── Tab nav ── */}
+      <div style={{ display: 'flex', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+        {CARD_TABS.map(t => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setCardTab(t.key)}
+            style={{
+              flex: 1, padding: '10px 4px',
+              border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 12, fontWeight: cardTab === t.key ? 700 : 500,
+              color: cardTab === t.key ? 'var(--primary)' : 'var(--muted)',
+              borderBottom: `2px solid ${cardTab === t.key ? 'var(--primary)' : 'transparent'}`,
+              transition: 'all 0.12s',
+            }}
+          >{t.label}</button>
+        ))}
+      </div>
 
-          <div className="field" style={{ marginBottom: 14 }}>
-            <label>Nota adicional (opcional)</label>
-            <textarea
-              value={nota}
-              onChange={e => setNota(e.target.value)}
-              placeholder="Algo más que quieras agregar..."
-              rows={2}
-              style={{ fontSize: 15 }}
-            />
-          </div>
+      {/* ── Tab content ── */}
+      <div style={{ padding: '16px 16px 18px' }}>
 
-          {/* Voice recording */}
-          <div style={{ marginBottom: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--secondary)', marginBottom: 10 }}>
-              O grabá una nota de voz
-            </p>
-            {!audioPreviewUrl ? (
-              <button
-                type="button"
-                onClick={grabando ? detenerGrabacion : iniciarGrabacion}
-                style={{
-                  width: '100%', padding: '16px',
-                  borderRadius: 12,
-                  border: `2px solid ${grabando ? 'var(--danger)' : 'var(--border)'}`,
-                  background: grabando ? '#fff5f5' : 'var(--bg)',
-                  fontSize: 16, fontWeight: 700,
-                  color: grabando ? 'var(--danger)' : 'var(--secondary)',
-                  cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-                  transition: 'all 0.15s',
-                }}
-              >
-                <span style={{ fontSize: 26 }}>{grabando ? '⏹️' : '🎙️'}</span>
-                {grabando
-                  ? `Grabando ${formatTimer(segundos)} — Toca para detener`
-                  : 'Grabar nota de voz'}
-              </button>
-            ) : (
-              <div>
-                <audio controls src={audioPreviewUrl} style={{ width: '100%', marginBottom: 8 }} />
-                <p style={{ fontSize: 13, color: 'var(--success)', textAlign: 'center', marginBottom: 8 }}>
-                  ✓ Nota de voz lista — se enviará junto con tu respuesta
-                </p>
+        {/* Responder tab */}
+        {cardTab === 'responder' && (
+          <div>
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label>Tu respuesta</label>
+              <textarea
+                value={respuesta}
+                onChange={e => setRespuesta(e.target.value)}
+                placeholder={PLACEHOLDER[p.tipo]}
+                rows={p.tipo === 'presupuesto' ? 5 : 4}
+                style={{ fontSize: 16 }}
+              />
+            </div>
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label>Nota adicional (opcional)</label>
+              <textarea
+                value={nota}
+                onChange={e => setNota(e.target.value)}
+                placeholder="Algo más que quieras agregar..."
+                rows={2}
+                style={{ fontSize: 15 }}
+              />
+            </div>
+            <div style={{ marginBottom: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--secondary)', marginBottom: 10 }}>
+                O grabá una nota de voz
+              </p>
+              {!audioPreviewUrl ? (
                 <button
                   type="button"
-                  onClick={descartarAudio}
-                  className="btn btn-secondary"
-                  style={{ fontSize: 13, width: '100%' }}
+                  onClick={grabando ? detenerGrabacion : iniciarGrabacion}
+                  style={{
+                    width: '100%', padding: '16px', borderRadius: 12,
+                    border: `2px solid ${grabando ? 'var(--danger)' : 'var(--border)'}`,
+                    background: grabando ? '#fff5f5' : 'var(--bg)',
+                    fontSize: 16, fontWeight: 700,
+                    color: grabando ? 'var(--danger)' : 'var(--secondary)',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+                    transition: 'all 0.15s',
+                  }}
                 >
-                  ✕ Descartar y grabar de nuevo
+                  <span style={{ fontSize: 26 }}>{grabando ? '⏹️' : '🎙️'}</span>
+                  {grabando ? `Grabando ${formatTimer(segundos)} — Toca para detener` : 'Grabar nota de voz'}
                 </button>
-              </div>
-            )}
+              ) : (
+                <div>
+                  <audio controls src={audioPreviewUrl} style={{ width: '100%', marginBottom: 8 }} />
+                  <p style={{ fontSize: 13, color: 'var(--success)', textAlign: 'center', marginBottom: 8 }}>
+                    ✓ Nota de voz lista — se enviará junto con tu respuesta
+                  </p>
+                  <button type="button" onClick={descartarAudio} className="btn btn-secondary" style={{ fontSize: 13, width: '100%' }}>
+                    ✕ Descartar y grabar de nuevo
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              className="btn btn-primary btn-lg"
+              onClick={enviar}
+              disabled={saving}
+              style={{ fontSize: 17, fontWeight: 800 }}
+            >
+              {saving ? 'Enviando...' : '✓ Enviar respuesta'}
+            </button>
           </div>
+        )}
 
-          <button
-            className="btn btn-primary btn-lg"
-            onClick={enviar}
-            disabled={saving}
-            style={{ fontSize: 17, fontWeight: 800 }}
-          >
-            {saving ? 'Enviando...' : '✓ Enviar respuesta'}
-          </button>
-        </div>
+        {/* Historial tab */}
+        {cardTab === 'historial' && (
+          <HistorialCliente clienteNombre={p.cliente_nombre} excluirId={p.id} />
+        )}
+
+        {/* Archivos tab */}
+        {cardTab === 'archivos' && (
+          p.drive_links?.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {p.drive_links.map((link, i) => (
+                <a
+                  key={i}
+                  href={link}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '14px 16px', background: '#e3f2fd',
+                    borderRadius: 10, color: '#1565c0',
+                    fontWeight: 600, fontSize: 15, textDecoration: 'none',
+                  }}
+                >
+                  <span style={{ fontSize: 22 }}>📁</span>
+                  Ver archivo {p.drive_links.length > 1 ? i + 1 : ''}
+                  <span style={{ marginLeft: 'auto', fontSize: 13, opacity: 0.7 }}>Abrir →</span>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', padding: '1.5rem 0' }}>
+              Sin archivos adjuntos en este pendiente.
+            </p>
+          )
+        )}
       </div>
     </div>
   )
