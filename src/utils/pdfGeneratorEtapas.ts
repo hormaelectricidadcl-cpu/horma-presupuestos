@@ -39,7 +39,11 @@ const BORDER:       [number, number, number] = [218, 218, 215]
 const GRAY_MID:     [number, number, number] = [140, 138, 135]   // secondary values
 const SUBTOT_BG:    [number, number, number] = [237, 236, 234]   // phase subtotal row
 
-export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
+export const generatePDFEtapas = async (
+  client: Client,
+  etapas: Etapa[],
+  gg: { pct: number; amount: number } = { pct: 0, amount: 0 }
+) => {
   const doc       = new jsPDF('p', 'mm', 'a4')
   const pageWidth = doc.internal.pageSize.getWidth()  // 210mm
   const margin    = 14
@@ -153,7 +157,8 @@ export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
   const activeEtapas   = etapas.filter(e => e.items.length > 0)
   const grandTotalMO   = etapas.reduce((s, e) => s + (Number(e.totalMO)  || 0), 0)
   const grandTotalMAT  = etapas.reduce((s, e) => s + (Number(e.totalMAT) || 0), 0)
-  const subtotal       = grandTotalMO + grandTotalMAT
+  const ggAmount       = gg?.amount || 0
+  const subtotal       = grandTotalMO + grandTotalMAT + ggAmount
   const iva            = Math.round(subtotal * 0.19)
   const total          = subtotal + iva
 
@@ -180,6 +185,7 @@ export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
         textColor: AMBER_TEXT,
         fontStyle: 'bold',
         fontSize: 8.5,
+        halign: 'left',
         cellPadding: { top: 4, bottom: 4, left: 6, right: 4 },
       },
     }])
@@ -221,6 +227,21 @@ export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
       ])
     }
   })
+
+  // Gastos Generales (solo si aplica)
+  if (ggAmount > 0) {
+    rows.push([
+      { content: '', styles: { fillColor: SUBTOT_BG } },
+      { content: `Gastos Generales y Logística (${gg.pct}%)`,
+        styles: { fillColor: SUBTOT_BG, textColor: CARBON, fontStyle: 'italic', halign: 'right', fontSize: 8, cellPadding: 3 } },
+      { content: '', styles: { fillColor: SUBTOT_BG } },
+      { content: '', styles: { fillColor: SUBTOT_BG } },
+      { content: '', styles: { fillColor: SUBTOT_BG } },
+      { content: '', styles: { fillColor: SUBTOT_BG } },
+      { content: `$${fmt(ggAmount)}`,
+        styles: { fillColor: SUBTOT_BG, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 8, cellPadding: 3 } },
+    ])
+  }
 
   // Grand subtotal
   rows.push([

@@ -48,10 +48,13 @@ export default function PresupuestoEtapas() {
   const [totalNeto, setTotalNeto]   = useState<number | null>(null)
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState('')
+  const [ggPct, setGgPct]           = useState(0)
 
   const grandMO  = etapas.reduce((s, e) => s + e.totalMO,  0)
   const grandMAT = etapas.reduce((s, e) => s + e.totalMAT, 0)
-  const subtotal = grandMO + grandMAT
+  const ggBase   = grandMO + grandMAT
+  const ggAmount = Math.round(ggBase * ggPct / 100)
+  const subtotal = ggBase + ggAmount
   const iva      = Math.round(subtotal * 0.19)
   const total    = subtotal + iva
 
@@ -79,8 +82,8 @@ export default function PresupuestoEtapas() {
 
   async function generarPDF() {
     if (!client.name.trim()) { alert('Ingresá el nombre del cliente antes de generar el PDF.'); return }
-    if (subtotal === 0) { alert('Procesá el texto con IA antes de generar el PDF.'); return }
-    await generatePDFEtapas(client, etapas)
+    if (ggBase === 0) { alert('Procesá el texto con IA antes de generar el PDF.'); return }
+    await generatePDFEtapas(client, etapas, { pct: ggPct, amount: ggAmount })
   }
 
   return (
@@ -135,7 +138,7 @@ export default function PresupuestoEtapas() {
             value={texto}
             onChange={e => {
               setTexto(e.target.value)
-              if (procesado) { setProcesado(false); setTotalNeto(null); setEtapas(FASES_DEFAULT) }
+              if (procesado) { setProcesado(false); setTotalNeto(null); setEtapas(FASES_DEFAULT); setGgPct(0) }
             }}
             placeholder={`Mano de obra\n75 Reemplazo de cable de centros eléctricos 13.000\nInstalación de tablero de distribución 100.000\n\nMateriales:\n50 ml Cable 2.5mm 800\nTablero de distribución con accesorios 120.000\n...`}
             rows={9}
@@ -173,7 +176,7 @@ export default function PresupuestoEtapas() {
             </p>
             {procesado && (
               <button
-                onClick={() => { setEtapas(FASES_DEFAULT); setProcesado(false); setTotalNeto(null) }}
+                onClick={() => { setEtapas(FASES_DEFAULT); setProcesado(false); setTotalNeto(null); setGgPct(0) }}
                 style={{ background: 'none', border: 'none', fontSize: 12, color: '#615e5b', cursor: 'pointer', fontWeight: 600 }}
               >↺ Limpiar</button>
             )}
@@ -273,6 +276,56 @@ export default function PresupuestoEtapas() {
           </div>
         </div>
 
+        {/* Gastos Generales selector */}
+        {procesado && (
+          <div className="card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Gastos Generales y Logística
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+              {[0, 5, 7, 10, 12, 15].map(pct => (
+                <button
+                  key={pct}
+                  onClick={() => setGgPct(pct)}
+                  style={{
+                    fontSize: 13, padding: '6px 14px', borderRadius: 8, fontWeight: 700, cursor: 'pointer',
+                    border: ggPct === pct ? '2px solid #e69a21' : '2px solid var(--border)',
+                    background: ggPct === pct ? '#fef9ee' : 'var(--white)',
+                    color: ggPct === pct ? '#e69a21' : '#615e5b',
+                  }}
+                >
+                  {pct === 0 ? 'Sin GG' : `${pct}%`}
+                </button>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={ggPct === 0 ? '' : ggPct}
+                  onChange={e => setGgPct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                  placeholder="Otro"
+                  style={{ width: 72, fontSize: 13, padding: '6px 10px', borderRadius: 8, border: '2px solid var(--border)', textAlign: 'center' }}
+                />
+                <span style={{ fontSize: 13, color: '#615e5b', fontWeight: 600 }}>%</span>
+              </div>
+            </div>
+            {ggAmount > 0 && (
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 12px', borderRadius: 8, background: '#fef9ee', border: '1px solid #e69a21',
+                fontSize: 13,
+              }}>
+                <span style={{ color: '#615e5b' }}>
+                  ${fmt(ggBase)} × {ggPct}%
+                </span>
+                <strong style={{ color: '#e69a21', fontSize: 15 }}>${fmt(ggAmount)}</strong>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Grand totals */}
         <div className="card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
@@ -286,9 +339,19 @@ export default function PresupuestoEtapas() {
             </div>
             <div style={{ textAlign: 'center', padding: '10px 0' }}>
               <p style={{ fontSize: 11, color: '#615e5b', fontWeight: 600, marginBottom: 4 }}>Subtotal Neto</p>
-              <p style={{ fontSize: 18, fontWeight: 800, color: '#1a1a1a' }}>${fmt(subtotal)}</p>
+              <p style={{ fontSize: 18, fontWeight: 800, color: '#1a1a1a' }}>${fmt(ggBase)}</p>
             </div>
           </div>
+          {ggAmount > 0 && (
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '8px 14px', borderRadius: 8, background: '#f5f5f3',
+              border: '1px solid var(--border)', marginBottom: 10, fontSize: 13,
+            }}>
+              <span style={{ color: '#615e5b' }}>Gastos Generales ({ggPct}%)</span>
+              <strong style={{ color: '#1a1a1a' }}>${fmt(ggAmount)}</strong>
+            </div>
+          )}
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '12px 16px', borderRadius: 10,
