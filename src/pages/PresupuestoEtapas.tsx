@@ -10,37 +10,57 @@ interface Client {
 }
 
 const FASES_DEFAULT: Etapa[] = [
-  { numero: '1.0', nombre: 'Preparación y Empalme',       descripcion: '', manoObra: 0, materiales: 0, total: 0 },
-  { numero: '2.0', nombre: 'Canalización y Alimentación', descripcion: '', manoObra: 0, materiales: 0, total: 0 },
-  { numero: '3.0', nombre: 'Montaje y Protecciones',      descripcion: '', manoObra: 0, materiales: 0, total: 0 },
-  { numero: '4.0', nombre: 'Ingeniería y Certificación',  descripcion: '', manoObra: 0, materiales: 0, total: 0 },
-  { numero: '5.0', nombre: 'Imprevistos y Complementarios', descripcion: '', manoObra: 0, materiales: 0, total: 0 },
+  { numero: '1.0', nombre: 'Preparación y Empalme',        items: [], totalMO: 0, totalMAT: 0, total: 0 },
+  { numero: '2.0', nombre: 'Canalización y Alimentación',  items: [], totalMO: 0, totalMAT: 0, total: 0 },
+  { numero: '3.0', nombre: 'Instalaciones y Protecciones', items: [], totalMO: 0, totalMAT: 0, total: 0 },
+  { numero: '4.0', nombre: 'Seguridad y Normativa',        items: [], totalMO: 0, totalMAT: 0, total: 0 },
+  { numero: '5.0', nombre: 'Gastos Generales y Logística', items: [], totalMO: 0, totalMAT: 0, total: 0 },
 ]
 
 const FASE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444']
 
-export default function PresupuestoEtapas() {
-  const [client, setClient]     = useState<Client>({ name: '', rut: '', email: '', address: '' })
-  const [texto, setTexto]       = useState('')
-  const [etapas, setEtapas]     = useState<Etapa[]>(FASES_DEFAULT)
-  const [procesado, setProcesado] = useState(false)
-  const [totalNeto, setTotalNeto] = useState<number | null>(null)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState('')
+const fmt = (n: number) => Math.round(n).toLocaleString('es-CL')
 
-  const totalMO  = etapas.reduce((s, e) => s + e.manoObra, 0)
-  const totalMAT = etapas.reduce((s, e) => s + e.materiales, 0)
-  const subtotal = totalMO + totalMAT
+const thS: React.CSSProperties = {
+  padding: '6px 10px',
+  fontSize: 10,
+  fontWeight: 700,
+  color: '#615e5b',
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  whiteSpace: 'nowrap',
+  background: '#f5f5f3',
+  borderBottom: '1px solid #e8e8e6',
+}
+
+const tdS: React.CSSProperties = {
+  padding: '7px 10px',
+  fontSize: 12,
+  color: '#1a1a1a',
+  borderTop: '1px solid #f0f0ee',
+}
+
+export default function PresupuestoEtapas() {
+  const [client, setClient]         = useState<Client>({ name: '', rut: '', email: '', address: '' })
+  const [texto, setTexto]           = useState('')
+  const [etapas, setEtapas]         = useState<Etapa[]>(FASES_DEFAULT)
+  const [procesado, setProcesado]   = useState(false)
+  const [totalNeto, setTotalNeto]   = useState<number | null>(null)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState('')
+
+  const grandMO  = etapas.reduce((s, e) => s + e.totalMO,  0)
+  const grandMAT = etapas.reduce((s, e) => s + e.totalMAT, 0)
+  const subtotal = grandMO + grandMAT
   const iva      = Math.round(subtotal * 0.19)
   const total    = subtotal + iva
-  const fmt      = (n: number) => Math.round(n).toLocaleString('es-CL')
 
   async function procesar() {
     if (!texto.trim()) { setError('Pegá el texto del presupuesto de Gustavo.'); return }
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/parse-etapas', {
+      const res  = await fetch('/api/parse-etapas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ texto }),
@@ -57,24 +77,15 @@ export default function PresupuestoEtapas() {
     }
   }
 
-  function setEtapaField(idx: number, field: 'manoObra' | 'materiales' | 'descripcion', val: number | string) {
-    setEtapas(prev => prev.map((e, i) => {
-      if (i !== idx) return e
-      const updated = { ...e, [field]: val }
-      updated.total = updated.manoObra + updated.materiales
-      return updated
-    }))
-  }
-
   async function generarPDF() {
     if (!client.name.trim()) { alert('Ingresá el nombre del cliente antes de generar el PDF.'); return }
-    if (subtotal === 0) { alert('Al menos una etapa debe tener montos mayores a 0.'); return }
+    if (subtotal === 0) { alert('Procesá el texto con IA antes de generar el PDF.'); return }
     await generatePDFEtapas(client, etapas)
   }
 
   return (
     <div className="pendientes" style={{ background: 'var(--bg)', minHeight: '100vh' }}>
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '1.5rem 1rem 3rem' }}>
+      <div style={{ maxWidth: 820, margin: '0 auto', padding: '1.5rem 1rem 3rem' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.5rem' }}>
@@ -90,7 +101,7 @@ export default function PresupuestoEtapas() {
           <a href="/admin" style={{ marginLeft: 'auto', fontSize: 13, color: '#615e5b', textDecoration: 'none', fontWeight: 600 }}>← Admin</a>
         </div>
 
-        {/* ── Client form ── */}
+        {/* Client form */}
         <div className="card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Datos del cliente
@@ -98,15 +109,15 @@ export default function PresupuestoEtapas() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div className="field">
               <label>Nombre *</label>
-              <input value={client.name} onChange={e => setClient(c => ({ ...c, name: e.target.value }))} placeholder="Ej: Patricio Valdés" />
+              <input value={client.name}    onChange={e => setClient(c => ({ ...c, name:    e.target.value }))} placeholder="Ej: Patricio Valdés" />
             </div>
             <div className="field">
               <label>RUT</label>
-              <input value={client.rut} onChange={e => setClient(c => ({ ...c, rut: e.target.value }))} placeholder="12.345.678-9" />
+              <input value={client.rut}     onChange={e => setClient(c => ({ ...c, rut:     e.target.value }))} placeholder="12.345.678-9" />
             </div>
             <div className="field">
               <label>Email</label>
-              <input type="email" value={client.email} onChange={e => setClient(c => ({ ...c, email: e.target.value }))} placeholder="cliente@email.com" />
+              <input type="email" value={client.email}   onChange={e => setClient(c => ({ ...c, email:   e.target.value }))} placeholder="cliente@email.com" />
             </div>
             <div className="field">
               <label>Dirección</label>
@@ -115,26 +126,18 @@ export default function PresupuestoEtapas() {
           </div>
         </div>
 
-        {/* ── Text input ── */}
+        {/* Text input */}
         <div className="card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Texto del presupuesto (formato Gustavo)
           </p>
           <textarea
             value={texto}
-            onChange={e => { setTexto(e.target.value); if (procesado) { setProcesado(false); setTotalNeto(null) } }}
-            placeholder={
-`Mano de obra
-Instalación de tablero de distribución en medidor 100.000
-Canalización y cableado para tablero de cargador 100.000
-Instalación de tablero para cargador 70.000
-...
-
-Materiales:
-Tablero de distribución con accesorios 120.000
-Materiales para canalización y cableado 140.000
-...`
-            }
+            onChange={e => {
+              setTexto(e.target.value)
+              if (procesado) { setProcesado(false); setTotalNeto(null); setEtapas(FASES_DEFAULT) }
+            }}
+            placeholder={`Mano de obra\n75 Reemplazo de cable de centros eléctricos 13.000\nInstalación de tablero de distribución 100.000\n\nMateriales:\n50 ml Cable 2.5mm 800\nTablero de distribución con accesorios 120.000\n...`}
             rows={9}
             style={{ width: '100%', fontSize: 13, fontFamily: 'monospace', resize: 'vertical', lineHeight: 1.6 }}
           />
@@ -161,9 +164,9 @@ Materiales para canalización y cableado 140.000
           </button>
         </div>
 
-        {/* ── Phases editor ── */}
-        <div className="card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        {/* Phase cards */}
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Etapas de obra
               {procesado && <span style={{ marginLeft: 8, color: '#16a34a', fontWeight: 700, fontSize: 11 }}>✓ IA procesó el texto</span>}
@@ -172,158 +175,138 @@ Materiales para canalización y cableado 140.000
               <button
                 onClick={() => { setEtapas(FASES_DEFAULT); setProcesado(false); setTotalNeto(null) }}
                 style={{ background: 'none', border: 'none', fontSize: 12, color: '#615e5b', cursor: 'pointer', fontWeight: 600 }}
-              >
-                ↺ Limpiar
-              </button>
+              >↺ Limpiar</button>
             )}
-          </div>
-
-          {/* Column headers */}
-          <div style={{
-            display: 'grid', gridTemplateColumns: '44px 1fr 120px 120px 120px',
-            gap: 6, padding: '6px 12px',
-            background: '#615e5b', borderRadius: 8, marginBottom: 8,
-          }}>
-            {['N°', 'Etapa', 'Mano de Obra', 'Materiales', 'Total'].map((h, i) => (
-              <span key={i} style={{
-                fontSize: 10, fontWeight: 700, color: i === 0 ? '#fff' : i === 4 ? '#e69a21' : '#fff',
-                textAlign: i > 1 ? 'right' : 'left', letterSpacing: '0.04em',
-              }}>{h}</span>
-            ))}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {etapas.map((etapa, idx) => {
-              const color = FASE_COLORS[idx]
-              const activa = etapa.total > 0
+              const color  = FASE_COLORS[idx]
+              const activa = etapa.items.length > 0
               return (
-                <div key={etapa.numero} style={{
-                  borderRadius: 10,
-                  border: `2px solid ${activa ? color + '50' : 'var(--border)'}`,
-                  background: activa ? color + '06' : 'var(--white)',
-                  overflow: 'hidden',
+                <div key={etapa.numero} className="card" style={{
+                  padding: 0, overflow: 'hidden',
+                  border: `2px solid ${activa ? color + '35' : 'var(--border)'}`,
                 }}>
-                  {/* Main row */}
+                  {/* Phase header bar */}
                   <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '44px 1fr 120px 120px 120px',
-                    gap: 6, alignItems: 'center',
-                    padding: '10px 12px',
+                    padding: '10px 14px',
+                    background: activa ? color + '0d' : '#fafaf9',
+                    borderBottom: activa ? `1px solid ${color}20` : '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', gap: 10,
                   }}>
-                    {/* Number badge */}
                     <span style={{
-                      width: 34, height: 34, borderRadius: 8,
-                      background: activa ? color : '#ccc',
+                      width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                      background: activa ? color : '#d4d4d2',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontWeight: 800, fontSize: 12,
+                      color: '#fff', fontWeight: 800, fontSize: 11,
                     }}>{etapa.numero}</span>
-
-                    {/* Name */}
-                    <span style={{ fontWeight: 700, fontSize: 13, color: activa ? '#1a1a1a' : '#999' }}>
+                    <span style={{ fontWeight: 700, fontSize: 13, color: activa ? '#1a1a1a' : '#b0b0ac' }}>
                       {etapa.nombre}
                     </span>
-
-                    {/* MO input */}
-                    <input
-                      type="number"
-                      value={etapa.manoObra || ''}
-                      onChange={e => setEtapaField(idx, 'manoObra', Number(e.target.value) || 0)}
-                      placeholder="0"
-                      style={{
-                        width: '100%', textAlign: 'right', fontWeight: 600, fontSize: 13,
-                        padding: '6px 8px', borderRadius: 6,
-                        border: `1.5px solid ${etapa.manoObra > 0 ? color : 'var(--border)'}`,
-                        background: 'var(--white)', color: '#1a1a1a',
-                      }}
-                    />
-
-                    {/* MAT input */}
-                    <input
-                      type="number"
-                      value={etapa.materiales || ''}
-                      onChange={e => setEtapaField(idx, 'materiales', Number(e.target.value) || 0)}
-                      placeholder="0"
-                      style={{
-                        width: '100%', textAlign: 'right', fontWeight: 600, fontSize: 13,
-                        padding: '6px 8px', borderRadius: 6,
-                        border: `1.5px solid ${etapa.materiales > 0 ? color : 'var(--border)'}`,
-                        background: 'var(--white)', color: '#1a1a1a',
-                      }}
-                    />
-
-                    {/* Total */}
-                    <span style={{
-                      textAlign: 'right', fontWeight: 800, fontSize: 14,
-                      color: activa ? color : '#ccc',
-                      padding: '6px 8px',
-                    }}>
-                      {activa ? `$${fmt(etapa.total)}` : '—'}
-                    </span>
+                    {activa ? (
+                      <div style={{ marginLeft: 'auto', display: 'flex', gap: 18, fontSize: 12 }}>
+                        <span style={{ color: '#615e5b' }}>
+                          MO: <strong style={{ color: '#1d4ed8' }}>${fmt(etapa.totalMO)}</strong>
+                        </span>
+                        <span style={{ color: '#615e5b' }}>
+                          MAT: <strong style={{ color: '#15803d' }}>${fmt(etapa.totalMAT)}</strong>
+                        </span>
+                        <span style={{ color: color, fontWeight: 800, fontSize: 13 }}>
+                          ${fmt(etapa.total)}
+                        </span>
+                      </div>
+                    ) : (
+                      <span style={{ marginLeft: 'auto', fontSize: 12, color: '#ccc' }}>Sin ítems</span>
+                    )}
                   </div>
 
-                  {/* Description */}
-                  <div style={{ padding: '0 12px 10px', paddingLeft: 62 }}>
-                    <input
-                      value={etapa.descripcion}
-                      onChange={e => setEtapaField(idx, 'descripcion', e.target.value)}
-                      placeholder="Descripción de lo incluido (aparece en el PDF)..."
-                      style={{
-                        width: '100%', fontSize: 12, padding: '5px 0',
-                        border: 'none', borderBottom: '1px solid var(--border)',
-                        background: 'transparent', color: '#615e5b',
-                      }}
-                    />
-                  </div>
+                  {/* Items table */}
+                  {activa && (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ ...thS, width: 44, textAlign: 'center' }}>N°</th>
+                            <th style={{ ...thS, textAlign: 'left' }}>Descripción / Concepto</th>
+                            <th style={{ ...thS, width: 54, textAlign: 'center' }}>Cant.</th>
+                            <th style={{ ...thS, width: 96, textAlign: 'right' }}>P. Unitario</th>
+                            <th style={{ ...thS, width: 46, textAlign: 'center' }}>Tipo</th>
+                            <th style={{ ...thS, width: 100, textAlign: 'right' }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {etapa.items.map((item, i) => (
+                            <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafaf8' }}>
+                              <td style={{ ...tdS, textAlign: 'center', color: '#93918e', fontSize: 11 }}>{item.subNumero}</td>
+                              <td style={{ ...tdS }}>{item.descripcion}</td>
+                              <td style={{ ...tdS, textAlign: 'center', color: '#615e5b', fontWeight: 600 }}>{item.cantidad}</td>
+                              <td style={{ ...tdS, textAlign: 'right', color: '#615e5b' }}>${fmt(item.precioUnitario)}</td>
+                              <td style={{ ...tdS, textAlign: 'center' }}>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+                                  background: item.tipo === 'MO' ? '#dbeafe' : '#dcfce7',
+                                  color:      item.tipo === 'MO' ? '#1d4ed8' : '#15803d',
+                                }}>{item.tipo}</span>
+                              </td>
+                              <td style={{ ...tdS, textAlign: 'right', fontWeight: 700 }}>${fmt(item.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {etapa.items.length > 1 && (
+                          <tfoot>
+                            <tr style={{ background: '#f0efed' }}>
+                              <td colSpan={4} style={{ ...tdS, fontSize: 11, fontWeight: 700, color: '#615e5b', textAlign: 'right' }}>
+                                Subtotal {etapa.numero}
+                              </td>
+                              <td style={{ ...tdS, textAlign: 'center' }} />
+                              <td style={{ ...tdS, textAlign: 'right', fontWeight: 800, color: color }}>${fmt(etapa.total)}</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  )}
                 </div>
               )
             })}
           </div>
+        </div>
 
-          {/* Totals summary */}
-          <div style={{
-            marginTop: 16, borderRadius: 10,
-            border: '2px solid #e69a21',
-            overflow: 'hidden',
-          }}>
-            {/* Column headers for totals */}
-            <div style={{
-              display: 'grid', gridTemplateColumns: '44px 1fr 120px 120px 120px',
-              gap: 6, padding: '8px 12px',
-              background: '#fef9ee',
-            }}>
-              <span />
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Subtotal Neto</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a', textAlign: 'right' }}>${fmt(totalMO)}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a', textAlign: 'right' }}>${fmt(totalMAT)}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#e69a21', textAlign: 'right' }}>${fmt(subtotal)}</span>
+        {/* Grand totals */}
+        <div className="card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div style={{ textAlign: 'center', padding: '10px 0' }}>
+              <p style={{ fontSize: 11, color: '#615e5b', fontWeight: 600, marginBottom: 4 }}>Subtotal Mano de Obra</p>
+              <p style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8' }}>${fmt(grandMO)}</p>
             </div>
-            <div style={{
-              display: 'grid', gridTemplateColumns: '44px 1fr 120px 120px 120px',
-              gap: 6, padding: '6px 12px',
-              borderTop: '1px solid #f0e0c0',
-            }}>
-              <span />
-              <span style={{ fontSize: 11, color: '#615e5b' }}>IVA (19%)</span>
-              <span /><span />
-              <span style={{ fontSize: 13, color: '#1a1a1a', textAlign: 'right' }}>${fmt(iva)}</span>
+            <div style={{ textAlign: 'center', padding: '10px 0', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>
+              <p style={{ fontSize: 11, color: '#615e5b', fontWeight: 600, marginBottom: 4 }}>Subtotal Materiales</p>
+              <p style={{ fontSize: 18, fontWeight: 800, color: '#15803d' }}>${fmt(grandMAT)}</p>
             </div>
-            <div style={{
-              display: 'grid', gridTemplateColumns: '44px 1fr 120px 120px 120px',
-              gap: 6, padding: '10px 12px',
-              background: '#e69a21',
-            }}>
-              <span />
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>TOTAL</span>
-              <span /><span />
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', textAlign: 'right' }}>${fmt(total)}</span>
+            <div style={{ textAlign: 'center', padding: '10px 0' }}>
+              <p style={{ fontSize: 11, color: '#615e5b', fontWeight: 600, marginBottom: 4 }}>Subtotal Neto</p>
+              <p style={{ fontSize: 18, fontWeight: 800, color: '#1a1a1a' }}>${fmt(subtotal)}</p>
             </div>
           </div>
-
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '12px 16px', borderRadius: 10,
+            background: '#fef9ee', border: '2px solid #e69a21', marginBottom: 14,
+          }}>
+            <span style={{ fontSize: 13, color: '#615e5b' }}>
+              IVA (19%): <strong style={{ color: '#1a1a1a' }}>${fmt(iva)}</strong>
+            </span>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: 11, color: '#615e5b', fontWeight: 600 }}>TOTAL CON IVA</p>
+              <p style={{ fontSize: 24, fontWeight: 800, color: '#e69a21', lineHeight: 1.1 }}>${fmt(total)}</p>
+            </div>
+          </div>
           <button
             className="btn btn-lg"
             onClick={generarPDF}
             style={{
-              marginTop: 16, width: '100%', fontWeight: 800, fontSize: 16,
+              width: '100%', fontWeight: 800, fontSize: 16,
               background: '#615e5b', color: '#fff', border: 'none',
               borderBottom: '4px solid #e69a21', borderRadius: 10,
             }}
@@ -333,7 +316,7 @@ Materiales para canalización y cableado 140.000
         </div>
 
         <p style={{ textAlign: 'center', fontSize: 12, color: '#93918e' }}>
-          Podés editar cada monto antes de generar el PDF.
+          Procesá el texto con IA para ver el desglose ítem a ítem antes de generar el PDF.
         </p>
       </div>
     </div>

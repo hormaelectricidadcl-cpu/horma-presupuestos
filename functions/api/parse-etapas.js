@@ -17,42 +17,48 @@ export async function onRequestPost(context) {
     return new Response(JSON.stringify({ error: 'Falta OPENAI_API_KEY' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
   }
 
-  const prompt = `Eres un experto en instalaciones eléctricas. Procesa el siguiente texto de presupuesto en 2 pasos y responde SOLO con JSON válido, sin explicación ni markdown.
+  const prompt = `Eres un experto en instalaciones eléctricas chilenas. Analiza el siguiente texto de presupuesto y responde SOLO con JSON válido, sin explicación ni markdown.
 
-PASO 1 — Lee CADA línea que tenga un número de precio. Los precios pueden tener puntos de miles (ej: "100.000" = 100000).
+PASO 1 — EXTRACCIÓN DE ÍTEMS:
+Lee cada línea que contenga un precio (número al final, puede tener puntos de miles: "13.000" = 13000).
 
-REGLA CRÍTICA DE CANTIDAD × PRECIO: Si una línea empieza con un número entero que representa una CANTIDAD (ejemplo: "75 Reemplazo de cable 13.000"), calcula el monto como CANTIDAD × PRECIO_UNITARIO (75 × 13.000 = 975.000). El primer número es cantidad cuando: es un número entero, aparece antes de la descripción, y el último número de la línea es el precio unitario. Nunca uses solo el precio unitario ignorando la cantidad.
+REGLA CRÍTICA DE CANTIDAD × PRECIO:
+- Si la línea EMPIEZA con un número entero (la cantidad), multiplica: total = cantidad × precio_unitario
+- Ejemplo: "75 Reemplazo de cable de centros eléctricos 13.000" → cantidad=75, precioUnitario=13000, total=975000
+- Ejemplo: "50 ml Cable 2.5mm 800" → cantidad=50, precioUnitario=800, total=40000
+- Ejemplo: "2 Tablero distribución 45.000" → cantidad=2, precioUnitario=45000, total=90000
+- Si NO empieza con número entero: cantidad=1, precioUnitario=precio_línea, total=precio_línea
+- Ejemplo: "Instalación de tablero 100.000" → cantidad=1, precioUnitario=100000, total=100000
 
-Ejemplos de multiplicación:
-- "75 Reemplazo de cable de centros eléctricos 13.000" → monto = 75 × 13000 = 975000
-- "50 ml Cable 2.5mm 800" → monto = 50 × 800 = 40000
-- "2 Tablero distribución 45.000" → monto = 2 × 45000 = 90000
-- "Instalación de tablero 100.000" → monto = 100000 (sin cantidad al inicio)
+Clasifica cada ítem:
+- "MO" (mano de obra): instalación, canalización, conexión, certificación, montaje, retiro, reemplazo de trabajo
+- "MAT" (materiales): cables, tableros, accesorios, kits, ductos, tuberías, materiales
 
-Clasifica cada ítem como "MO" (mano de obra: instalación, canalización, conexión, certificación, montaje) o "MAT" (materiales: tableros, cables, accesorios, kits, porcentajes de materiales). No omitas ningún ítem con precio.
+PASO 2 — AGRUPACIÓN EN 5 FASES FIJAS:
+Asigna cada ítem a exactamente una fase:
+- 1.0 "Preparación y Empalme": medidor, nichos, empalme, tablero de distribución principal
+- 2.0 "Canalización y Alimentación": cables, ductos, tuberías, cableado, tendido
+- 3.0 "Instalaciones y Protecciones": tablero cargador, montaje equipos, diferenciales, protecciones, interruptores
+- 4.0 "Seguridad y Normativa": puesta a tierra, certificación TE1, ingeniería, trámites
+- 5.0 "Gastos Generales y Logística": transporte, herramientas, administración, imprevistos, complementarios, porcentajes
 
-PASO 2 — Agrupa todos los ítems en exactamente 5 fases. Para cada fase, suma los montos MO por separado y los MAT por separado:
+Sub-numeración: primer ítem de fase 1.0 → "1.1", segundo → "1.2", etc.
+Si un ítem no encaja en ninguna fase específica, asígnalo a 5.0.
+No omitas ningún ítem con precio. Todos los valores son enteros.
 
-Fase 1.0 "Preparación y Empalme": ítems del medidor, empalme, tablero de distribución principal y sus materiales.
-Fase 2.0 "Canalización y Alimentación": ítems de canalización, cableado, ductos, tuberías y sus materiales.
-Fase 3.0 "Montaje y Protecciones": tablero del cargador, instalación del cargador, diferencial EV y sus materiales.
-Fase 4.0 "Ingeniería y Certificación": TE1, puesta a tierra, certificación, trámites de ingeniería.
-Fase 5.0 "Imprevistos y Complementarios": porcentajes de imprevistos, materiales complementarios, contingencias.
-
-Reglas críticas:
-- Los totales de MO+MAT de las 5 fases deben sumar exactamente el total de todos los ítems del texto.
-- Si un ítem no encaja en ninguna fase, asígnalo a la Fase 5.0.
-- "total" = manoObra + materiales (siempre).
-- "descripcion" es un resumen breve (máx 70 chars) de lo incluido.
-- Todos los valores son números enteros sin puntos.
-
-Formato de respuesta:
+FORMATO DE RESPUESTA (JSON array de exactamente 5 objetos):
 [
-  {"numero":"1.0","nombre":"Preparación y Empalme","descripcion":"","manoObra":0,"materiales":0,"total":0},
-  {"numero":"2.0","nombre":"Canalización y Alimentación","descripcion":"","manoObra":0,"materiales":0,"total":0},
-  {"numero":"3.0","nombre":"Montaje y Protecciones","descripcion":"","manoObra":0,"materiales":0,"total":0},
-  {"numero":"4.0","nombre":"Ingeniería y Certificación","descripcion":"","manoObra":0,"materiales":0,"total":0},
-  {"numero":"5.0","nombre":"Imprevistos y Complementarios","descripcion":"","manoObra":0,"materiales":0,"total":0}
+  {
+    "numero": "1.0",
+    "nombre": "Preparación y Empalme",
+    "items": [
+      {"subNumero":"1.1","descripcion":"descripción del ítem","cantidad":1,"precioUnitario":100000,"tipo":"MO","total":100000}
+    ]
+  },
+  {"numero":"2.0","nombre":"Canalización y Alimentación","items":[]},
+  {"numero":"3.0","nombre":"Instalaciones y Protecciones","items":[]},
+  {"numero":"4.0","nombre":"Seguridad y Normativa","items":[]},
+  {"numero":"5.0","nombre":"Gastos Generales y Logística","items":[]}
 ]
 
 Texto del presupuesto:
@@ -79,26 +85,40 @@ ${texto}`
     const fin = textoLimpio.lastIndexOf(']')
     if (ini !== -1 && fin > ini) textoLimpio = textoLimpio.substring(ini, fin + 1)
 
-    const etapas = JSON.parse(textoLimpio)
+    const etapasRaw = JSON.parse(textoLimpio)
 
-    const etapasNormalizadas = etapas.map(e => {
-      const mo  = Math.round(Number(e.manoObra)  || 0)
-      const mat = Math.round(Number(e.materiales) || 0)
+    const etapas = etapasRaw.map(e => {
+      const items = (e.items || []).map(it => {
+        const cantidad       = Math.max(1, Math.round(Number(it.cantidad) || 1))
+        const precioUnitario = Math.round(Number(it.precioUnitario) || 0)
+        const total          = cantidad * precioUnitario
+        return {
+          subNumero:      String(it.subNumero || ''),
+          descripcion:    String(it.descripcion || ''),
+          cantidad,
+          precioUnitario,
+          tipo:           it.tipo === 'MAT' ? 'MAT' : 'MO',
+          total,
+        }
+      })
+
+      const totalMO  = items.filter(it => it.tipo === 'MO').reduce((s, it) => s + it.total, 0)
+      const totalMAT = items.filter(it => it.tipo === 'MAT').reduce((s, it) => s + it.total, 0)
+
       return {
-        numero:      String(e.numero || ''),
-        nombre:      String(e.nombre || ''),
-        descripcion: String(e.descripcion || ''),
-        manoObra:    mo,
-        materiales:  mat,
-        total:       mo + mat,
+        numero:  String(e.numero || ''),
+        nombre:  String(e.nombre || ''),
+        items,
+        totalMO,
+        totalMAT,
+        total: totalMO + totalMAT,
       }
     })
 
-    // Compute grand total for validation info
-    const grandTotal = etapasNormalizadas.reduce((s, e) => s + e.total, 0)
+    const totalNeto = etapas.reduce((s, e) => s + e.total, 0)
 
     return new Response(
-      JSON.stringify({ etapas: etapasNormalizadas, totalNeto: grandTotal }),
+      JSON.stringify({ etapas, totalNeto }),
       { headers: { 'Content-Type': 'application/json' } }
     )
   } catch (err) {
