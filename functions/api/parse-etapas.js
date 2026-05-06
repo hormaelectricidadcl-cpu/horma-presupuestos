@@ -19,7 +19,17 @@ export async function onRequestPost(context) {
 
   const prompt = `Eres un experto en instalaciones eléctricas. Procesa el siguiente texto de presupuesto en 2 pasos y responde SOLO con JSON válido, sin explicación ni markdown.
 
-PASO 1 — Lee CADA línea que tenga un número de precio. Los precios pueden tener puntos de miles (ej: "100.000" = 100000). Clasifica cada ítem como "MO" (mano de obra: instalación, canalización, conexión, certificación, montaje) o "MAT" (materiales: tableros, cables, accesorios, kits, porcentajes de materiales). No omitas ningún ítem con precio.
+PASO 1 — Lee CADA línea que tenga un número de precio. Los precios pueden tener puntos de miles (ej: "100.000" = 100000).
+
+REGLA CRÍTICA DE CANTIDAD × PRECIO: Si una línea empieza con un número entero que representa una CANTIDAD (ejemplo: "75 Reemplazo de cable 13.000"), calcula el monto como CANTIDAD × PRECIO_UNITARIO (75 × 13.000 = 975.000). El primer número es cantidad cuando: es un número entero, aparece antes de la descripción, y el último número de la línea es el precio unitario. Nunca uses solo el precio unitario ignorando la cantidad.
+
+Ejemplos de multiplicación:
+- "75 Reemplazo de cable de centros eléctricos 13.000" → monto = 75 × 13000 = 975000
+- "50 ml Cable 2.5mm 800" → monto = 50 × 800 = 40000
+- "2 Tablero distribución 45.000" → monto = 2 × 45000 = 90000
+- "Instalación de tablero 100.000" → monto = 100000 (sin cantidad al inicio)
+
+Clasifica cada ítem como "MO" (mano de obra: instalación, canalización, conexión, certificación, montaje) o "MAT" (materiales: tableros, cables, accesorios, kits, porcentajes de materiales). No omitas ningún ítem con precio.
 
 PASO 2 — Agrupa todos los ítems en exactamente 5 fases. Para cada fase, suma los montos MO por separado y los MAT por separado:
 

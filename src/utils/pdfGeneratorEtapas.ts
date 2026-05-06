@@ -19,12 +19,13 @@ interface Client {
 }
 
 // Brand palette
-const CARBON: [number, number, number] = [97, 94, 91]     // #615E5B
-const AMBER:  [number, number, number] = [230, 154, 33]   // #E69A21
-const WHITE:  [number, number, number] = [255, 255, 255]
-const BLACK:  [number, number, number] = [0, 0, 0]
-const HUESO:  [number, number, number] = [244, 244, 241]  // #F4F4F1
-const BORDER: [number, number, number] = [210, 210, 210]
+const CARBON:   [number, number, number] = [97, 94, 91]    // #615E5B
+const AMBER:    [number, number, number] = [230, 154, 33]  // #E69A21
+const WHITE:    [number, number, number] = [255, 255, 255]
+const BLACK:    [number, number, number] = [26, 26, 26]    // near-black
+const HUESO:    [number, number, number] = [244, 244, 241] // #F4F4F1
+const BORDER:   [number, number, number] = [218, 218, 215]
+const GRAY_MID: [number, number, number] = [130, 128, 125] // subtotal secondary values
 
 export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
   const doc = new jsPDF('p', 'mm', 'a4')
@@ -130,10 +131,10 @@ export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
   y = (doc as any).lastAutoTable.finalY + 10
 
   // ── 4. PHASES TABLE (5 columns) ───────────────────────
-  // Column widths: N°(5%) | Etapa(45%) | MO(15%) | MAT(15%) | Total(20%)
+  // Column widths: N°(8%) | Etapa(42%) | MO(15%) | MAT(15%) | Total(20%)
   const cW = {
-    num:   contentW * 0.05,  //  9mm
-    desc:  contentW * 0.45,  // 81mm
+    num:   contentW * 0.08,  // 14.4mm — enough for "5.0" without line-break
+    desc:  contentW * 0.42,  // 75.6mm
     mo:    contentW * 0.15,  // 27mm
     mat:   contentW * 0.15,  // 27mm
     total: contentW * 0.20,  // 36mm
@@ -149,33 +150,33 @@ export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
   const rows: any[] = [
     // Header
     [
-      { content: 'N°',              styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', halign: 'center', fontSize: 8 } },
-      { content: 'ETAPA / DESCRIPCIÓN', styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', fontSize: 8 } },
-      { content: 'MANO DE OBRA',    styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 8 } },
-      { content: 'MATERIALES',      styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 8 } },
-      { content: 'TOTAL NETO',      styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 8 } },
+      { content: 'N°',              styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', halign: 'center', fontSize: 7.5 } },
+      { content: 'ETAPA / DESCRIPCIÓN', styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', fontSize: 7.5 } },
+      { content: 'MANO DE OBRA',    styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 7.5 } },
+      { content: 'MATERIALES',      styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 7.5 } },
+      { content: 'TOTAL NETO',      styles: { fillColor: CARBON, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 7.5 } },
     ],
   ]
 
   activeEtapas.forEach(etapa => {
-    // Phase row
+    // Phase row — medium weight, not full bold
     rows.push([
       { content: etapa.numero,
-        styles: { fillColor: AMBER, textColor: WHITE, fontStyle: 'bold', halign: 'center', fontSize: 10 } },
+        styles: { fillColor: AMBER, textColor: WHITE, fontStyle: 'bold', halign: 'center', fontSize: 8.5, cellPadding: 3.5 } },
       { content: etapa.nombre,
-        styles: { fillColor: HUESO, textColor: BLACK, fontStyle: 'bold', fontSize: 10 } },
+        styles: { fillColor: HUESO, textColor: BLACK, fontStyle: 'normal', fontSize: 9, cellPadding: 3.5 } },
       { content: etapa.manoObra > 0  ? `$${fmt(etapa.manoObra)}`  : '—',
-        styles: { fillColor: HUESO, textColor: BLACK, halign: 'right', fontSize: 10 } },
+        styles: { fillColor: HUESO, textColor: BLACK, halign: 'right', fontSize: 9, cellPadding: 3.5 } },
       { content: etapa.materiales > 0 ? `$${fmt(etapa.materiales)}` : '—',
-        styles: { fillColor: HUESO, textColor: BLACK, halign: 'right', fontSize: 10 } },
+        styles: { fillColor: HUESO, textColor: BLACK, halign: 'right', fontSize: 9, cellPadding: 3.5 } },
       { content: `$${fmt(etapa.total)}`,
-        styles: { fillColor: HUESO, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 10 } },
+        styles: { fillColor: HUESO, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 9, cellPadding: 3.5 } },
     ])
     // Description row
     if (etapa.descripcion) {
       rows.push([
-        { content: '', styles: { fillColor: WHITE } },
-        { content: etapa.descripcion, styles: { fillColor: WHITE, textColor: CARBON, fontSize: 8, fontStyle: 'italic' } },
+        { content: '', styles: { fillColor: WHITE, cellPadding: { top: 2, bottom: 3, left: 2, right: 2 } } },
+        { content: etapa.descripcion, styles: { fillColor: WHITE, textColor: CARBON, fontSize: 7.5, fontStyle: 'italic', cellPadding: { top: 2, bottom: 3, left: 3, right: 2 } } },
         { content: '', styles: { fillColor: WHITE } },
         { content: '', styles: { fillColor: WHITE } },
         { content: '', styles: { fillColor: WHITE } },
@@ -183,27 +184,27 @@ export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
     }
   })
 
-  // Subtotals row
+  // Subtotals — secondary values in GRAY_MID, total column in BLACK for hierarchy
   rows.push([
     { content: '', styles: { fillColor: WHITE, lineColor: WHITE } },
-    { content: 'SUBTOTAL NETO', styles: { fontStyle: 'bold', halign: 'right', textColor: BLACK, fontSize: 9, fillColor: WHITE } },
-    { content: `$${fmt(totalMO)}`,  styles: { fontStyle: 'bold', halign: 'right', textColor: BLACK, fontSize: 9, fillColor: WHITE } },
-    { content: `$${fmt(totalMAT)}`, styles: { fontStyle: 'bold', halign: 'right', textColor: BLACK, fontSize: 9, fillColor: WHITE } },
-    { content: `$${fmt(subtotal)}`, styles: { fontStyle: 'bold', halign: 'right', textColor: BLACK, fontSize: 9, fillColor: WHITE } },
+    { content: 'SUBTOTAL NETO', styles: { fontStyle: 'bold', halign: 'right', textColor: CARBON, fontSize: 8.5, fillColor: WHITE, cellPadding: 3.5 } },
+    { content: `$${fmt(totalMO)}`,  styles: { fontStyle: 'normal', halign: 'right', textColor: GRAY_MID, fontSize: 8.5, fillColor: WHITE, cellPadding: 3.5 } },
+    { content: `$${fmt(totalMAT)}`, styles: { fontStyle: 'normal', halign: 'right', textColor: GRAY_MID, fontSize: 8.5, fillColor: WHITE, cellPadding: 3.5 } },
+    { content: `$${fmt(subtotal)}`, styles: { fontStyle: 'bold', halign: 'right', textColor: BLACK, fontSize: 9, fillColor: WHITE, cellPadding: 3.5 } },
   ])
   rows.push([
     { content: '', styles: { fillColor: WHITE, lineColor: WHITE } },
-    { content: 'IVA (19%)', styles: { halign: 'right', textColor: BLACK, fontSize: 9, fillColor: WHITE } },
+    { content: 'IVA (19%)', styles: { halign: 'right', textColor: GRAY_MID, fontSize: 8, fillColor: WHITE, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 } } },
     { content: '', styles: { fillColor: WHITE } },
     { content: '', styles: { fillColor: WHITE } },
-    { content: `$${fmt(iva)}`, styles: { halign: 'right', textColor: BLACK, fontSize: 9, fillColor: WHITE } },
+    { content: `$${fmt(iva)}`, styles: { halign: 'right', textColor: GRAY_MID, fontSize: 8, fillColor: WHITE, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 } } },
   ])
   rows.push([
+    { content: '', styles: { fillColor: AMBER, cellPadding: 4 } },
+    { content: 'TOTAL', styles: { fillColor: AMBER, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 11, cellPadding: 4 } },
     { content: '', styles: { fillColor: AMBER } },
-    { content: 'TOTAL', styles: { fillColor: AMBER, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 12 } },
     { content: '', styles: { fillColor: AMBER } },
-    { content: '', styles: { fillColor: AMBER } },
-    { content: `$${fmt(total)}`, styles: { fillColor: AMBER, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 12 } },
+    { content: `$${fmt(total)}`, styles: { fillColor: AMBER, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 11, cellPadding: 4 } },
   ])
 
   autoTable(doc, {
@@ -211,7 +212,7 @@ export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
     head: [],
     body: rows,
     theme: 'grid',
-    styles: { fontSize: 9, cellPadding: 2.5, minCellHeight: 8, lineWidth: 0.15, lineColor: BORDER },
+    styles: { fontSize: 9, cellPadding: 3, minCellHeight: 9, lineWidth: 0.12, lineColor: BORDER },
     columnStyles: {
       0: { cellWidth: cW.num,   halign: 'center' },
       1: { cellWidth: cW.desc },
