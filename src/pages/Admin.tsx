@@ -1373,7 +1373,8 @@ export default function Admin() {
           { label: '📋 Admin', href: '/admin', active: true, color: 'var(--primary)' },
           { label: '🔧 Gustavo', href: `/g?t=${gustavoToken}`, active: false, color: '#0284c7' },
           { label: '🧾 Irazú', href: `/i?t=${irazuToken}`, active: false, color: '#0891b2' },
-          { label: '📊 Presupuestos', href: '/', active: false, color: '#059669' },
+          { label: '📊 Presupuesto', href: '/', active: false, color: '#059669' },
+          { label: '📋 Itemizado', href: '/itemizado', active: false, color: '#e69a21' },
         ].map(item => (
           <a
             key={item.label}
