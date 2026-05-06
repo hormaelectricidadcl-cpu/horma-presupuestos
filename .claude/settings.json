@@ -4,7 +4,16 @@
       "Bash(npx tsc *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(copy \"e:\\\\horma-presupuestos-v2\\\\Logo.PNG\" \"e:\\\\horma-presupuestos-v2\\\\public\\\\Logo.PNG\")",
+      "PowerShell(Copy-Item \"e:\\\\horma-presupuestos-v2\\\\Logo.PNG\" \"e:\\\\horma-presupuestos-v2\\\\public\\\\Logo.PNG\")",
+      "Bash(mkdir -p /mnt/e/horma-presupuestos-v2/src/assets)",
+      "Bash(cp /mnt/e/horma-presupuestos-v2/Logo.PNG /mnt/e/horma-presupuestos-v2/src/assets/Logo.PNG)",
+      "Bash(ls /e/horma-presupuestos-v2/ 2>/dev/null || ls /cygdrive/e/horma-presupuestos-v2/ 2>/dev/null || echo \"PATH_CHECK\")",
+      "Read(//cygdrive/e/**)",
+      "Bash(Get-ChildItem -Path \"e:\\\\horma-presupuestos-v2\\\\src\" -Recurse -Type File)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(xargs grep -l \"parse.*etapa\\\\|parse.*presupuesto\")"
     ]
   }
 }

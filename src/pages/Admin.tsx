@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
 import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario } from '../types'
 
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD as string
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
   confirmar_visita: 'Confirmar visita',
@@ -101,15 +100,30 @@ function fmtHaceQuanto(iso: string): string {
 function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [pwd, setPwd] = useState('')
   const [err, setErr] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (pwd === ADMIN_PASSWORD) {
-      localStorage.setItem('horma_admin', pwd)
-      onLogin()
-    } else {
+    setLoading(true)
+    setErr(false)
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pwd }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        localStorage.setItem('horma_admin_token', data.token)
+        onLogin()
+      } else {
+        setErr(true)
+        setPwd('')
+      }
+    } catch {
       setErr(true)
-      setPwd('')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -127,7 +141,9 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
             <input type="password" value={pwd} onChange={e => { setPwd(e.target.value); setErr(false) }} placeholder="••••••••" autoFocus />
             {err && <span style={{ color: 'var(--danger)', fontSize: 13 }}>Contraseña incorrecta</span>}
           </div>
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px' }}>Entrar</button>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px' }} disabled={loading}>
+            {loading ? 'Verificando...' : 'Entrar'}
+          </button>
         </form>
       </div>
     </div>
@@ -1236,8 +1252,16 @@ export default function Admin() {
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
 
   useEffect(() => {
-    const saved = localStorage.getItem('horma_admin')
-    if (saved === ADMIN_PASSWORD) setAuthed(true)
+    const token = localStorage.getItem('horma_admin_token')
+    if (!token) return
+    fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.ok) setAuthed(true) })
+      .catch(() => {})
   }, [])
 
   const loadPendientes = useCallback(async (showSpinner = false) => {

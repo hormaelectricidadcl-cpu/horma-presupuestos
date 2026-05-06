@@ -46,7 +46,7 @@ export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
   const contentW  = pageWidth - 2 * margin            // 182mm
   let y = margin
 
-  const fmt   = (n: number) => Math.round(n).toLocaleString('es-CL')
+  const fmt   = (n: number) => Math.round(n || 0).toLocaleString('es-CL')
   const pad   = (n: number) => String(n).padStart(2, '0')
   const today = new Date()
   const currentDate = `${pad(today.getDate())}-${pad(today.getMonth() + 1)}-${today.getFullYear()}`
@@ -151,8 +151,8 @@ export const generatePDFEtapas = async (client: Client, etapas: Etapa[]) => {
   }
 
   const activeEtapas   = etapas.filter(e => e.items.length > 0)
-  const grandTotalMO   = etapas.reduce((s, e) => s + e.totalMO,  0)
-  const grandTotalMAT  = etapas.reduce((s, e) => s + e.totalMAT, 0)
+  const grandTotalMO   = etapas.reduce((s, e) => s + (Number(e.totalMO)  || 0), 0)
+  const grandTotalMAT  = etapas.reduce((s, e) => s + (Number(e.totalMAT) || 0), 0)
   const subtotal       = grandTotalMO + grandTotalMAT
   const iva            = Math.round(subtotal * 0.19)
   const total          = subtotal + iva
