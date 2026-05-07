@@ -94,7 +94,7 @@ ${texto}`
         const total          = cantidad * precioUnitario
         return {
           subNumero:      String(it.subNumero || ''),
-          descripcion:    String(it.descripcion || ''),
+          descripcion:    String(it.descripcion || '').replace(/^\d+[\s.,]+/, '').trim(),
           cantidad,
           precioUnitario,
           tipo:           it.tipo === 'MAT' ? 'MAT' : 'MO',

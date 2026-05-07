@@ -4,7 +4,7 @@ import type { Etapa } from '../utils/pdfGeneratorEtapas'
 
 interface Client {
   name: string
-  rut: string
+  telefono: string
   email: string
   address: string
 }
@@ -41,7 +41,7 @@ const tdS: React.CSSProperties = {
 }
 
 export default function PresupuestoEtapas() {
-  const [client, setClient]         = useState<Client>({ name: '', rut: '', email: '', address: '' })
+  const [client, setClient]         = useState<Client>({ name: '', telefono: '', email: '', address: '' })
   const [texto, setTexto]           = useState('')
   const [etapas, setEtapas]         = useState<Etapa[]>(FASES_DEFAULT)
   const [procesado, setProcesado]   = useState(false)
@@ -50,11 +50,12 @@ export default function PresupuestoEtapas() {
   const [error, setError]           = useState('')
   const [ggPct, setGgPct]           = useState(0)
 
-  const grandMO  = etapas.reduce((s, e) => s + e.totalMO,  0)
-  const grandMAT = etapas.reduce((s, e) => s + e.totalMAT, 0)
-  const ggBase   = grandMO + grandMAT
+  const etapasForCalc = ggPct > 0 ? etapas.filter(e => e.numero !== '5.0') : etapas
+  const grandMO  = etapasForCalc.reduce((s, e) => s + e.totalMO,  0)
+  const grandMAT = etapasForCalc.reduce((s, e) => s + e.totalMAT, 0)
+  const ggBase   = etapas.filter(e => e.numero !== '5.0').reduce((s, e) => s + e.totalMO + e.totalMAT, 0)
   const ggAmount = Math.round(ggBase * ggPct / 100)
-  const subtotal = ggBase + ggAmount
+  const subtotal = grandMO + grandMAT + ggAmount
   const iva      = Math.round(subtotal * 0.19)
   const total    = subtotal + iva
 
@@ -115,8 +116,8 @@ export default function PresupuestoEtapas() {
               <input value={client.name}    onChange={e => setClient(c => ({ ...c, name:    e.target.value }))} placeholder="Ej: Patricio Valdés" />
             </div>
             <div className="field">
-              <label>RUT</label>
-              <input value={client.rut}     onChange={e => setClient(c => ({ ...c, rut:     e.target.value }))} placeholder="12.345.678-9" />
+              <label>Teléfono</label>
+              <input value={client.telefono} onChange={e => setClient(c => ({ ...c, telefono: e.target.value }))} placeholder="+56 9 1234 5678" />
             </div>
             <div className="field">
               <label>Email</label>

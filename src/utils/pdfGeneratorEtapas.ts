@@ -22,7 +22,7 @@ export interface Etapa {
 
 interface Client {
   name: string
-  rut: string
+  telefono: string
   email: string
   address: string
 }
@@ -124,8 +124,8 @@ export const generatePDFEtapas = async (
         { content: client.address || '', styles: { fontSize: 8.5, textColor: BLACK } },
       ],
       [
-        { content: 'RUT',       styles: { fontStyle: 'bold', textColor: WHITE, fillColor: CARBON, fontSize: 7.5, cellPadding: 2 } },
-        { content: client.rut   || '', styles: { fontSize: 8.5, textColor: BLACK } },
+        { content: 'TELÉFONO',  styles: { fontStyle: 'bold', textColor: WHITE, fillColor: CARBON, fontSize: 7.5, cellPadding: 2 } },
+        { content: client.telefono || '', styles: { fontSize: 8.5, textColor: BLACK } },
         { content: 'E-MAIL',    styles: { fontStyle: 'bold', textColor: WHITE, fillColor: CARBON, fontSize: 7.5, cellPadding: 2 } },
         { content: client.email || '', styles: { fontSize: 8.5, textColor: BLACK } },
       ],
@@ -154,9 +154,10 @@ export const generatePDFEtapas = async (
     total: contentW * 0.16,   // 29.1mm
   }
 
-  const activeEtapas   = etapas.filter(e => e.items.length > 0)
-  const grandTotalMO   = etapas.reduce((s, e) => s + (Number(e.totalMO)  || 0), 0)
-  const grandTotalMAT  = etapas.reduce((s, e) => s + (Number(e.totalMAT) || 0), 0)
+  const etapasForCalc  = gg.pct > 0 ? etapas.filter(e => e.numero !== '5.0') : etapas
+  const activeEtapas   = etapasForCalc.filter(e => e.items.length > 0)
+  const grandTotalMO   = etapasForCalc.reduce((s, e) => s + (Number(e.totalMO)  || 0), 0)
+  const grandTotalMAT  = etapasForCalc.reduce((s, e) => s + (Number(e.totalMAT) || 0), 0)
   const ggAmount       = gg?.amount || 0
   const subtotal       = grandTotalMO + grandTotalMAT + ggAmount
   const iva            = Math.round(subtotal * 0.19)
@@ -176,19 +177,15 @@ export const generatePDFEtapas = async (
   ])
 
   activeEtapas.forEach(etapa => {
-    // Phase header — full-width merged cell
-    rows.push([{
-      content: `  ${etapa.numero}   ${etapa.nombre.toUpperCase()}`,
-      colSpan: 7,
-      styles: {
-        fillColor: AMBER_LIGHT,
-        textColor: AMBER_TEXT,
-        fontStyle: 'bold',
-        fontSize: 8.5,
-        halign: 'left',
-        cellPadding: { top: 4, bottom: 4, left: 6, right: 4 },
-      },
-    }])
+    // Phase header — número en col N°, nombre en las 6 restantes
+    rows.push([
+      { content: etapa.numero,
+        styles: { fillColor: AMBER_LIGHT, textColor: AMBER_TEXT, fontStyle: 'bold', halign: 'center', fontSize: 8.5,
+          cellPadding: { top: 4, bottom: 4, left: 2, right: 2 } } },
+      { content: etapa.nombre.toUpperCase(), colSpan: 6,
+        styles: { fillColor: AMBER_LIGHT, textColor: AMBER_TEXT, fontStyle: 'bold', halign: 'left', fontSize: 8.5,
+          cellPadding: { top: 4, bottom: 4, left: 4, right: 4 } } },
+    ])
 
     // Individual item rows
     etapa.items.forEach(item => {
