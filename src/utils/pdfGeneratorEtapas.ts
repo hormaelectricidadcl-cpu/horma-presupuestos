@@ -154,10 +154,9 @@ export const generatePDFEtapas = async (
     total: contentW * 0.16,   // 29.1mm
   }
 
-  const etapasForCalc  = gg.pct > 0 ? etapas.filter(e => e.numero !== '5.0') : etapas
-  const activeEtapas   = etapasForCalc.filter(e => e.items.length > 0)
-  const grandTotalMO   = etapasForCalc.reduce((s, e) => s + (Number(e.totalMO)  || 0), 0)
-  const grandTotalMAT  = etapasForCalc.reduce((s, e) => s + (Number(e.totalMAT) || 0), 0)
+  const activeEtapas   = etapas.filter(e => e.items.length > 0)
+  const grandTotalMO   = etapas.reduce((s, e) => s + (Number(e.totalMO)  || 0), 0)
+  const grandTotalMAT  = etapas.reduce((s, e) => s + (Number(e.totalMAT) || 0), 0)
   const ggAmount       = gg?.amount || 0
   const subtotal       = grandTotalMO + grandTotalMAT + ggAmount
   const iva            = Math.round(subtotal * 0.19)
@@ -225,18 +224,29 @@ export const generatePDFEtapas = async (
     }
   })
 
-  // Gastos Generales (solo si aplica)
+  // Sección 5.0 Gastos Generales (solo si aplica)
   if (ggAmount > 0) {
+    // Header de fase 5.0
     rows.push([
-      { content: '', styles: { fillColor: SUBTOT_BG } },
+      { content: '5.0',
+        styles: { fillColor: AMBER_LIGHT, textColor: AMBER_TEXT, fontStyle: 'bold', halign: 'center', fontSize: 8.5,
+          cellPadding: { top: 4, bottom: 4, left: 2, right: 2 } } },
+      { content: 'GASTOS GENERALES Y LOGÍSTICA', colSpan: 6,
+        styles: { fillColor: AMBER_LIGHT, textColor: AMBER_TEXT, fontStyle: 'bold', halign: 'left', fontSize: 8.5,
+          cellPadding: { top: 4, bottom: 4, left: 4, right: 4 } } },
+    ])
+    // Ítem GG
+    rows.push([
+      { content: '5.1',
+        styles: { fillColor: HUESO, textColor: GRAY_MID, halign: 'center', fontSize: 7.5, cellPadding: 2.5 } },
       { content: `Gastos Generales y Logística (${gg.pct}%)`,
-        styles: { fillColor: SUBTOT_BG, textColor: CARBON, fontStyle: 'italic', halign: 'right', fontSize: 8, cellPadding: 3 } },
-      { content: '', styles: { fillColor: SUBTOT_BG } },
-      { content: '', styles: { fillColor: SUBTOT_BG } },
-      { content: '', styles: { fillColor: SUBTOT_BG } },
-      { content: '', styles: { fillColor: SUBTOT_BG } },
+        styles: { fillColor: HUESO, textColor: BLACK, fontStyle: 'italic', fontSize: 8, cellPadding: 2.5 } },
+      { content: '', styles: { fillColor: HUESO } },
+      { content: '', styles: { fillColor: HUESO } },
+      { content: '', styles: { fillColor: HUESO } },
+      { content: '', styles: { fillColor: HUESO } },
       { content: `$${fmt(ggAmount)}`,
-        styles: { fillColor: SUBTOT_BG, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 8, cellPadding: 3 } },
+        styles: { fillColor: HUESO, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 8, cellPadding: 2.5 } },
     ])
   }
 

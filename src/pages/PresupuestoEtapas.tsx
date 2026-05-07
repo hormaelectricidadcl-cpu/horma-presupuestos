@@ -14,7 +14,6 @@ const FASES_DEFAULT: Etapa[] = [
   { numero: '2.0', nombre: 'Canalización y Alimentación',  items: [], totalMO: 0, totalMAT: 0, total: 0 },
   { numero: '3.0', nombre: 'Instalaciones y Protecciones', items: [], totalMO: 0, totalMAT: 0, total: 0 },
   { numero: '4.0', nombre: 'Seguridad y Normativa',        items: [], totalMO: 0, totalMAT: 0, total: 0 },
-  { numero: '5.0', nombre: 'Gastos Generales y Logística', items: [], totalMO: 0, totalMAT: 0, total: 0 },
 ]
 
 const FASE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444']
@@ -50,12 +49,11 @@ export default function PresupuestoEtapas() {
   const [error, setError]           = useState('')
   const [ggPct, setGgPct]           = useState(0)
 
-  const etapasForCalc = ggPct > 0 ? etapas.filter(e => e.numero !== '5.0') : etapas
-  const grandMO  = etapasForCalc.reduce((s, e) => s + e.totalMO,  0)
-  const grandMAT = etapasForCalc.reduce((s, e) => s + e.totalMAT, 0)
-  const ggBase   = etapas.filter(e => e.numero !== '5.0').reduce((s, e) => s + e.totalMO + e.totalMAT, 0)
+  const grandMO  = etapas.reduce((s, e) => s + e.totalMO,  0)
+  const grandMAT = etapas.reduce((s, e) => s + e.totalMAT, 0)
+  const ggBase   = grandMO + grandMAT
   const ggAmount = Math.round(ggBase * ggPct / 100)
-  const subtotal = grandMO + grandMAT + ggAmount
+  const subtotal = ggBase + ggAmount
   const iva      = Math.round(subtotal * 0.19)
   const total    = subtotal + iva
 

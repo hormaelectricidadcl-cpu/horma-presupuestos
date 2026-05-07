@@ -34,19 +34,18 @@ Clasifica cada ítem:
 - "MO" (mano de obra): instalación, canalización, conexión, certificación, montaje, retiro, reemplazo de trabajo
 - "MAT" (materiales): cables, tableros, accesorios, kits, ductos, tuberías, materiales
 
-PASO 2 — AGRUPACIÓN EN 5 FASES FIJAS:
-Asigna cada ítem a exactamente una fase:
+PASO 2 — AGRUPACIÓN EN 4 FASES FIJAS:
+Asigna cada ítem a exactamente una de estas 4 fases:
 - 1.0 "Preparación y Empalme": medidor, nichos, empalme, tablero de distribución principal
-- 2.0 "Canalización y Alimentación": cables, ductos, tuberías, cableado, tendido
+- 2.0 "Canalización y Alimentación": cables, ductos, tuberías, cableado, tendido, materiales complementarios, accesorios generales de la instalación
 - 3.0 "Instalaciones y Protecciones": tablero cargador, montaje equipos, diferenciales, protecciones, interruptores
 - 4.0 "Seguridad y Normativa": puesta a tierra, certificación TE1, ingeniería, trámites
-- 5.0 "Gastos Generales y Logística": transporte, herramientas, administración, imprevistos, complementarios, porcentajes
 
 Sub-numeración: primer ítem de fase 1.0 → "1.1", segundo → "1.2", etc.
-Si un ítem no encaja en ninguna fase específica, asígnalo a 5.0.
+Si un ítem no encaja claramente, asígnalo a la fase más relacionada con el trabajo que describe.
 No omitas ningún ítem con precio. Todos los valores son enteros.
 
-FORMATO DE RESPUESTA (JSON array de exactamente 5 objetos):
+FORMATO DE RESPUESTA (JSON array de exactamente 4 objetos):
 [
   {
     "numero": "1.0",
@@ -57,8 +56,7 @@ FORMATO DE RESPUESTA (JSON array de exactamente 5 objetos):
   },
   {"numero":"2.0","nombre":"Canalización y Alimentación","items":[]},
   {"numero":"3.0","nombre":"Instalaciones y Protecciones","items":[]},
-  {"numero":"4.0","nombre":"Seguridad y Normativa","items":[]},
-  {"numero":"5.0","nombre":"Gastos Generales y Logística","items":[]}
+  {"numero":"4.0","nombre":"Seguridad y Normativa","items":[]}
 ]
 
 Texto del presupuesto:
