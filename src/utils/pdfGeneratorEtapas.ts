@@ -239,7 +239,7 @@ export const generatePDFEtapas = async (
     rows.push([
       { content: '5.1',
         styles: { fillColor: HUESO, textColor: GRAY_MID, halign: 'center', fontSize: 7.5, cellPadding: 2.5 } },
-      { content: `Gastos Generales y Logística (${gg.pct}%)`,
+      { content: 'Gastos Generales y Logística',
         styles: { fillColor: HUESO, textColor: BLACK, fontStyle: 'italic', fontSize: 8, cellPadding: 2.5 } },
       { content: '', styles: { fillColor: HUESO } },
       { content: '', styles: { fillColor: HUESO } },
@@ -250,20 +250,63 @@ export const generatePDFEtapas = async (
     ])
   }
 
-  // Grand subtotal
-  rows.push([
-    { content: '', styles: { fillColor: WHITE, lineColor: BORDER } },
-    { content: 'SUBTOTAL NETO',
-      styles: { fillColor: WHITE, textColor: CARBON, fontStyle: 'bold', halign: 'right', fontSize: 8.5, cellPadding: 3 } },
-    { content: '', styles: { fillColor: WHITE } },
-    { content: '', styles: { fillColor: WHITE } },
-    { content: `$${fmt(grandTotalMO)}`,
-      styles: { fillColor: WHITE, textColor: GRAY_MID, halign: 'right', fontSize: 8.5, cellPadding: 3 } },
-    { content: `$${fmt(grandTotalMAT)}`,
-      styles: { fillColor: WHITE, textColor: GRAY_MID, halign: 'right', fontSize: 8.5, cellPadding: 3 } },
-    { content: `$${fmt(subtotal)}`,
-      styles: { fillColor: WHITE, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 9, cellPadding: 3 } },
-  ])
+  // Footer rows: COSTOS DIRECTOS → (GG) → SUBTOTAL NETO → IVA → TOTAL
+  const costosDirectos = grandTotalMO + grandTotalMAT
+  if (ggAmount > 0) {
+    // COSTOS DIRECTOS con desglose MO/MAT
+    rows.push([
+      { content: '', styles: { fillColor: WHITE, lineColor: BORDER } },
+      { content: 'COSTOS DIRECTOS',
+        styles: { fillColor: WHITE, textColor: CARBON, fontStyle: 'bold', halign: 'right', fontSize: 8.5, cellPadding: 3 } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: `$${fmt(grandTotalMO)}`,
+        styles: { fillColor: WHITE, textColor: GRAY_MID, halign: 'right', fontSize: 8.5, cellPadding: 3 } },
+      { content: `$${fmt(grandTotalMAT)}`,
+        styles: { fillColor: WHITE, textColor: GRAY_MID, halign: 'right', fontSize: 8.5, cellPadding: 3 } },
+      { content: `$${fmt(costosDirectos)}`,
+        styles: { fillColor: WHITE, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 9, cellPadding: 3 } },
+    ])
+    // GASTOS GENERALES (sin porcentaje visible)
+    rows.push([
+      { content: '', styles: { fillColor: WHITE, lineColor: BORDER } },
+      { content: 'Gastos Generales y Logística',
+        styles: { fillColor: WHITE, textColor: GRAY_MID, halign: 'right', fontSize: 8, cellPadding: 3 } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: `$${fmt(ggAmount)}`,
+        styles: { fillColor: WHITE, textColor: GRAY_MID, halign: 'right', fontSize: 8, cellPadding: 3 } },
+    ])
+    // SUBTOTAL NETO (costos directos + GG)
+    rows.push([
+      { content: '', styles: { fillColor: WHITE, lineColor: BORDER } },
+      { content: 'SUBTOTAL NETO',
+        styles: { fillColor: WHITE, textColor: CARBON, fontStyle: 'bold', halign: 'right', fontSize: 8.5, cellPadding: 3 } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: `$${fmt(subtotal)}`,
+        styles: { fillColor: WHITE, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 9, cellPadding: 3 } },
+    ])
+  } else {
+    // Sin GG: SUBTOTAL NETO con desglose MO/MAT
+    rows.push([
+      { content: '', styles: { fillColor: WHITE, lineColor: BORDER } },
+      { content: 'SUBTOTAL NETO',
+        styles: { fillColor: WHITE, textColor: CARBON, fontStyle: 'bold', halign: 'right', fontSize: 8.5, cellPadding: 3 } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: '', styles: { fillColor: WHITE } },
+      { content: `$${fmt(grandTotalMO)}`,
+        styles: { fillColor: WHITE, textColor: GRAY_MID, halign: 'right', fontSize: 8.5, cellPadding: 3 } },
+      { content: `$${fmt(grandTotalMAT)}`,
+        styles: { fillColor: WHITE, textColor: GRAY_MID, halign: 'right', fontSize: 8.5, cellPadding: 3 } },
+      { content: `$${fmt(subtotal)}`,
+        styles: { fillColor: WHITE, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 9, cellPadding: 3 } },
+    ])
+  }
 
   // IVA
   rows.push([
