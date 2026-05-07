@@ -224,32 +224,6 @@ export const generatePDFEtapas = async (
     }
   })
 
-  // Sección 5.0 Gastos Generales (solo si aplica)
-  if (ggAmount > 0) {
-    // Header de fase 5.0
-    rows.push([
-      { content: '5.0',
-        styles: { fillColor: AMBER_LIGHT, textColor: AMBER_TEXT, fontStyle: 'bold', halign: 'center', fontSize: 8.5,
-          cellPadding: { top: 4, bottom: 4, left: 2, right: 2 } } },
-      { content: 'GASTOS GENERALES Y LOGÍSTICA', colSpan: 6,
-        styles: { fillColor: AMBER_LIGHT, textColor: AMBER_TEXT, fontStyle: 'bold', halign: 'left', fontSize: 8.5,
-          cellPadding: { top: 4, bottom: 4, left: 4, right: 4 } } },
-    ])
-    // Ítem GG
-    rows.push([
-      { content: '5.1',
-        styles: { fillColor: HUESO, textColor: GRAY_MID, halign: 'center', fontSize: 7.5, cellPadding: 2.5 } },
-      { content: 'Gastos Generales y Logística',
-        styles: { fillColor: HUESO, textColor: BLACK, fontStyle: 'italic', fontSize: 8, cellPadding: 2.5 } },
-      { content: '', styles: { fillColor: HUESO } },
-      { content: '', styles: { fillColor: HUESO } },
-      { content: '', styles: { fillColor: HUESO } },
-      { content: '', styles: { fillColor: HUESO } },
-      { content: `$${fmt(ggAmount)}`,
-        styles: { fillColor: HUESO, textColor: BLACK, fontStyle: 'bold', halign: 'right', fontSize: 8, cellPadding: 2.5 } },
-    ])
-  }
-
   // Footer rows: COSTOS DIRECTOS → (GG) → SUBTOTAL NETO → IVA → TOTAL
   const costosDirectos = grandTotalMO + grandTotalMAT
   if (ggAmount > 0) {

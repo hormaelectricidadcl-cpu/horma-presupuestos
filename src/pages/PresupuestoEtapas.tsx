@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { generatePDFEtapas } from '../utils/pdfGeneratorEtapas'
 import type { Etapa } from '../utils/pdfGeneratorEtapas'
+import { supabase } from '../lib/supabase'
 
 interface Client {
   name: string
@@ -39,15 +40,118 @@ const tdS: React.CSSProperties = {
   borderTop: '1px solid #f0f0ee',
 }
 
+const JSON_PLACEHOLDER = `{
+  "cliente": "Patricio Valdés",
+  "direccion": "Las Condes, Santiago",
+  "gastos_generales_porcentaje": 10,
+  "items": [
+    {
+      "tipo": "mano_de_obra",
+      "cantidad": 75,
+      "descripcion": "Reemplazo de cable de centros eléctricos",
+      "precio_unitario": 13000
+    },
+    {
+      "tipo": "materiales",
+      "cantidad": 50,
+      "descripcion": "Cable 2.5mm",
+      "precio_unitario": 800
+    }
+  ]
+}`
+
+// ── Login screen ─────────────────────────────────────────────────────────────
+
+function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) => Promise<string | null> }) {
+  const [email, setEmail]       = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError]       = useState('')
+  const [loading, setLoading]   = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    const err = await onLogin(email, password)
+    if (err) setError(err)
+    setLoading(false)
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh', background: 'var(--bg)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+    }}>
+      <div className="card" style={{ width: '100%', maxWidth: 380, padding: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.75rem' }}>
+          <div style={{
+            width: 44, height: 44, background: '#615e5b', borderRadius: 12,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
+          }}>H</div>
+          <div>
+            <p style={{ fontWeight: 800, fontSize: 16, color: '#1a1a1a', lineHeight: 1.2 }}>Presupuestador</p>
+            <p style={{ fontSize: 12, color: '#615e5b' }}>Horma Electricidad</p>
+          </div>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="tu@email.com"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="field" style={{ marginBottom: 16 }}>
+            <label>Contraseña</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          {error && (
+            <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>
+          )}
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={loading}
+            style={{ width: '100%', fontWeight: 700, fontSize: 15 }}
+          >
+            {loading ? 'Ingresando...' : 'Ingresar'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function PresupuestoEtapas() {
+  // Auth
+  const [session, setSession]   = useState<any>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  // Presupuesto state
   const [client, setClient]         = useState<Client>({ name: '', telefono: '', email: '', address: '' })
   const [texto, setTexto]           = useState('')
+  const [jsonInput, setJsonInput]   = useState('')
+  const [inputMode, setInputMode]   = useState<'texto' | 'json'>('texto')
   const [etapas, setEtapas]         = useState<Etapa[]>(FASES_DEFAULT)
   const [procesado, setProcesado]   = useState(false)
   const [totalNeto, setTotalNeto]   = useState<number | null>(null)
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState('')
   const [ggPct, setGgPct]           = useState(0)
+  const [guardado, setGuardado]     = useState(false)
 
   const grandMO  = etapas.reduce((s, e) => s + e.totalMO,  0)
   const grandMAT = etapas.reduce((s, e) => s + e.totalMAT, 0)
@@ -57,6 +161,29 @@ export default function PresupuestoEtapas() {
   const iva      = Math.round(subtotal * 0.19)
   const total    = subtotal + iva
 
+  // Auth init
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setAuthLoading(false)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function handleLogin(email: string, password: string): Promise<string | null> {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) return 'Email o contraseña incorrectos.'
+    return null
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+  }
+
+  // Procesar texto plano con IA
   async function procesar() {
     if (!texto.trim()) { setError('Pegá el texto del presupuesto de Gustavo.'); return }
     setLoading(true)
@@ -72,6 +199,7 @@ export default function PresupuestoEtapas() {
       setEtapas(data.etapas)
       setTotalNeto(data.totalNeto ?? null)
       setProcesado(true)
+      setGuardado(false)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -79,10 +207,91 @@ export default function PresupuestoEtapas() {
     }
   }
 
+  // Procesar JSON estructurado
+  async function procesarJSON() {
+    let parsed: any
+    try {
+      parsed = JSON.parse(jsonInput)
+    } catch {
+      setError('JSON inválido. Verifica el formato.')
+      return
+    }
+    if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
+      setError('El JSON debe tener un array "items" con al menos un ítem.')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      // Pre-cargar datos del cliente desde el JSON
+      if (parsed.cliente)   setClient(c => ({ ...c, name:    parsed.cliente }))
+      if (parsed.direccion) setClient(c => ({ ...c, address: parsed.direccion }))
+      if (typeof parsed.gastos_generales_porcentaje === 'number') {
+        setGgPct(Math.max(0, Math.min(100, parsed.gastos_generales_porcentaje)))
+      }
+
+      const res  = await fetch('/api/parse-json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.etapas) throw new Error(data.error || 'Error al procesar')
+      setEtapas(data.etapas)
+      setTotalNeto(data.totalNeto ?? null)
+      setProcesado(true)
+      setGuardado(false)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function limpiar() {
+    setEtapas(FASES_DEFAULT)
+    setProcesado(false)
+    setTotalNeto(null)
+    setGgPct(0)
+    setGuardado(false)
+  }
+
   async function generarPDF() {
     if (!client.name.trim()) { alert('Ingresá el nombre del cliente antes de generar el PDF.'); return }
     if (ggBase === 0) { alert('Procesá el texto con IA antes de generar el PDF.'); return }
     await generatePDFEtapas(client, etapas, { pct: ggPct, amount: ggAmount })
+
+    // Guardar en Supabase
+    if (session?.user?.id) {
+      const { error: dbErr } = await supabase.from('presupuestos').insert({
+        user_id:          session.user.id,
+        cliente_nombre:   client.name,
+        cliente_telefono: client.telefono,
+        cliente_email:    client.email,
+        cliente_direccion: client.address,
+        etapas,
+        gg_pct:    ggPct,
+        gg_amount: ggAmount,
+        subtotal,
+        iva,
+        total,
+      })
+      if (!dbErr) setGuardado(true)
+    }
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <p style={{ color: '#615e5b', fontSize: 14 }}>Cargando...</p>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return <LoginScreen onLogin={handleLogin} />
   }
 
   return (
@@ -100,7 +309,16 @@ export default function PresupuestoEtapas() {
             <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#1a1a1a' }}>Presupuesto Itemizado por Etapas</h1>
             <p style={{ fontSize: 13, color: '#615e5b', fontWeight: 500 }}>Horma Electricidad — Estándar de Ingeniería</p>
           </div>
-          <a href="/admin" style={{ marginLeft: 'auto', fontSize: 13, color: '#615e5b', textDecoration: 'none', fontWeight: 600 }}>← Admin</a>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: '#93918e' }}>{session.user.email}</span>
+            <button
+              onClick={handleLogout}
+              style={{ fontSize: 12, color: '#615e5b', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+            >
+              Salir
+            </button>
+            <a href="/admin" style={{ fontSize: 13, color: '#615e5b', textDecoration: 'none', fontWeight: 600 }}>← Admin</a>
+          </div>
         </div>
 
         {/* Client form */}
@@ -111,7 +329,7 @@ export default function PresupuestoEtapas() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div className="field">
               <label>Nombre *</label>
-              <input value={client.name}    onChange={e => setClient(c => ({ ...c, name:    e.target.value }))} placeholder="Ej: Patricio Valdés" />
+              <input value={client.name}     onChange={e => setClient(c => ({ ...c, name:     e.target.value }))} placeholder="Ej: Patricio Valdés" />
             </div>
             <div className="field">
               <label>Teléfono</label>
@@ -119,51 +337,115 @@ export default function PresupuestoEtapas() {
             </div>
             <div className="field">
               <label>Email</label>
-              <input type="email" value={client.email}   onChange={e => setClient(c => ({ ...c, email:   e.target.value }))} placeholder="cliente@email.com" />
+              <input type="email" value={client.email} onChange={e => setClient(c => ({ ...c, email: e.target.value }))} placeholder="cliente@email.com" />
             </div>
             <div className="field">
               <label>Dirección</label>
-              <input value={client.address} onChange={e => setClient(c => ({ ...c, address: e.target.value }))} placeholder="Las Condes, Santiago" />
+              <input value={client.address}  onChange={e => setClient(c => ({ ...c, address:  e.target.value }))} placeholder="Las Condes, Santiago" />
             </div>
           </div>
         </div>
 
-        {/* Text input */}
+        {/* Input card — tabs Texto / JSON */}
         <div className="card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Texto del presupuesto (formato Gustavo)
-          </p>
-          <textarea
-            value={texto}
-            onChange={e => {
-              setTexto(e.target.value)
-              if (procesado) { setProcesado(false); setTotalNeto(null); setEtapas(FASES_DEFAULT); setGgPct(0) }
-            }}
-            placeholder={`Mano de obra\n75 Reemplazo de cable de centros eléctricos 13.000\nInstalación de tablero de distribución 100.000\n\nMateriales:\n50 ml Cable 2.5mm 800\nTablero de distribución con accesorios 120.000\n...`}
-            rows={9}
-            style={{ width: '100%', fontSize: 13, fontFamily: 'monospace', resize: 'vertical', lineHeight: 1.6 }}
-          />
-          {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 6 }}>{error}</p>}
-          {totalNeto !== null && (
-            <div style={{
-              marginTop: 10, padding: '8px 14px', borderRadius: 8,
-              background: '#f0fdf4', border: '1.5px solid #22c55e',
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              <span style={{ fontSize: 16 }}>✓</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#15803d' }}>
-                Total detectado por IA: ${fmt(totalNeto)}
-              </span>
-            </div>
+
+          {/* Tab selector */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
+            {(['texto', 'json'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => { setInputMode(mode); setError('') }}
+                style={{
+                  fontSize: 13, fontWeight: 700, padding: '6px 16px',
+                  border: 'none', borderBottom: inputMode === mode ? '2px solid #e69a21' : '2px solid transparent',
+                  background: 'none', cursor: 'pointer',
+                  color: inputMode === mode ? '#e69a21' : '#93918e',
+                  marginBottom: -1,
+                }}
+              >
+                {mode === 'texto' ? 'Texto plano' : 'JSON / API'}
+              </button>
+            ))}
+          </div>
+
+          {inputMode === 'texto' ? (
+            <>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Texto del presupuesto (formato Gustavo)
+              </p>
+              <textarea
+                value={texto}
+                onChange={e => {
+                  setTexto(e.target.value)
+                  if (procesado) limpiar()
+                }}
+                placeholder={`Mano de obra\n75 Reemplazo de cable de centros eléctricos 13.000\nInstalación de tablero de distribución 100.000\n\nMateriales:\n50 ml Cable 2.5mm 800\nTablero de distribución con accesorios 120.000\n...`}
+                rows={9}
+                style={{ width: '100%', fontSize: 13, fontFamily: 'monospace', resize: 'vertical', lineHeight: 1.6 }}
+              />
+              {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 6 }}>{error}</p>}
+              {totalNeto !== null && (
+                <div style={{
+                  marginTop: 10, padding: '8px 14px', borderRadius: 8,
+                  background: '#f0fdf4', border: '1.5px solid #22c55e',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ fontSize: 16 }}>✓</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#15803d' }}>
+                    Total detectado por IA: ${fmt(totalNeto)}
+                  </span>
+                </div>
+              )}
+              <button
+                className="btn btn-primary"
+                onClick={procesar}
+                disabled={loading}
+                style={{ marginTop: 12, fontWeight: 700, fontSize: 15 }}
+              >
+                {loading ? '⏳ Procesando con IA...' : '✨ Agrupar en etapas con IA'}
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Entrada JSON estructurada
+              </p>
+              <p style={{ fontSize: 12, color: '#93918e', marginBottom: 8 }}>
+                Compatible con Make.com, Zapier y cualquier webhook. Los campos <code>cliente</code>, <code>direccion</code> y <code>gastos_generales_porcentaje</code> se aplican automáticamente.
+              </p>
+              <textarea
+                value={jsonInput}
+                onChange={e => {
+                  setJsonInput(e.target.value)
+                  if (procesado) limpiar()
+                }}
+                placeholder={JSON_PLACEHOLDER}
+                rows={14}
+                style={{ width: '100%', fontSize: 12, fontFamily: 'monospace', resize: 'vertical', lineHeight: 1.6 }}
+              />
+              {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 6 }}>{error}</p>}
+              {totalNeto !== null && (
+                <div style={{
+                  marginTop: 10, padding: '8px 14px', borderRadius: 8,
+                  background: '#f0fdf4', border: '1.5px solid #22c55e',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ fontSize: 16 }}>✓</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#15803d' }}>
+                    Total detectado: ${fmt(totalNeto)}
+                  </span>
+                </div>
+              )}
+              <button
+                className="btn btn-primary"
+                onClick={procesarJSON}
+                disabled={loading}
+                style={{ marginTop: 12, fontWeight: 700, fontSize: 15 }}
+              >
+                {loading ? '⏳ Clasificando con IA...' : '⚙️ Procesar JSON y clasificar fases'}
+              </button>
+            </>
           )}
-          <button
-            className="btn btn-primary"
-            onClick={procesar}
-            disabled={loading}
-            style={{ marginTop: 12, fontWeight: 700, fontSize: 15 }}
-          >
-            {loading ? '⏳ Procesando con IA...' : '✨ Agrupar en etapas con IA'}
-          </button>
         </div>
 
         {/* Phase cards */}
@@ -171,11 +453,11 @@ export default function PresupuestoEtapas() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Etapas de obra
-              {procesado && <span style={{ marginLeft: 8, color: '#16a34a', fontWeight: 700, fontSize: 11 }}>✓ IA procesó el texto</span>}
+              {procesado && <span style={{ marginLeft: 8, color: '#16a34a', fontWeight: 700, fontSize: 11 }}>✓ IA procesó los datos</span>}
             </p>
             {procesado && (
               <button
-                onClick={() => { setEtapas(FASES_DEFAULT); setProcesado(false); setTotalNeto(null); setGgPct(0) }}
+                onClick={limpiar}
                 style={{ background: 'none', border: 'none', fontSize: 12, color: '#615e5b', cursor: 'pointer', fontWeight: 600 }}
               >↺ Limpiar</button>
             )}
@@ -190,7 +472,6 @@ export default function PresupuestoEtapas() {
                   padding: 0, overflow: 'hidden',
                   border: `2px solid ${activa ? color + '35' : 'var(--border)'}`,
                 }}>
-                  {/* Phase header bar */}
                   <div style={{
                     padding: '10px 14px',
                     background: activa ? color + '0d' : '#fafaf9',
@@ -223,7 +504,6 @@ export default function PresupuestoEtapas() {
                     )}
                   </div>
 
-                  {/* Items table */}
                   {activa && (
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -316,9 +596,7 @@ export default function PresupuestoEtapas() {
                 padding: '8px 12px', borderRadius: 8, background: '#fef9ee', border: '1px solid #e69a21',
                 fontSize: 13,
               }}>
-                <span style={{ color: '#615e5b' }}>
-                  ${fmt(ggBase)} × {ggPct}%
-                </span>
+                <span style={{ color: '#615e5b' }}>${fmt(ggBase)} × {ggPct}%</span>
                 <strong style={{ color: '#e69a21', fontSize: 15 }}>${fmt(ggAmount)}</strong>
               </div>
             )}
@@ -375,10 +653,15 @@ export default function PresupuestoEtapas() {
           >
             📄 Generar PDF — Presupuesto Itemizado
           </button>
+          {guardado && (
+            <p style={{ textAlign: 'center', fontSize: 12, color: '#15803d', marginTop: 8, fontWeight: 600 }}>
+              ✓ Guardado en el historial
+            </p>
+          )}
         </div>
 
         <p style={{ textAlign: 'center', fontSize: 12, color: '#93918e' }}>
-          Procesá el texto con IA para ver el desglose ítem a ítem antes de generar el PDF.
+          Procesá el texto o JSON con IA para ver el desglose ítem a ítem antes de generar el PDF.
         </p>
       </div>
     </div>
