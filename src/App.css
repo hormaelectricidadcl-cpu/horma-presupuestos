@@ -19,7 +19,7 @@
   font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--primary, #e8590c);
+  color: var(--primary, #c1440e);
   margin-bottom: 4px;
 }
 
@@ -73,8 +73,8 @@ input:focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--primary, #e8590c);
-  box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.12);
+  border-color: var(--primary, #c1440e);
+  box-shadow: 0 0 0 3px rgba(193, 68, 14, 0.12);
 }
 
 .field-grid {
@@ -102,11 +102,11 @@ textarea:focus {
 .range-label input[type="range"] {
   grid-column: 1 / -1;
   margin: 6px 0 0;
-  accent-color: var(--primary, #e8590c);
+  accent-color: var(--primary, #c1440e);
 }
 
 .range-value {
-  color: var(--primary, #e8590c);
+  color: var(--primary, #c1440e);
   font-weight: 700;
 }
 
@@ -138,12 +138,12 @@ textarea:focus {
 }
 
 .mode-tab.active {
-  background: var(--primary, #e8590c);
+  background: var(--primary, #c1440e);
   color: white;
 }
 
 .mode-tab.active:hover {
-  background: var(--primary-dark, #b8460a);
+  background: var(--primary-dark, #8f330a);
 }
 
 /* ── AI panel ── */
@@ -165,7 +165,7 @@ textarea:focus {
 
 /* ── Buttons ── */
 button {
-  background-color: var(--primary, #e8590c);
+  background-color: var(--primary, #c1440e);
   color: white;
   border: none;
   padding: 10px 16px;
@@ -177,7 +177,7 @@ button {
 }
 
 button:hover {
-  background-color: var(--primary-dark, #b8460a);
+  background-color: var(--primary-dark, #8f330a);
 }
 
 .btn-generate {
@@ -260,5 +260,5 @@ button:hover {
   border-top: 1px solid var(--border, #e0dedd);
   font-size: 18px;
   font-weight: 800;
-  color: var(--primary, #e8590c);
+  color: var(--primary, #c1440e);
 }

@@ -29,7 +29,7 @@ interface Client {
 
 // Brand palette — explicit tuple types required by jsPDF
 const CARBON:       [number, number, number] = [20, 33, 61]      // #14213D — azul marino
-const AMBER:        [number, number, number] = [232, 89, 12]     // #E8590C — naranja
+const AMBER:        [number, number, number] = [193, 68, 14]     // #c1440e — naranja
 const AMBER_LIGHT:  [number, number, number] = [253, 226, 214]   // phase header bg
 const AMBER_TEXT:   [number, number, number] = [120, 46, 6]      // text on amber-light bg
 const WHITE:        [number, number, number] = [255, 255, 255]

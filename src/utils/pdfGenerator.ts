@@ -54,7 +54,7 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   };
 
   // 1. HEADER
-  doc.setFillColor(232, 89, 12); // #e8590c — acento naranja debajo del header
+  doc.setFillColor(193, 68, 14); // #c1440e — acento naranja debajo del header
   doc.rect(0, 40, pageWidth, 2.5, 'F');
   doc.setFillColor(20, 33, 61); // #14213d
   doc.rect(0, 0, pageWidth, 40, 'F');
@@ -95,6 +95,10 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
     ['Cliente:', client.name || '', 'E-mail:', client.email || ''],
     [{ content: 'Dirección:', colSpan: 1 }, { content: client.address || '', colSpan: 3 }]
   ];
+
+  // Sombra suave detrás de la tabla (2 filas × ~7mm)
+  doc.setFillColor(225, 226, 227);
+  doc.roundedRect(margin + 1, yPosition + 1.5, pageWidth - 2 * margin, 14, 2, 2, 'F');
 
   autoTable(doc, {
     startY: yPosition,
@@ -141,10 +145,10 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   if (materials.length > 0) {
     const materialsTotal = materials.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     tableData.push([
-      { content: 'MATERIALES', styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
-      { content: `$${formatNumber(materialsTotal)}`, styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
-      { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } },
-      { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } }
+      { content: 'MATERIALES', styles: { fillColor: [193, 68, 14], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
+      { content: `$${formatNumber(materialsTotal)}`, styles: { fillColor: [193, 68, 14], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
+      { content: '', styles: { fillColor: [193, 68, 14], fontSize: 10 } },
+      { content: '', styles: { fillColor: [193, 68, 14], fontSize: 10 } }
     ]);
     materials.forEach(item => {
       tableData.push([
@@ -161,10 +165,10 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   if (manoObra.length > 0) {
     const manoObraTotal = manoObra.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     tableData.push([
-      { content: 'MANO DE OBRA', styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
-      { content: `$${formatNumber(manoObraTotal)}`, styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
-      { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } },
-      { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } }
+      { content: 'MANO DE OBRA', styles: { fillColor: [193, 68, 14], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
+      { content: `$${formatNumber(manoObraTotal)}`, styles: { fillColor: [193, 68, 14], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
+      { content: '', styles: { fillColor: [193, 68, 14], fontSize: 10 } },
+      { content: '', styles: { fillColor: [193, 68, 14], fontSize: 10 } }
     ]);
     manoObra.forEach(item => {
       tableData.push([
@@ -182,15 +186,19 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
     .reduce((sum, item) => sum + (item.price * item.quantity), 0)) * (porcentajeGastos / 100);
 
   tableData.push([
-    { content: 'GASTOS GENERALES', styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
-    { content: `$${formatNumber(gastosGeneralesAmount)}`, styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
-    { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } },
-    { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } }
+    { content: 'GASTOS GENERALES', styles: { fillColor: [193, 68, 14], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
+    { content: `$${formatNumber(gastosGeneralesAmount)}`, styles: { fillColor: [193, 68, 14], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
+    { content: '', styles: { fillColor: [193, 68, 14], fontSize: 10 } },
+    { content: '', styles: { fillColor: [193, 68, 14], fontSize: 10 } }
   ]);
   tableData.push([
     { content: '', colSpan: 3 },
     { content: `$${formatNumber(gastosGeneralesAmount)}`, styles: { halign: 'right' } }
   ]);
+
+  // Sombra suave detrás de la tabla de items (estimada por cantidad de filas)
+  doc.setFillColor(225, 226, 227);
+  doc.roundedRect(margin + 1, yPosition + 1.5, pageWidth - 2 * margin, tableData.length * 6.5, 2, 2, 'F');
 
   autoTable(doc, {
     startY: yPosition,
@@ -239,10 +247,14 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
       { content: `$${formatNumber(iva)}`, styles: { textColor: [20, 33, 61] } }
     ],
     [
-      { content: 'Total', styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontSize: 11 } },
-      { content: `$${formatNumber(total)}`, styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontSize: 11 } }
+      { content: 'Total', styles: { fillColor: [193, 68, 14], textColor: [255, 255, 255], fontSize: 11 } },
+      { content: `$${formatNumber(total)}`, styles: { fillColor: [193, 68, 14], textColor: [255, 255, 255], fontSize: 11 } }
     ]
   ];
+
+  // Sombra suave detrás de la tabla de totales (3 filas × ~7mm), alineada a la derecha
+  doc.setFillColor(225, 226, 227);
+  doc.roundedRect(pageWidth - margin - 60 + 1, yPosition + 1.5, 60, 21, 2, 2, 'F');
 
   autoTable(doc, {
     startY: yPosition,
