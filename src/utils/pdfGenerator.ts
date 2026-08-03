@@ -54,21 +54,23 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   };
 
   // 1. HEADER
+  doc.setFillColor(232, 89, 12); // #e8590c — acento naranja debajo del header
+  doc.rect(0, 40, pageWidth, 2.5, 'F');
   doc.setFillColor(20, 33, 61); // #14213d
   doc.rect(0, 0, pageWidth, 40, 'F');
 
   // Title (centered)
-  doc.setFont('arial', 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(20);
   doc.setTextColor(255, 255, 255);
   const titleWidth = doc.getTextWidth('PRESUPUESTO HORMA SERVICIOS');
   const titleX = (pageWidth - titleWidth) / 2;
   doc.text('PRESUPUESTO HORMA SERVICIOS', titleX, 25);
 
-  yPosition = 50;
+  yPosition = 52;
 
   // 2. COMPANY DATA
-  doc.setFont('arial', 'normal');
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
   doc.text('HORMA SERVICIOS', margin, yPosition);
@@ -100,20 +102,22 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
     body: clientTableData,
     theme: 'grid',
     styles: {
+      font: 'helvetica',
       fontSize: 10,
-      cellPadding: 1,
-      minCellHeight: 6,
-      lineWidth: 0.1,
-      lineColor: [100, 100, 100]
+      cellPadding: 2.5,
+      minCellHeight: 7,
+      lineWidth: 0.15,
+      lineColor: [206, 209, 212],
+      fillColor: [245, 245, 240]
     },
     headStyles: {
       cellPadding: 1,
       minCellHeight: 6
     },
     columnStyles: {
-      0: { cellWidth: (pageWidth - 2 * margin) * 0.15 },
+      0: { cellWidth: (pageWidth - 2 * margin) * 0.15, fontStyle: 'bold', textColor: [20, 33, 61] },
       1: { cellWidth: (pageWidth - 2 * margin) * 0.35 },
-      2: { cellWidth: (pageWidth - 2 * margin) * 0.15 },
+      2: { cellWidth: (pageWidth - 2 * margin) * 0.15, fontStyle: 'bold', textColor: [20, 33, 61] },
       3: { cellWidth: (pageWidth - 2 * margin) * 0.35 }
     },
     margin: { left: margin, right: margin }
@@ -194,11 +198,15 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
     body: tableData,
     theme: 'grid',
     styles: {
+      font: 'helvetica',
       fontSize: 9,
-      cellPadding: 1,
-      minCellHeight: 6,
-      lineWidth: 0.1,
-      lineColor: [100, 100, 100]
+      cellPadding: 2,
+      minCellHeight: 6.5,
+      lineWidth: 0.15,
+      lineColor: [206, 209, 212]
+    },
+    alternateRowStyles: {
+      fillColor: [245, 245, 240]
     },
     headStyles: {
       cellPadding: 1,
@@ -221,10 +229,19 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
 
   console.log('Totales calculados en PDF:', { subtotal, gastosGeneralesAmount, neto, iva, total });
 
-  const totalsData = [
-    ['Sub Total', `$${formatNumber(neto)}`],
-    ['IVA', `$${formatNumber(iva)}`],
-    ['Total', `$${formatNumber(total)}`]
+  const totalsData: any[] = [
+    [
+      { content: 'Sub Total', styles: { textColor: [20, 33, 61] } },
+      { content: `$${formatNumber(neto)}`, styles: { textColor: [20, 33, 61] } }
+    ],
+    [
+      { content: 'IVA', styles: { textColor: [20, 33, 61] } },
+      { content: `$${formatNumber(iva)}`, styles: { textColor: [20, 33, 61] } }
+    ],
+    [
+      { content: 'Total', styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontSize: 11 } },
+      { content: `$${formatNumber(total)}`, styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontSize: 11 } }
+    ]
   ];
 
   autoTable(doc, {
@@ -233,11 +250,12 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
     body: totalsData,
     theme: 'grid',
     styles: {
+      font: 'helvetica',
       fontSize: 10,
-      cellPadding: 1,
-      minCellHeight: 6,
-      lineWidth: 0.1,
-      lineColor: [100, 100, 100]
+      cellPadding: 2.5,
+      minCellHeight: 7,
+      lineWidth: 0.15,
+      lineColor: [206, 209, 212]
     },
     columnStyles: {
       0: { cellWidth: 30, fontStyle: 'bold' },
@@ -248,16 +266,18 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
 
   yPosition = (doc as any).lastAutoTable.finalY + 10;
 
-  // 6. TERMS AND CONDITIONS
+  // 6. TERMS AND CONDITIONS — con sombra suave y esquinas redondeadas
+  doc.setFillColor(225, 226, 227); // sombra: gris claro desplazado
+  doc.roundedRect(margin + 1, yPosition + 1.5, pageWidth - 2 * margin, 45, 3, 3, 'F');
   doc.setFillColor(108, 117, 125); // #6c757d
-  doc.rect(margin, yPosition, pageWidth - 2 * margin, 45, 'F');
+  doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 45, 3, 3, 'F');
 
-  doc.setFont('arial', 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(255, 255, 255);
   doc.text('TÉRMINOS Y CONDICIONES', margin + 8, yPosition + 10);
 
-  doc.setFont('arial', 'normal');
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   const termsText = [
     'Forma de pago: 50% Adelanto para compra de equipos y materiales.',
@@ -271,7 +291,7 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   yPosition += 55;
 
   // 7. FOOTER
-  doc.setFont('arial', 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setTextColor(0, 0, 0);
   const footerText = '¡Gracias por confiar en nosotros!';

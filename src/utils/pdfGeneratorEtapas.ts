@@ -322,9 +322,11 @@ export const generatePDFEtapas = async (
   })
   y = (doc as any).lastAutoTable.finalY + 8
 
-  // ── 5. TERMS ─────────────────────────────────────────────────────
+  // ── 5. TERMS — con sombra suave y esquinas redondeadas ────────────
+  doc.setFillColor(225, 226, 227)
+  doc.roundedRect(margin + 1, y + 1.5, contentW, 34, 3, 3, 'F')
   doc.setFillColor(...CARBON)
-  doc.rect(margin, y, contentW, 46, 'F')
+  doc.roundedRect(margin, y, contentW, 34, 3, 3, 'F')
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(8.5)
@@ -338,7 +340,7 @@ export const generatePDFEtapas = async (
     'Forma de pago: 50% Adelanto para compra de equipos y materiales.',
     '50% contra entrega de los trabajos terminados.',
   ].forEach((line, i) => doc.text(line, margin + 8, y + 19 + i * 6))
-  y += 56
+  y += 44
 
   // ── 6. FOOTER ────────────────────────────────────────────────────
   doc.setDrawColor(...AMBER)
