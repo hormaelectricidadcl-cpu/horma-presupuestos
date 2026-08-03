@@ -74,7 +74,6 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   doc.text('HORMA SERVICIOS', margin, yPosition);
 
   doc.setFontSize(10);
-  doc.text('Dirección: Morande 696', margin, yPosition + 5);
 
   // Right column dates
   doc.setTextColor(0, 0, 0);
@@ -279,12 +278,6 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   const footerWidth = doc.getTextWidth(footerText);
   const footerX = (pageWidth - footerWidth) / 2;
   doc.text(footerText, footerX, yPosition + 10);
-
-  // Website below footer
-  doc.setFont('arial', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 255);
-  doc.textWithLink('www.hormaelectricidad.cl', (pageWidth - 50) / 2, yPosition + 18, { url: 'https://www.hormaelectricidad.cl' });
 
   // Save the PDF
   doc.save('presupuesto.pdf');

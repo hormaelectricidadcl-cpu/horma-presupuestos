@@ -94,9 +94,6 @@ export const generatePDFEtapas = async (
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
-  doc.setTextColor(...CARBON)
-  doc.text('Morande 696', margin, y + 5.5)
-
   doc.setTextColor(...BLACK)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
@@ -354,12 +351,6 @@ export const generatePDFEtapas = async (
   doc.setTextColor(...CARBON)
   const footer = '¡Gracias por confiar en nosotros!'
   doc.text(footer, (pageWidth - doc.getTextWidth(footer)) / 2, y)
-
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8.5)
-  doc.setTextColor(0, 0, 200)
-  const web = 'www.hormaelectricidad.cl'
-  doc.textWithLink(web, (pageWidth - doc.getTextWidth(web)) / 2, y + 6.5, { url: 'https://www.hormaelectricidad.cl' })
 
   doc.save('presupuesto-horma.pdf')
 }

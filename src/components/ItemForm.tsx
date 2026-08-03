@@ -228,54 +228,30 @@ const ItemForm: React.FC<ItemFormProps> = ({ addItem }) => {
   };
 
   return (
-    <div className="item-form">
+    <div className="card item-form">
       <h2>Agregar artículo</h2>
 
-      <div style={{ display: 'flex', marginBottom: '15px', borderBottom: '1px solid #ccc' }}>
+      <div className="mode-tabs">
         <button
           type="button"
+          className={mode === 'manual' ? 'mode-tab active' : 'mode-tab'}
           onClick={() => setMode('manual')}
-          style={{
-            flex: 1,
-            padding: '8px',
-            backgroundColor: mode === 'manual' ? '#e69a21' : '#f5f5f5',
-            color: mode === 'manual' ? 'white' : 'black',
-            border: 'none',
-            cursor: 'pointer',
-            fontWeight: mode === 'manual' ? 'bold' : 'normal'
-          }}
         >
           Manual
         </button>
 
         <button
           type="button"
+          className={mode === 'catalog' ? 'mode-tab active' : 'mode-tab'}
           onClick={() => setMode('catalog')}
-          style={{
-            flex: 1,
-            padding: '8px',
-            backgroundColor: mode === 'catalog' ? '#e69a21' : '#f5f5f5',
-            color: mode === 'catalog' ? 'white' : 'black',
-            border: 'none',
-            cursor: 'pointer',
-            fontWeight: mode === 'catalog' ? 'bold' : 'normal'
-          }}
         >
           Catálogo
         </button>
 
         <button
           type="button"
+          className={mode === 'ai' ? 'mode-tab active' : 'mode-tab'}
           onClick={() => setMode('ai')}
-          style={{
-            flex: 1,
-            padding: '8px',
-            backgroundColor: mode === 'ai' ? '#e69a21' : '#f5f5f5',
-            color: mode === 'ai' ? 'white' : 'black',
-            border: 'none',
-            cursor: 'pointer',
-            fontWeight: mode === 'ai' ? 'bold' : 'normal'
-          }}
         >
           IA
         </button>
@@ -321,7 +297,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ addItem }) => {
       )}
 
       {mode === 'catalog' && (
-        <div style={{ padding: '15px', textAlign: 'center', color: '#666' }}>
+        <div className="empty-state" style={{ padding: '15px', textAlign: 'center' }}>
           <p>📋 <strong>Catálogo deshabilitado</strong></p>
           <p style={{ fontSize: '12px' }}>
             El catálogo de servicios requiere conexión a base de datos.<br />
@@ -391,38 +367,22 @@ const ItemForm: React.FC<ItemFormProps> = ({ addItem }) => {
       )}
 
       {mode === 'ai' && (
-        <div style={{ padding: '20px' }}>
-          <p style={{ marginBottom: '8px', fontWeight: 'bold' }}>
-            Generar ítems con IA
-          </p>
+        <div className="ai-panel">
+          <p className="ai-label">Generar ítems con IA</p>
 
           <textarea
+            className="ai-textarea"
             value={aiText}
             onChange={(e) => setAiText(e.target.value)}
-            style={{
-              width: '100%',
-              minHeight: '140px',
-              padding: '12px',
-              resize: 'vertical',
-              boxSizing: 'border-box'
-            }}
             placeholder="Pega aquí el detalle del trabajo o presupuesto"
           />
 
           <button
             type="button"
+            className="btn-generate"
             onClick={procesarIA}
             disabled={isProcessingAI}
-            style={{
-              marginTop: '10px',
-              width: '100%',
-              padding: '12px',
-              backgroundColor: '#e69a21',
-              color: 'white',
-              border: 'none',
-              cursor: isProcessingAI ? 'not-allowed' : 'pointer',
-              opacity: isProcessingAI ? 0.7 : 1
-            }}
+            style={{ width: '100%', marginTop: '10px' }}
           >
             {isProcessingAI ? 'Procesando...' : 'Generar con IA'}
           </button>
