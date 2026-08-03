@@ -28,16 +28,16 @@ interface Client {
 }
 
 // Brand palette — explicit tuple types required by jsPDF
-const CARBON:       [number, number, number] = [97, 94, 91]      // #615E5B
-const AMBER:        [number, number, number] = [230, 154, 33]    // #E69A21
-const AMBER_LIGHT:  [number, number, number] = [255, 245, 220]   // phase header bg
-const AMBER_TEXT:   [number, number, number] = [110, 72, 0]      // text on amber-light bg
+const CARBON:       [number, number, number] = [20, 33, 61]      // #14213D — azul marino
+const AMBER:        [number, number, number] = [232, 89, 12]     // #E8590C — naranja
+const AMBER_LIGHT:  [number, number, number] = [253, 226, 214]   // phase header bg
+const AMBER_TEXT:   [number, number, number] = [120, 46, 6]      // text on amber-light bg
 const WHITE:        [number, number, number] = [255, 255, 255]
 const BLACK:        [number, number, number] = [26, 26, 26]
-const HUESO:        [number, number, number] = [248, 247, 244]   // item row bg
-const BORDER:       [number, number, number] = [218, 218, 215]
-const GRAY_MID:     [number, number, number] = [140, 138, 135]   // secondary values
-const SUBTOT_BG:    [number, number, number] = [237, 236, 234]   // phase subtotal row
+const HUESO:        [number, number, number] = [245, 245, 240]   // #F5F5F0 — item row bg
+const BORDER:       [number, number, number] = [206, 209, 212]
+const GRAY_MID:     [number, number, number] = [108, 117, 125]   // #6C757D — gris concreto
+const SUBTOT_BG:    [number, number, number] = [232, 233, 234]   // phase subtotal row
 
 export const generatePDFEtapas = async (
   client: Client,
@@ -72,7 +72,7 @@ export const generatePDFEtapas = async (
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(15)
   doc.setTextColor(...WHITE)
-  doc.text('PRESUPUESTO HORMA ELECTRICIDAD', tx, 18)
+  doc.text('PRESUPUESTO HORMA SERVICIOS', tx, 18)
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
@@ -82,7 +82,7 @@ export const generatePDFEtapas = async (
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.5)
   doc.setTextColor(210, 210, 210)
-  doc.text('Estándar de ingeniería — Horma Electricidad', tx, 34)
+  doc.text('Estándar de ingeniería — Horma Servicios', tx, 34)
 
   y = hH + 8
 
@@ -90,14 +90,12 @@ export const generatePDFEtapas = async (
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9.5)
   doc.setTextColor(...BLACK)
-  doc.text('HORMA SPA', margin, y)
+  doc.text('HORMA SERVICIOS', margin, y)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
   doc.setTextColor(...CARBON)
-  doc.text('Morande 696  |  +56 9 2014 4427', margin, y + 5.5)
-  doc.setTextColor(0, 0, 200)
-  doc.textWithLink('contacto@hormaelectricidad.cl', margin, y + 11, { url: 'mailto:contacto@hormaelectricidad.cl' })
+  doc.text('Morande 696', margin, y + 5.5)
 
   doc.setTextColor(...BLACK)
   doc.setFont('helvetica', 'normal')
@@ -342,8 +340,6 @@ export const generatePDFEtapas = async (
   ;[
     'Forma de pago: 50% Adelanto para compra de equipos y materiales.',
     '50% contra entrega de los trabajos terminados.',
-    'Transferencia bancaria: Mercado Pago – Cuenta Vista',
-    'N° cuenta: 1092804013  |  RUT: 77.518.498-1  |  Titular: HORMA SPA',
   ].forEach((line, i) => doc.text(line, margin + 8, y + 19 + i * 6))
   y += 56
 

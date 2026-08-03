@@ -54,16 +54,16 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   };
 
   // 1. HEADER
-  doc.setFillColor(97, 94, 91); // #615e5b
+  doc.setFillColor(20, 33, 61); // #14213d
   doc.rect(0, 0, pageWidth, 40, 'F');
 
   // Title (centered)
   doc.setFont('arial', 'bold');
   doc.setFontSize(20);
   doc.setTextColor(255, 255, 255);
-  const titleWidth = doc.getTextWidth('PRESUPUESTO HORMA ELECTRICIDAD');
+  const titleWidth = doc.getTextWidth('PRESUPUESTO HORMA SERVICIOS');
   const titleX = (pageWidth - titleWidth) / 2;
-  doc.text('PRESUPUESTO HORMA ELECTRICIDAD', titleX, 25);
+  doc.text('PRESUPUESTO HORMA SERVICIOS', titleX, 25);
 
   yPosition = 50;
 
@@ -71,15 +71,10 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   doc.setFont('arial', 'normal');
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
-  doc.text('HORMA ELECTRICIDAD', margin, yPosition);
+  doc.text('HORMA SERVICIOS', margin, yPosition);
 
   doc.setFontSize(10);
   doc.text('Dirección: Morande 696', margin, yPosition + 5);
-  doc.text('Teléfono: +56920144427', margin, yPosition + 10);
-
-  // Email as link
-  doc.setTextColor(0, 0, 255);
-  doc.textWithLink('contacto@hormaelectricidad.cl', margin, yPosition + 15, { url: 'mailto:contacto@hormaelectricidad.cl' });
 
   // Right column dates
   doc.setTextColor(0, 0, 0);
@@ -132,10 +127,10 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
 
   // Gray header row (first row of table)
   tableData.push([
-    { content: '', styles: { fillColor: [97, 94, 91], textColor: [255, 255, 255], fontStyle: 'normal' } },
-    { content: 'PRECIO U.', styles: { fillColor: [97, 94, 91], textColor: [255, 255, 255], fontStyle: 'normal', halign: 'center' } },
-    { content: 'CANT', styles: { fillColor: [97, 94, 91], textColor: [255, 255, 255], fontStyle: 'normal', halign: 'center' } },
-    { content: 'NETO', styles: { fillColor: [97, 94, 91], textColor: [255, 255, 255], fontStyle: 'normal', halign: 'right' } }
+    { content: '', styles: { fillColor: [20, 33, 61], textColor: [255, 255, 255], fontStyle: 'normal' } },
+    { content: 'PRECIO U.', styles: { fillColor: [20, 33, 61], textColor: [255, 255, 255], fontStyle: 'normal', halign: 'center' } },
+    { content: 'CANT', styles: { fillColor: [20, 33, 61], textColor: [255, 255, 255], fontStyle: 'normal', halign: 'center' } },
+    { content: 'NETO', styles: { fillColor: [20, 33, 61], textColor: [255, 255, 255], fontStyle: 'normal', halign: 'right' } }
   ]);
 
   // Materials section
@@ -143,10 +138,10 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   if (materials.length > 0) {
     const materialsTotal = materials.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     tableData.push([
-      { content: 'MATERIALES', styles: { fillColor: [230, 154, 33], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
-      { content: `$${formatNumber(materialsTotal)}`, styles: { fillColor: [230, 154, 33], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
-      { content: '', styles: { fillColor: [230, 154, 33], fontSize: 10 } },
-      { content: '', styles: { fillColor: [230, 154, 33], fontSize: 10 } }
+      { content: 'MATERIALES', styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
+      { content: `$${formatNumber(materialsTotal)}`, styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
+      { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } },
+      { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } }
     ]);
     materials.forEach(item => {
       tableData.push([
@@ -163,10 +158,10 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   if (manoObra.length > 0) {
     const manoObraTotal = manoObra.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     tableData.push([
-      { content: 'MANO DE OBRA', styles: { fillColor: [230, 154, 33], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
-      { content: `$${formatNumber(manoObraTotal)}`, styles: { fillColor: [230, 154, 33], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
-      { content: '', styles: { fillColor: [230, 154, 33], fontSize: 10 } },
-      { content: '', styles: { fillColor: [230, 154, 33], fontSize: 10 } }
+      { content: 'MANO DE OBRA', styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
+      { content: `$${formatNumber(manoObraTotal)}`, styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
+      { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } },
+      { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } }
     ]);
     manoObra.forEach(item => {
       tableData.push([
@@ -184,10 +179,10 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
     .reduce((sum, item) => sum + (item.price * item.quantity), 0)) * (porcentajeGastos / 100);
 
   tableData.push([
-    { content: 'GASTOS GENERALES', styles: { fillColor: [230, 154, 33], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
-    { content: `$${formatNumber(gastosGeneralesAmount)}`, styles: { fillColor: [230, 154, 33], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
-    { content: '', styles: { fillColor: [230, 154, 33], fontSize: 10 } },
-    { content: '', styles: { fillColor: [230, 154, 33], fontSize: 10 } }
+    { content: 'GASTOS GENERALES', styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 } },
+    { content: `$${formatNumber(gastosGeneralesAmount)}`, styles: { fillColor: [232, 89, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, halign: 'center' } },
+    { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } },
+    { content: '', styles: { fillColor: [232, 89, 12], fontSize: 10 } }
   ]);
   tableData.push([
     { content: '', colSpan: 3 },
@@ -255,7 +250,7 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   yPosition = (doc as any).lastAutoTable.finalY + 10;
 
   // 6. TERMS AND CONDITIONS
-  doc.setFillColor(147, 145, 142); // #93918e
+  doc.setFillColor(108, 117, 125); // #6c757d
   doc.rect(margin, yPosition, pageWidth - 2 * margin, 45, 'F');
 
   doc.setFont('arial', 'bold');
@@ -267,9 +262,7 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   doc.setFontSize(9);
   const termsText = [
     'Forma de pago: 50% Adelanto para compra de equipos y materiales.',
-    '50% contra entrega de los trabajos',
-    'Datos para transferencia bancaria: Mercado Pago – Cuenta Vista',
-    'Número de cuenta: 1092804013 | RUT: 77.518.498-1 | Titular: HORMA SPA'
+    '50% contra entrega de los trabajos'
   ];
 
   termsText.forEach((line, index) => {

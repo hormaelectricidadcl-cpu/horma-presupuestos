@@ -10,12 +10,12 @@ body {
 
 /* ── Variables globales ────────────────────────────────── */
 :root {
-  --primary: #E69A21;
-  --primary-dark: #c4841c;
-  --secondary: #615E5B;
-  --text: #2d2b29;
-  --muted: #93918E;
-  --bg: #F4F4F1;
+  --primary: #E8590C;
+  --primary-dark: #b8460a;
+  --secondary: #14213D;
+  --text: #14213D;
+  --muted: #6C757D;
+  --bg: #F5F5F0;
   --white: #ffffff;
   --danger: #c0392b;
   --danger-bg: #fdf2f2;
