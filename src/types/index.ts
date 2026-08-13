@@ -47,3 +47,30 @@ export interface NuevoPendiente {
   drive_links: string[]
   destinatario: Destinatario
 }
+
+export interface ReporteTrabajadorDia {
+  id: string
+  fecha: string
+  trabajador: string
+  presente: boolean
+  obra: string | null
+  fraccion_jornada: number
+  viatico: boolean
+  adelanto_monto: number | null
+}
+
+export interface ReporteCompraDia {
+  id: string
+  fecha: string
+  descripcion: string
+  monto: number
+  obra: string | null
+}
+
+export interface ReporteCobroDia {
+  id: string
+  fecha: string
+  obra: string | null
+  cliente: string
+  monto: number
+}

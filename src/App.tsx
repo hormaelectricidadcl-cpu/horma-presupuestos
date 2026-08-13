@@ -3,6 +3,7 @@ import PresupuestoEtapas from './pages/PresupuestoEtapas'
 import Admin from './pages/Admin'
 import Gustavo from './pages/Gustavo'
 import Irazu from './pages/Irazu'
+import Reporte from './pages/Reporte'
 
 export default function App() {
   const path = window.location.pathname
@@ -10,6 +11,7 @@ export default function App() {
 
   if (path === '/g') return <Gustavo token={params.get('t')} />
   if (path === '/i') return <Irazu token={params.get('t')} />
+  if (path === '/reporte') return <Reporte token={params.get('t')} />
   if (path === '/admin') return <Admin />
   if (path === '/itemizado') return <PresupuestoEtapas />
 
