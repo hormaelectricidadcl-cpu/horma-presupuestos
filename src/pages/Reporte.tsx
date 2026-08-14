@@ -4,13 +4,19 @@ import { supabase } from '../lib/supabase'
 const REPORTE_TOKEN = import.meta.env.VITE_REPORTE_TOKEN as string
 
 const TRABAJADORES = ['Alejandro', 'Fabriel', 'Henry', 'Manuel', 'Misael', 'Samuel']
+const OBRA_LIMACHE = 'Ohiggins 126 Limache'
 const OBRAS = [
-  'Ohiggins 126 Limache',
+  OBRA_LIMACHE,
   'Doctora Eloísa (dirección 5843)',
   'Doctora Eloísa - Obra 1 (dirección 5860)',
   'Luisi Carrera',
   'Renato Sanches',
 ]
+
+// El viático solo corresponde a la obra de Limache (los equipos en Santiago no lo reciben).
+function viaticoPorObra(obra: string) {
+  return obra === OBRA_LIMACHE
+}
 
 interface TrabajadorState {
   presente: boolean
@@ -52,7 +58,7 @@ const DEFAULT_TRABAJADOR: TrabajadorState = {
   presente: true,
   obra: '',
   fraccionJornada: 1,
-  viatico: false,
+  viatico: true,
   adelanto: '',
 }
 
@@ -140,7 +146,7 @@ export default function Reporte({ token }: Props) {
     setTrabajadores(prev => {
       const next = { ...prev }
       for (const nombre of TRABAJADORES) {
-        if (next[nombre].presente) next[nombre] = { ...next[nombre], obra: obraGeneral }
+        if (next[nombre].presente) next[nombre] = { ...next[nombre], obra: obraGeneral, viatico: viaticoPorObra(obraGeneral) }
       }
       return next
     })
@@ -290,6 +296,12 @@ export default function Reporte({ token }: Props) {
       }
     }
 
+    fetch('/api/sync-horas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fecha }),
+    }).catch(() => {})
+
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
@@ -384,7 +396,10 @@ export default function Reporte({ token }: Props) {
                         )}
                         <div className="field">
                           <label>Obra</label>
-                          <select value={t.obra} onChange={e => actualizarTrabajador(nombre, { obra: e.target.value })}>
+                          <select
+                            value={t.obra}
+                            onChange={e => actualizarTrabajador(nombre, { obra: e.target.value, viatico: viaticoPorObra(e.target.value) })}
+                          >
                             <option value="">Selecciona una obra...</option>
                             {OBRAS.map(o => <option key={o} value={o}>{o}</option>)}
                           </select>
@@ -400,14 +415,14 @@ export default function Reporte({ token }: Props) {
                               <option value={0.5}>Medio día</option>
                             </select>
                           </div>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: 'var(--text)', paddingTop: 22, cursor: 'pointer' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: t.viatico ? 'var(--text)' : 'var(--danger)', paddingTop: 22, cursor: 'pointer' }}>
                             <input
                               type="checkbox"
-                              checked={t.viatico}
-                              onChange={e => actualizarTrabajador(nombre, { viatico: e.target.checked })}
-                              style={{ width: 18, height: 18, accentColor: 'var(--primary)', cursor: 'pointer' }}
+                              checked={!t.viatico}
+                              onChange={e => actualizarTrabajador(nombre, { viatico: !e.target.checked })}
+                              style={{ width: 18, height: 18, accentColor: 'var(--danger)', cursor: 'pointer' }}
                             />
-                            Viático
+                            Sin viático hoy
                           </label>
                         </div>
                         <div className="field">
