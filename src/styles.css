@@ -139,6 +139,18 @@ body {
 }
 .pendientes textarea { resize: vertical; min-height: 80px; }
 
+/* Checkboxes quedan fuera del reset de arriba: necesitan su apariencia nativa
+   para que accent-color pinte el tilde — si no, el clic cambia el valor pero
+   no se ve nada (appearance:none + padding de texto los deja en blanco). */
+.pendientes input[type="checkbox"] {
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: none;
+  appearance: auto;
+  -webkit-appearance: auto;
+}
+
 /* ── Cards ───────────────────────────────────────────── */
 .pendientes .card {
   background: var(--white);

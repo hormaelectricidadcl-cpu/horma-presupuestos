@@ -34,6 +34,20 @@ interface CobroRow {
   monto: string
 }
 
+interface SubcontratoRow {
+  id?: string
+  obra: string
+  subcontrato: string
+  monto: string
+}
+
+interface TrabajoPuntualRow {
+  id?: string
+  descripcion: string
+  direccion: string
+  trabajador: string
+}
+
 const DEFAULT_TRABAJADOR: TrabajadorState = {
   presente: true,
   obra: '',
@@ -70,14 +84,18 @@ export default function Reporte({ token }: Props) {
   const [obraGeneral, setObraGeneral] = useState('')
   const [compras, setCompras] = useState<CompraRow[]>([])
   const [cobros, setCobros] = useState<CobroRow[]>([])
+  const [subcontratos, setSubcontratos] = useState<SubcontratoRow[]>([])
+  const [trabajosPuntuales, setTrabajosPuntuales] = useState<TrabajoPuntualRow[]>([])
 
   const cargarDia = useCallback(async (f: string) => {
     setLoading(true)
     setError(null)
-    const [{ data: dia }, { data: compr }, { data: cobr }] = await Promise.all([
+    const [{ data: dia }, { data: compr }, { data: cobr }, { data: subc }, { data: punt }] = await Promise.all([
       supabase.from('reportes_diarios').select('*').eq('fecha', f),
       supabase.from('reportes_compras').select('*').eq('fecha', f).order('created_at'),
       supabase.from('reportes_cobros').select('*').eq('fecha', f).order('created_at'),
+      supabase.from('reportes_subcontratos').select('*').eq('fecha', f).order('created_at'),
+      supabase.from('reportes_trabajos_puntuales').select('*').eq('fecha', f).order('created_at'),
     ])
 
     const base = defaultTrabajadores()
@@ -98,6 +116,12 @@ export default function Reporte({ token }: Props) {
     })))
     setCobros((cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
       id: c.id, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
+    })))
+    setSubcontratos((subc || []).map((s: { id: string; obra: string | null; subcontrato: string; monto: number }) => ({
+      id: s.id, obra: s.obra || '', subcontrato: s.subcontrato, monto: String(s.monto),
+    })))
+    setTrabajosPuntuales((punt || []).map((p: { id: string; descripcion: string; direccion: string | null; trabajador: string | null }) => ({
+      id: p.id, descripcion: p.descripcion, direccion: p.direccion || '', trabajador: p.trabajador || '',
     })))
     setLoading(false)
   }, [])
@@ -142,6 +166,26 @@ export default function Reporte({ token }: Props) {
     setCobros(prev => prev.filter((_, i) => i !== idx))
   }
 
+  function agregarSubcontrato() {
+    setSubcontratos(prev => [...prev, { obra: '', subcontrato: '', monto: '' }])
+  }
+  function actualizarSubcontrato(idx: number, patch: Partial<SubcontratoRow>) {
+    setSubcontratos(prev => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
+  }
+  function quitarSubcontrato(idx: number) {
+    setSubcontratos(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function agregarTrabajoPuntual() {
+    setTrabajosPuntuales(prev => [...prev, { descripcion: '', direccion: '', trabajador: '' }])
+  }
+  function actualizarTrabajoPuntual(idx: number, patch: Partial<TrabajoPuntualRow>) {
+    setTrabajosPuntuales(prev => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
+  }
+  function quitarTrabajoPuntual(idx: number) {
+    setTrabajosPuntuales(prev => prev.filter((_, i) => i !== idx))
+  }
+
   async function enviarReporte() {
     setError(null)
 
@@ -175,6 +219,18 @@ export default function Reporte({ token }: Props) {
       return
     }
 
+    const subcontratosValidos = subcontratos.filter(s => s.subcontrato.trim() || s.monto.trim())
+    if (subcontratosValidos.some(s => !s.subcontrato.trim() || !s.monto.trim())) {
+      alert('Cada subcontrato necesita nombre y monto.')
+      return
+    }
+
+    const trabajosValidos = trabajosPuntuales.filter(p => p.descripcion.trim() || p.direccion.trim())
+    if (trabajosValidos.some(p => !p.descripcion.trim())) {
+      alert('Cada trabajo puntual necesita descripción.')
+      return
+    }
+
     setSaving(true)
 
     const { error: e1 } = await supabase
@@ -205,6 +261,30 @@ export default function Reporte({ token }: Props) {
       )
       if (e3) {
         setError('Error al guardar los cobros. Intenta de nuevo.')
+        setSaving(false)
+        return
+      }
+    }
+
+    await supabase.from('reportes_subcontratos').delete().eq('fecha', fecha)
+    if (subcontratosValidos.length) {
+      const { error: e4 } = await supabase.from('reportes_subcontratos').insert(
+        subcontratosValidos.map(s => ({ fecha, obra: s.obra || null, subcontrato: s.subcontrato.trim(), monto: Number(s.monto) }))
+      )
+      if (e4) {
+        setError('Error al guardar los subcontratos. Intenta de nuevo.')
+        setSaving(false)
+        return
+      }
+    }
+
+    await supabase.from('reportes_trabajos_puntuales').delete().eq('fecha', fecha)
+    if (trabajosValidos.length) {
+      const { error: e5 } = await supabase.from('reportes_trabajos_puntuales').insert(
+        trabajosValidos.map(p => ({ fecha, descripcion: p.descripcion.trim(), direccion: p.direccion.trim() || null, trabajador: p.trabajador || null }))
+      )
+      if (e5) {
+        setError('Error al guardar los trabajos puntuales. Intenta de nuevo.')
         setSaving(false)
         return
       }
@@ -289,7 +369,7 @@ export default function Reporte({ token }: Props) {
                           type="checkbox"
                           checked={!t.presente}
                           onChange={e => actualizarTrabajador(nombre, { presente: !e.target.checked })}
-                          style={{ width: 18, height: 18 }}
+                          style={{ width: 18, height: 18, accentColor: 'var(--danger)', cursor: 'pointer' }}
                         />
                         Ausente hoy
                       </label>
@@ -325,7 +405,7 @@ export default function Reporte({ token }: Props) {
                               type="checkbox"
                               checked={t.viatico}
                               onChange={e => actualizarTrabajador(nombre, { viatico: e.target.checked })}
-                              style={{ width: 18, height: 18 }}
+                              style={{ width: 18, height: 18, accentColor: 'var(--primary)', cursor: 'pointer' }}
                             />
                             Viático
                           </label>
@@ -435,6 +515,96 @@ export default function Reporte({ token }: Props) {
             </div>
             <button type="button" className="btn btn-secondary" onClick={agregarCobro} style={{ width: '100%', marginBottom: 28 }}>
               + Agregar cobro
+            </button>
+
+            {/* Subcontratos */}
+            <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Subcontratos</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+              {subcontratos.map((s, idx) => (
+                <div key={idx} className="card" style={{ padding: 14 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="field">
+                      <label>Subcontrato</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Pintura"
+                        value={s.subcontrato}
+                        onChange={e => actualizarSubcontrato(idx, { subcontrato: e.target.value })}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <div className="field" style={{ flex: 1 }}>
+                        <label>Monto</label>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Monto en pesos"
+                          value={s.monto}
+                          onChange={e => actualizarSubcontrato(idx, { monto: e.target.value })}
+                        />
+                      </div>
+                      <div className="field" style={{ flex: 1 }}>
+                        <label>Obra</label>
+                        <select value={s.obra} onChange={e => actualizarSubcontrato(idx, { obra: e.target.value })}>
+                          <option value="">Selecciona...</option>
+                          {OBRAS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <button type="button" className="btn btn-ghost" onClick={() => quitarSubcontrato(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
+                      ✕ Quitar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="btn btn-secondary" onClick={agregarSubcontrato} style={{ width: '100%', marginBottom: 28 }}>
+              + Agregar subcontrato
+            </button>
+
+            {/* Trabajo puntual / visita técnica */}
+            <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Trabajo puntual o visita técnica</h2>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>
+              Para trabajos nuevos que no son ninguna de las obras de la lista.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+              {trabajosPuntuales.map((p, idx) => (
+                <div key={idx} className="card" style={{ padding: 14 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="field">
+                      <label>Descripción</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Visita técnica cotización tablero"
+                        value={p.descripcion}
+                        onChange={e => actualizarTrabajoPuntual(idx, { descripcion: e.target.value })}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Dirección</label>
+                      <input
+                        type="text"
+                        placeholder="Dirección o referencia del lugar"
+                        value={p.direccion}
+                        onChange={e => actualizarTrabajoPuntual(idx, { direccion: e.target.value })}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Quién lo hizo (opcional)</label>
+                      <select value={p.trabajador} onChange={e => actualizarTrabajoPuntual(idx, { trabajador: e.target.value })}>
+                        <option value="">Selecciona...</option>
+                        {TRABAJADORES.map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                    <button type="button" className="btn btn-ghost" onClick={() => quitarTrabajoPuntual(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
+                      ✕ Quitar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="btn btn-secondary" onClick={agregarTrabajoPuntual} style={{ width: '100%', marginBottom: 28 }}>
+              + Agregar trabajo puntual
             </button>
 
             {error && (

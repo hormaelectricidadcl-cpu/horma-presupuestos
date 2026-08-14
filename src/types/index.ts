@@ -74,3 +74,19 @@ export interface ReporteCobroDia {
   cliente: string
   monto: number
 }
+
+export interface ReporteSubcontratoDia {
+  id: string
+  fecha: string
+  obra: string | null
+  subcontrato: string
+  monto: number
+}
+
+export interface ReporteTrabajoPuntualDia {
+  id: string
+  fecha: string
+  descripcion: string
+  direccion: string | null
+  trabajador: string | null
+}
