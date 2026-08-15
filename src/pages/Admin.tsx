@@ -419,6 +419,21 @@ function HistorialModal({
   )
 }
 
+/* ─── Stat tile (números de obra) ───────────────────── */
+function StatTile({ label, valor, tono = 'neutral' }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' | 'alerta' }) {
+  const color = tono === 'positivo' ? 'var(--success)' : tono === 'negativo' ? 'var(--danger)' : tono === 'alerta' ? 'var(--warning)' : 'var(--secondary)'
+  return (
+    <div style={{ padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, minWidth: 100 }}>
+      <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+        {label}
+      </p>
+      <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+        {valor}
+      </p>
+    </div>
+  )
+}
+
 /* ─── Presupuesto editable ──────────────────────────── */
 function EditablePresupuesto({ valor, onGuardar }: { valor: number | null; onGuardar: (monto: number | null) => void }) {
   const [editando, setEditando] = useState(false)
@@ -1411,7 +1426,7 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'respondidos_irazu' | 'clientes' | 'obras'>('activos')
+  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'obras'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
   const [historialObra, setHistorialObra] = useState<string | null>(null)
   const [reportesDiarios, setReportesDiarios] = useState<ReporteTrabajadorDia[]>([])
@@ -1502,9 +1517,7 @@ export default function Admin() {
     .sort((a, b) => new Date(b.respondido_at ?? b.created_at).getTime() - new Date(a.respondido_at ?? a.created_at).getTime())
   const vencidos = activos.filter(p => new Date(p.fecha_limite) < new Date())
   const respondidosGustavo = respondidos.filter(p => !p.destinatario || p.destinatario === 'gustavo')
-  const respondidosIrazu = respondidos.filter(p => p.destinatario === 'irazu')
   const activosGustavo = activos.filter(p => !p.destinatario || p.destinatario === 'gustavo')
-  const activosIrazu = activos.filter(p => p.destinatario === 'irazu')
 
   const clienteGroups = activos.reduce<Record<string, Pendiente[]>>((acc, p) => {
     if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
@@ -1675,18 +1688,6 @@ export default function Admin() {
             )}
           </div>
         </div>
-        <div className="card" onClick={() => setTab('respondidos_irazu')} style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: tab === 'respondidos_irazu' ? '3px solid #0891b2' : undefined }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#0891b2' }}>{respondidosIrazu.length}</span>
-          <div>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#0891b2' }}>Irazú</p>
-            <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondidos</p>
-            {activosIrazu.length > 0 && (
-              <p style={{ fontSize: 11, color: '#0891b2', fontWeight: 600 }}>
-                {activosIrazu.length} activo{activosIrazu.length !== 1 ? 's' : ''}
-              </p>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Quick notes */}
@@ -1708,7 +1709,6 @@ export default function Admin() {
         {([
           ['activos', `Activos (${activos.length})`, 'var(--primary)'],
           ['respondidos_gustavo', `Gustavo (${respondidosGustavo.length})`, '#0284c7'],
-          ['respondidos_irazu', `Irazú (${respondidosIrazu.length})`, '#0891b2'],
           ['clientes', `Clientes (${clientesSummary.length})`, '#7c3aed'],
           ['obras', `Obras (${obrasSummary.length})`, '#c1440e'],
         ] as const).map(([k, label, color]) => (
@@ -1771,8 +1771,6 @@ export default function Admin() {
         )
       ) : tab === 'respondidos_gustavo' ? (
         renderRespondidos(respondidosGustavo)
-      ) : tab === 'respondidos_irazu' ? (
-        renderRespondidos(respondidosIrazu)
       ) : tab === 'obras' ? (
         obrasSummary.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin obras registradas aún.</p>
@@ -1782,16 +1780,12 @@ export default function Admin() {
               <div
                 key={o.obra}
                 className="card"
-                style={{ padding: '14px 16px', borderLeft: `4px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}
+                style={{ padding: '16px 18px', borderTop: `3px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                  <div style={{
-                    width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-                    background: '#fdf2ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-                  }}></div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{o.obra}</p>
-                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    <p className="font-serif" style={{ fontSize: 22, marginBottom: 2, color: 'var(--secondary)' }}>{o.obra}</p>
+                    <span className="font-display" style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: '0.2px' }}>
                       {o.diasTrabajados} día{o.diasTrabajados !== 1 ? 's' : ''} trabajados › Última: {o.ultimaFecha.split('-').reverse().join('/')}
                     </span>
                   </div>
@@ -1803,14 +1797,14 @@ export default function Admin() {
                     Detalle
                   </button>
                 </div>
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginBottom: 8 }}>
-                  <span>Compras: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoCompras)}</strong></span>
-                  <span>Subcontratos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoSubcontratos)}</strong></span>
-                  <span>Adelantos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.adelantos)}</strong></span>
-                  <span>Cobrado: <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobrado)}</strong></span>
-                  <span>Saldo: <strong style={{ color: o.saldo >= 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtMoney(o.saldo)}</strong></span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                  <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
+                  <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+                  <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
+                  <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
+                  <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
                 </div>
-                <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                   {o.obraId ? (
                     <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
                   ) : (
@@ -1847,7 +1841,7 @@ export default function Admin() {
 
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 3 }}>{c.nombre}</p>
+                <p className="font-serif" style={{ fontSize: 19, marginBottom: 3, color: 'var(--secondary)' }}>{c.nombre}</p>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 12, color: 'var(--muted)' }}>
                     {c.total} interacción{c.total !== 1 ? 'es' : ''}

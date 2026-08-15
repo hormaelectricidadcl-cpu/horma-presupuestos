@@ -664,6 +664,20 @@ function fmtMoney(n: number) {
   return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString('es-CL')}`
 }
 
+function StatTile({ label, valor, tono = 'neutral' }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' }) {
+  const color = tono === 'positivo' ? 'var(--success)' : tono === 'negativo' ? 'var(--danger)' : 'var(--secondary)'
+  return (
+    <div style={{ padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, minWidth: 100 }}>
+      <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+        {label}
+      </p>
+      <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+        {valor}
+      </p>
+    </div>
+  )
+}
+
 function EditablePresupuesto({ valor, onGuardar }: { valor: number | null; onGuardar: (monto: number | null) => void }) {
   const [editando, setEditando] = useState(false)
   const [texto, setTexto] = useState(valor != null ? String(valor) : '')
@@ -770,15 +784,16 @@ function PanelObras() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {resumen.map(o => (
-        <div key={o.obra} className="card" style={{ padding: '14px 16px', borderLeft: `4px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
-          <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>{o.obra}</p>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13, marginBottom: 8 }}>
-            <span>Compras: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoCompras)}</strong></span>
-            <span>Subcontratos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoSubcontratos)}</strong></span>
-            <span>Adelantos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.adelantos)}</strong></span>
-            <span>Cobrado: <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobrado)}</strong></span>
+        <div key={o.obra} className="card" style={{ padding: '16px 18px', borderTop: `3px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
+          <p className="font-serif" style={{ fontSize: 21, marginBottom: 10, color: 'var(--secondary)' }}>{o.obra}</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
+            <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+            <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
+            <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
+            <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
           </div>
-          <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+          <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
             {o.obraId ? (
               <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
             ) : (
