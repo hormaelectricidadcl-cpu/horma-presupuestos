@@ -11,7 +11,7 @@ const OBRAS_FALLBACK = [
   'Doctora Eloísa (dirección 5843)',
   'Doctora Eloísa - Obra 1 (dirección 5860)',
   'Luisi Carrera',
-  'Renato Sanches',
+  'Renato Sanchez',
 ]
 
 // El viático solo corresponde a la obra de Limache (los equipos en Santiago no lo reciben).
