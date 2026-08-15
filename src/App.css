@@ -28,6 +28,8 @@
   font-weight: 800;
   color: var(--secondary, #14213d);
   margin: 0;
+  font-family: var(--font-display, inherit);
+  letter-spacing: 0.2px;
 }
 
 /* ── Cards ── */
@@ -47,6 +49,8 @@
   margin: 0 0 14px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border, #e0dedd);
+  font-family: var(--font-display, inherit);
+  letter-spacing: 0.2px;
 }
 
 /* ── Inputs ── */
@@ -174,6 +178,8 @@ button {
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.15s ease;
+  font-family: var(--font-display, inherit);
+  letter-spacing: 0.2px;
 }
 
 button:hover {

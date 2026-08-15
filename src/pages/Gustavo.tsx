@@ -15,13 +15,13 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
 }
 
 const TIPO_EMOJI: Record<TipoPendiente, string> = {
-  confirmar_visita: '📅',
-  revisar_fotos: '📸',
-  presupuesto: '📋',
-  otro: '📌',
-  emitir_boleta: '🧾',
-  emitir_factura: '📄',
-  cobro: '💰',
+  confirmar_visita: '',
+  revisar_fotos: '',
+  presupuesto: '',
+  otro: '',
+  emitir_boleta: '',
+  emitir_factura: '',
+  cobro: '',
 }
 
 const PLACEHOLDER: Record<TipoPendiente, string> = {
@@ -114,7 +114,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
           )}
           {h.mensaje_cliente && (
             <p style={{ fontSize: 13, color: '#0284c7', lineHeight: 1.5, marginBottom: 4 }}>
-              💬 {h.mensaje_cliente}
+              {h.mensaje_cliente}
             </p>
           )}
           {h.direccion && (
@@ -123,7 +123,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
               target="_blank" rel="noreferrer"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 4, textDecoration: 'none' }}
             >
-              📍 {h.direccion}
+              {h.direccion}
             </a>
           )}
           {h.drive_links && h.drive_links.length > 0 && (
@@ -131,7 +131,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
               {h.drive_links.map((link, i) => (
                 <a key={i} href={link} target="_blank" rel="noreferrer"
                   style={{ fontSize: 12, color: '#1565c0', fontWeight: 600 }}>
-                  📁 Archivo {h.drive_links.length > 1 ? i + 1 : ''}
+                  Archivo {h.drive_links.length > 1 ? i + 1 : ''}
                 </a>
               ))}
             </div>
@@ -148,7 +148,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
             <div style={{ marginTop: 6 }}>
               {h.destinatario === 'irazu' ? (
                 <>
-                  <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>📎 Archivo de Irazú</p>
+                  <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Archivo de Irazú</p>
                   {/\.(jpe?g|png|gif|webp)(\?|$)/i.test(h.audio_url) && (
                     <img src={h.audio_url} alt="Archivo" style={{ width: '100%', borderRadius: 8, marginBottom: 6 }} />
                   )}
@@ -158,7 +158,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
                 </>
               ) : (
                 <>
-                  <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>🎙️ Nota de voz</p>
+                  <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>Nota de voz</p>
                   <audio controls src={h.audio_url} style={{ width: '100%', height: 36 }} />
                 </>
               )}
@@ -290,8 +290,8 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
 
   const CARD_TABS = [
     { key: 'responder' as const, label: '✓ Responder' },
-    { key: 'historial' as const, label: '🕐 Historial' },
-    { key: 'archivos' as const, label: `📁 Archivos${p.drive_links?.length ? ` (${p.drive_links.length})` : ''}` },
+    { key: 'historial' as const, label: 'Historial' },
+    { key: 'archivos' as const, label: `Archivos${p.drive_links?.length ? ` (${p.drive_links.length})` : ''}` },
   ]
 
   return (
@@ -346,7 +346,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
               fontSize: 14, fontWeight: 600,
             }}
           >
-            <span style={{ fontSize: 18 }}>📍</span>
+            <span style={{ fontSize: 18 }}></span>
             {p.direccion}
             <span style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.7 }}>Ver en Maps →</span>
           </a>
@@ -417,7 +417,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
                     transition: 'all 0.15s',
                   }}
                 >
-                  <span style={{ fontSize: 26 }}>{grabando ? '⏹️' : '🎙️'}</span>
+                  <span style={{ fontSize: 26 }}>{grabando ? '⏹️' : ''}</span>
                   {grabando ? `Grabando ${formatTimer(segundos)} — Toca para detener` : 'Grabar nota de voz'}
                 </button>
               ) : (
@@ -465,7 +465,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
                     fontWeight: 600, fontSize: 15, textDecoration: 'none',
                   }}
                 >
-                  <span style={{ fontSize: 22 }}>📁</span>
+                  <span style={{ fontSize: 22 }}></span>
                   Ver archivo {p.drive_links.length > 1 ? i + 1 : ''}
                   <span style={{ marginLeft: 'auto', fontSize: 13, opacity: 0.7 }}>Abrir →</span>
                 </a>
@@ -523,7 +523,7 @@ function PanelClientes() {
         >
           ← Volver a clientes
         </button>
-        <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>👤 {seleccionado}</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>{seleccionado}</h2>
 
         {loadingH ? (
           <div className="spinner" />
@@ -553,7 +553,7 @@ function PanelClientes() {
                         color: esIrazu ? '#0891b2' : 'var(--primary)',
                         background: esIrazu ? '#ecfeff' : '#eff6ff',
                       }}>
-                        {esIrazu ? '🧾 ' : '🔧 '}{TIPO_LABELS[h.tipo]}
+                        {esIrazu ? '' : ''}{TIPO_LABELS[h.tipo]}
                       </span>
                       <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtFecha(h.created_at)}</span>
                       {h.estado === 'respondido' && <span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>✓ Respondido</span>}
@@ -566,7 +566,7 @@ function PanelClientes() {
                     )}
                     {h.mensaje_cliente && (
                       <p style={{ fontSize: 13, color: '#0284c7', lineHeight: 1.5, marginBottom: 4, whiteSpace: 'pre-wrap' }}>
-                        💬 {h.mensaje_cliente}
+                        {h.mensaje_cliente}
                       </p>
                     )}
                     {h.direccion && (
@@ -575,7 +575,7 @@ function PanelClientes() {
                         target="_blank" rel="noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 6, textDecoration: 'none' }}
                       >
-                        📍 {h.direccion}
+                        {h.direccion}
                       </a>
                     )}
                     {h.drive_links && h.drive_links.length > 0 && (
@@ -583,7 +583,7 @@ function PanelClientes() {
                         {h.drive_links.map((link, i) => (
                           <a key={i} href={link} target="_blank" rel="noreferrer"
                             style={{ fontSize: 12, color: '#1565c0', fontWeight: 600, padding: '3px 8px', background: '#e3f2fd', borderRadius: 6, textDecoration: 'none' }}>
-                            📁 Archivo {h.drive_links.length > 1 ? i + 1 : ''}
+                            Archivo {h.drive_links.length > 1 ? i + 1 : ''}
                           </a>
                         ))}
                       </div>
@@ -602,7 +602,7 @@ function PanelClientes() {
                       <div style={{ marginTop: 8 }}>
                         {esIrazu ? (
                           <>
-                            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>📎 Archivo adjunto</p>
+                            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>Archivo adjunto</p>
                             {/\.(jpe?g|png|gif|webp)(\?|$)/i.test(h.audio_url) && (
                               <img src={h.audio_url} alt="Boleta" style={{ width: '100%', borderRadius: 8, marginBottom: 6 }} />
                             )}
@@ -612,7 +612,7 @@ function PanelClientes() {
                           </>
                         ) : (
                           <>
-                            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>🎙️ Nota de voz</p>
+                            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>Nota de voz</p>
                             <audio controls src={h.audio_url} style={{ width: '100%', height: 36 }} />
                           </>
                         )}
@@ -648,7 +648,7 @@ function PanelClientes() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               }}
             >
-              <span>👤 {nombre}</span>
+              <span>{nombre}</span>
               <span style={{ fontSize: 14, color: 'var(--muted)' }}>→</span>
             </button>
           ))}
@@ -771,7 +771,7 @@ function PanelObras() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {resumen.map(o => (
         <div key={o.obra} className="card" style={{ padding: '14px 16px', borderLeft: `4px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
-          <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>🏗️ {o.obra}</p>
+          <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>{o.obra}</p>
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13, marginBottom: 8 }}>
             <span>Compras: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoCompras)}</strong></span>
             <span>Subcontratos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoSubcontratos)}</strong></span>
@@ -858,7 +858,7 @@ export default function Gustavo({ token }: Props) {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0 }}>
-          {([['pendientes', '📋 Mis tareas'], ['clientes', '👥 Clientes'], ['obras', '🏗️ Obras']] as const).map(([k, label]) => (
+          {([['pendientes', 'Mis tareas'], ['clientes', 'Clientes'], ['obras', 'Obras']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}

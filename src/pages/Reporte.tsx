@@ -342,7 +342,7 @@ export default function Reporte({ token }: Props) {
             background: 'var(--primary)', borderRadius: 12,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
-          }}>📋</div>
+          }}></div>
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>Reporte diario</h1>
             <p style={{ fontSize: 13, color: 'var(--muted)' }}>Cuéntanos cómo fue el día de obra</p>

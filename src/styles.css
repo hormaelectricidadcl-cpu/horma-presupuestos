@@ -28,6 +28,18 @@ body {
   --radius-sm: 8px;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --font-display: 'Big Shoulders Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Tipografía estructural (títulos, botones, nav, labels) — el cuerpo de
+   texto (párrafos, inputs, valores) se queda en la fuente del sistema
+   para que siga siendo legible en bloques largos. */
+.pendientes h1, .pendientes h2, .pendientes h3,
+.pendientes button,
+.pendientes .field label,
+.pendientes .badge {
+  font-family: var(--font-display);
+  letter-spacing: 0.2px;
 }
 
 /* ── Todo lo demás SOLO dentro de .pendientes ─────────── */

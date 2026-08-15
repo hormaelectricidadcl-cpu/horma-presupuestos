@@ -25,10 +25,10 @@ const ACCION_LABELS: Record<string, string> = {
 }
 
 const ACCION_EMOJI: Record<string, string> = {
-  recordatorio: '📲',
-  items_generados: '✨',
-  pdf_generado: '📄',
-  visita_agendada: '📅',
+  recordatorio: '',
+  items_generados: '',
+  pdf_generado: '',
+  visita_agendada: '',
 }
 
 function formatDeadline(iso: string): { text: string; cls: string } {
@@ -183,7 +183,7 @@ function TareasCliente({ clienteNombre }: { clienteNombre: string }) {
   return (
     <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
       <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-        📋 Mis tareas para este cliente
+        Mis tareas para este cliente
       </p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
         <input
@@ -250,7 +250,7 @@ function HistorialModal({
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
         }}>
           <div>
-            <h2 style={{ fontSize: 17, fontWeight: 800 }}>👤 {cliente}</h2>
+            <h2 style={{ fontSize: 17, fontWeight: 800 }}>{cliente}</h2>
             <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
               {historial.length} interacción{historial.length !== 1 ? 'es' : ''} registradas
             </p>
@@ -305,7 +305,7 @@ function HistorialModal({
 
                       {p.mensaje_cliente && (
                         <p style={{ fontSize: 13, color: '#0284c7', lineHeight: 1.5, marginBottom: 6, whiteSpace: 'pre-wrap' }}>
-                          💬 {p.mensaje_cliente}
+                          {p.mensaje_cliente}
                         </p>
                       )}
 
@@ -315,7 +315,7 @@ function HistorialModal({
                           target="_blank" rel="noreferrer"
                           style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 6, textDecoration: 'none' }}
                         >
-                          📍 {p.direccion}
+                          {p.direccion}
                         </a>
                       )}
 
@@ -330,7 +330,7 @@ function HistorialModal({
                               className="btn btn-secondary"
                               style={{ fontSize: 12, padding: '4px 10px' }}
                             >
-                              📁 Archivo {p.drive_links.length > 1 ? i + 1 : ''}
+                              Archivo {p.drive_links.length > 1 ? i + 1 : ''}
                             </a>
                           ))}
                         </div>
@@ -350,7 +350,7 @@ function HistorialModal({
                         <div style={{ marginTop: 8 }}>
                           {p.destinatario === 'irazu' ? (
                             <>
-                              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>📎 Archivo adjunto</p>
+                              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>Archivo adjunto</p>
                               {/\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(p.audio_url) ? (
                                 <img src={p.audio_url} alt="Archivo" style={{ width: '100%', borderRadius: 6, marginBottom: 6 }} />
                               ) : null}
@@ -360,7 +360,7 @@ function HistorialModal({
                             </>
                           ) : (
                             <>
-                              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>🎙️ Nota de voz</p>
+                              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Nota de voz</p>
                               <audio controls src={p.audio_url} style={{ width: '100%', height: 36 }} />
                             </>
                           )}
@@ -370,7 +370,7 @@ function HistorialModal({
                       {/* items summary */}
                       {p.items?.length > 0 && (
                         <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
-                          📋 {formatItemsResumen(p.items)}
+                          {formatItemsResumen(p.items)}
                         </p>
                       )}
 
@@ -404,7 +404,7 @@ function HistorialModal({
             style={{ flex: 1, fontWeight: 600, fontSize: 14 }}
             onClick={() => { onPedirBoleta(cliente); onClose() }}
           >
-            🧾 Pedir boleta a Irazú
+            Pedir boleta a Irazú
           </button>
           <button
             className="btn btn-primary"
@@ -506,7 +506,7 @@ function HistorialObraModal({
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
         }}>
           <div>
-            <h2 style={{ fontSize: 17, fontWeight: 800 }}>🏗️ {obra}</h2>
+            <h2 style={{ fontSize: 17, fontWeight: 800 }}>{obra}</h2>
             <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
               {diariosObra.length} jornada{diariosObra.length !== 1 ? 's' : ''} registradas
             </p>
@@ -707,7 +707,7 @@ function CrearForm({
                 color: form.destinatario === d ? 'var(--primary)' : 'var(--muted)',
               }}
             >
-              {d === 'gustavo' ? '🔧 Gustavo' : '🧾 Irazú'}
+              {d === 'gustavo' ? 'Gustavo' : 'Irazú'}
             </button>
           ))}
         </div>
@@ -733,12 +733,12 @@ function CrearForm({
         </div>
 
         <div className="field">
-          <label>📝 Mensaje del cliente (lo que te dijo)</label>
+          <label>Mensaje del cliente (lo que te dijo)</label>
           <textarea value={form.mensaje_cliente} onChange={e => setField('mensaje_cliente', e.target.value)} placeholder="Ej: 'Hola, necesito cambiar el tablero, hay chispas y se va la luz seguido...'" rows={3} />
         </div>
 
         <div className="field">
-          <label>🔧 Tu instrucción para {form.destinatario === 'gustavo' ? 'Gustavo' : 'Irazú'}</label>
+          <label>Tu instrucción para {form.destinatario === 'gustavo' ? 'Gustavo' : 'Irazú'}</label>
           <textarea value={form.descripcion} onChange={e => setField('descripcion', e.target.value)} placeholder={form.destinatario === 'gustavo' ? 'Ej: Ir a revisar el tablero y confirmar si necesita reemplazo completo...' : 'Ej: Emitir boleta por instalación de tablero, monto $85.000...'} rows={3} />
         </div>
 
@@ -749,7 +749,7 @@ function CrearForm({
           </div>
           {form.tipo === 'confirmar_visita' && (
             <div className="field">
-              <label>Fecha del trabajo 🔨</label>
+              <label>Fecha del trabajo </label>
               <input type="datetime-local" value={form.fecha_trabajo} onChange={e => setField('fecha_trabajo', e.target.value)} />
             </div>
           )}
@@ -757,7 +757,7 @@ function CrearForm({
 
         {form.tipo === 'confirmar_visita' && (
           <div className="field">
-            <label>Dirección 📍</label>
+            <label>Dirección </label>
             <input value={form.direccion} onChange={e => setField('direccion', e.target.value)} placeholder="Ej: Juan Montalvo 75, Las Condes" />
           </div>
         )}
@@ -852,25 +852,25 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
       {form.tipo === 'confirmar_visita' && (
         <>
           <div className="field">
-            <label>Fecha del trabajo 🔨</label>
+            <label>Fecha del trabajo </label>
             <input type="datetime-local" value={form.fecha_trabajo} onChange={e => setForm(f => ({ ...f, fecha_trabajo: e.target.value }))} />
           </div>
           <div className="field">
-            <label>Dirección 📍</label>
+            <label>Dirección </label>
             <input value={form.direccion} onChange={e => setForm(f => ({ ...f, direccion: e.target.value }))} placeholder="Ej: Juan Montalvo 75, Las Condes" />
           </div>
         </>
       )}
       <div className="field">
-        <label>📝 Mensaje del cliente</label>
+        <label>Mensaje del cliente</label>
         <textarea value={form.mensaje_cliente} onChange={e => setForm(f => ({ ...f, mensaje_cliente: e.target.value }))} rows={2} placeholder="Lo que dijo el cliente..." />
       </div>
       <div className="field">
-        <label>🔧 Tu instrucción</label>
+        <label>Tu instrucción</label>
         <textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} rows={2} placeholder="Contexto / instrucción..." />
       </div>
       <div className="field">
-        <label>📎 Links de Drive</label>
+        <label>Links de Drive</label>
         {form.drive_links.map((link, i) => (
           <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
             <input
@@ -1092,7 +1092,7 @@ function PendienteCard({
               {(p.fecha_trabajo || p.direccion) && (
                 <div style={{ marginTop: 12, background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 'var(--radius-sm)', padding: '10px 14px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <span style={{ fontSize: 18, marginTop: 2 }}>🔨</span>
+                    <span style={{ fontSize: 18, marginTop: 2 }}></span>
                     <div>
                       {p.fecha_trabajo && (
                         <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
@@ -1104,7 +1104,7 @@ function PendienteCard({
                         </p>
                       )}
                       {p.direccion && (
-                        <p style={{ fontSize: 13, color: 'var(--secondary)', marginTop: 2 }}>📍 {p.direccion}</p>
+                        <p style={{ fontSize: 13, color: 'var(--secondary)', marginTop: 2 }}>{p.direccion}</p>
                       )}
                     </div>
                   </div>
@@ -1116,7 +1116,7 @@ function PendienteCard({
                     className="btn btn-secondary"
                     style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
                   >
-                    📅 Agendar en Calendar
+                    Agendar en Calendar
                   </a>
                 </div>
               )}
@@ -1139,7 +1139,7 @@ function PendienteCard({
                 <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {p.drive_links.map((link, i) => (
                     <a key={i} href={link} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ fontSize: 13, padding: '6px 12px' }}>
-                      📎 Archivo {i + 1}
+                      Archivo {i + 1}
                     </a>
                   ))}
                 </div>
@@ -1160,23 +1160,23 @@ function PendienteCard({
                     <div style={{ marginTop: 10 }}>
                       {p.destinatario === 'irazu' ? (
                         <>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 8 }}>📎 Archivo adjunto de Irazú</p>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 8 }}>Archivo adjunto de Irazú</p>
                           {/\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(p.audio_url) ? (
                             <>
                               <img src={p.audio_url} alt="Archivo adjunto" style={{ width: '100%', borderRadius: 8, marginBottom: 8, display: 'block' }} />
                               <a href={p.audio_url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ fontSize: 13, padding: '6px 14px' }}>
-                                ⬇️ Abrir / descargar imagen
+                                Abrir / descargar imagen
                               </a>
                             </>
                           ) : (
                             <a href={p.audio_url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ fontSize: 13, padding: '6px 14px' }}>
-                              📄 Abrir / descargar archivo
+                              Abrir / descargar archivo
                             </a>
                           )}
                         </>
                       ) : (
                         <>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 4 }}>🎙️ Nota de voz de Gustavo</p>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 4 }}>Nota de voz de Gustavo</p>
                           <audio controls src={p.audio_url} style={{ width: '100%' }} />
                         </>
                       )}
@@ -1212,7 +1212,7 @@ function PendienteCard({
                                   registrarAccion('pdf_generado').then(onUpdate)
                                 }}
                               >
-                                📄 Generar PDF
+                                Generar PDF
                               </button>
                             </div>
                           </div>
@@ -1248,7 +1248,7 @@ function PendienteCard({
                           onClick={generarItemsIA}
                           disabled={aiLoading}
                         >
-                          {aiLoading ? '⏳ Generando...' : '✨ Generar ítems con IA'}
+                          {aiLoading ? '⏳ Generando...' : 'Generar ítems con IA'}
                         </button>
                       ) : null}
                     </div>
@@ -1277,7 +1277,7 @@ function PendienteCard({
                 {!respondido && (
                   <>
                     <button className="btn btn-secondary" onClick={enviarRecordatorio} disabled={sending} style={{ fontSize: 13, padding: '7px 14px' }}>
-                      {sending ? '...' : '📲 Recordatorio'}
+                      {sending ? '...' : 'Recordatorio'}
                     </button>
                     <button className="btn btn-secondary" onClick={marcarRespondido} style={{ fontSize: 13, padding: '7px 14px', color: 'var(--success)' }}>
                       ✓ Marcar respondido
@@ -1290,7 +1290,7 @@ function PendienteCard({
                   onClick={() => onVerHistorial(p.cliente_nombre)}
                   style={{ fontSize: 13, padding: '7px 14px' }}
                 >
-                  🕐 Ver historial
+                  Ver historial
                 </button>
                 <button
                   className="btn btn-secondary"
@@ -1360,7 +1360,7 @@ function NotasRapidas() {
   return (
     <div className="card" style={{ marginBottom: '1.25rem', padding: '1rem 1.25rem' }}>
       <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-        📌 Mis notas
+        Mis notas
       </h3>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <input
@@ -1530,7 +1530,7 @@ export default function Admin() {
             background: '#f0f4ff', border: '1px solid #c7d2fe',
             borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
           }}>
-            <span>🔗</span>
+            <span></span>
             <span>{cliente}</span>
             <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
             <button
@@ -1600,7 +1600,6 @@ export default function Admin() {
   }).sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha))
 
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
-  const irazuToken = import.meta.env.VITE_IRAZU_TOKEN as string
 
   return (
     <div className="pendientes" style={{ background: 'var(--bg)', minHeight: '100vh' }}>
@@ -1618,11 +1617,10 @@ export default function Admin() {
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Horma</span>
         </div>
         {[
-          { label: '📋 Admin', href: '/admin', active: true, color: 'var(--primary)' },
-          { label: '🔧 Gustavo', href: `/g?t=${gustavoToken}`, active: false, color: '#0284c7' },
-          { label: '🧾 Irazú', href: `/i?t=${irazuToken}`, active: false, color: '#0891b2' },
-          { label: '📊 Presupuesto', href: '/', active: false, color: '#059669' },
-          { label: '📋 Itemizado', href: '/itemizado', active: false, color: '#e69a21' },
+          { label: 'Admin', href: '/admin', active: true, color: 'var(--primary)' },
+          { label: 'Gustavo', href: `/g?t=${gustavoToken}`, active: false, color: '#0284c7' },
+          { label: 'Presupuesto', href: '/', active: false, color: '#059669' },
+          { label: 'Itemizado', href: '/itemizado', active: false, color: '#e69a21' },
         ].map(item => (
           <a
             key={item.label}
@@ -1668,7 +1666,7 @@ export default function Admin() {
         <div className="card" onClick={() => setTab('respondidos_gustavo')} style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: tab === 'respondidos_gustavo' ? '3px solid #0284c7' : undefined }}>
           <span style={{ fontSize: 22, fontWeight: 800, color: '#0284c7' }}>{respondidosGustavo.length}</span>
           <div>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#0284c7' }}>🔧 Gustavo</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#0284c7' }}>Gustavo</p>
             <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondidos</p>
             {activosGustavo.length > 0 && (
               <p style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
@@ -1680,7 +1678,7 @@ export default function Admin() {
         <div className="card" onClick={() => setTab('respondidos_irazu')} style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: tab === 'respondidos_irazu' ? '3px solid #0891b2' : undefined }}>
           <span style={{ fontSize: 22, fontWeight: 800, color: '#0891b2' }}>{respondidosIrazu.length}</span>
           <div>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#0891b2' }}>🧾 Irazú</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#0891b2' }}>Irazú</p>
             <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondidos</p>
             {activosIrazu.length > 0 && (
               <p style={{ fontSize: 11, color: '#0891b2', fontWeight: 600 }}>
@@ -1709,10 +1707,10 @@ export default function Admin() {
       <div style={{ display: 'flex', gap: 0, marginBottom: '1rem', borderBottom: '2px solid var(--border)' }}>
         {([
           ['activos', `Activos (${activos.length})`, 'var(--primary)'],
-          ['respondidos_gustavo', `🔧 Gustavo (${respondidosGustavo.length})`, '#0284c7'],
-          ['respondidos_irazu', `🧾 Irazú (${respondidosIrazu.length})`, '#0891b2'],
-          ['clientes', `👥 Clientes (${clientesSummary.length})`, '#7c3aed'],
-          ['obras', `🏗️ Obras (${obrasSummary.length})`, '#c1440e'],
+          ['respondidos_gustavo', `Gustavo (${respondidosGustavo.length})`, '#0284c7'],
+          ['respondidos_irazu', `Irazú (${respondidosIrazu.length})`, '#0891b2'],
+          ['clientes', `Clientes (${clientesSummary.length})`, '#7c3aed'],
+          ['obras', `Obras (${obrasSummary.length})`, '#c1440e'],
         ] as const).map(([k, label, color]) => (
           <button
             key={k}
@@ -1748,7 +1746,7 @@ export default function Admin() {
                   background: '#f0f4ff', border: '1px solid #c7d2fe',
                   borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
                 }}>
-                  <span>🔗</span>
+                  <span></span>
                   <span>{cliente}</span>
                   <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
                   <button
@@ -1790,11 +1788,11 @@ export default function Admin() {
                   <div style={{
                     width: 40, height: 40, borderRadius: 10, flexShrink: 0,
                     background: '#fdf2ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-                  }}>🏗️</div>
+                  }}></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{o.obra}</p>
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                      {o.diasTrabajados} día{o.diasTrabajados !== 1 ? 's' : ''} trabajados · Última: {o.ultimaFecha.split('-').reverse().join('/')}
+                      {o.diasTrabajados} día{o.diasTrabajados !== 1 ? 's' : ''} trabajados › Última: {o.ultimaFecha.split('-').reverse().join('/')}
                     </span>
                   </div>
                   <button
@@ -1802,7 +1800,7 @@ export default function Admin() {
                     onClick={() => setHistorialObra(o.obra)}
                     style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
                   >
-                    🕐 Detalle
+                    Detalle
                   </button>
                 </div>
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginBottom: 8 }}>
@@ -1875,7 +1873,7 @@ export default function Admin() {
                   onClick={() => setHistorialCliente(c.nombre)}
                   style={{ fontSize: 12, padding: '6px 12px' }}
                 >
-                  🕐 Historial
+                  Historial
                 </button>
                 <button
                   className="btn btn-primary"
