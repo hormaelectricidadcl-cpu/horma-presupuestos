@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra } from '../types'
+import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador } from '../types'
 
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
@@ -529,7 +529,9 @@ function getPeriodo(fecha: string, vista: VistaPeriodo): { key: string; label: s
       : `${monday.getDate()} ${MESES_CORTOS[monday.getMonth()]} - ${sunday.getDate()} ${MESES_CORTOS[sunday.getMonth()]} ${sunday.getFullYear()}`
     const todayDow = (today.getDay() + 6) % 7
     const todayMonday = new Date(today); todayMonday.setDate(today.getDate() - todayDow)
-    const enCurso = monday.getTime() === todayMonday.getTime()
+    // La semana de trabajo es de lunes a viernes: si hoy es sábado o domingo,
+    // la semana ya cerró aunque el domingo del rango todavía no haya llegado.
+    const enCurso = todayDow <= 4 && monday.getTime() === todayMonday.getTime()
     return { key, label, enCurso }
   }
 
@@ -668,7 +670,7 @@ function PeriodoRow({ periodo }: { periodo: PeriodoAgrupado }) {
           </span>
         )}
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, color: 'var(--muted)', flexWrap: 'wrap' }}>
-          {dias > 0 && <span>{dias} día{dias !== 1 ? 's' : ''} › {trabajadores.length} trabajador{trabajadores.length !== 1 ? 'es' : ''}</span>}
+          {dias > 0 && <span>{dias} jornada{dias !== 1 ? 's' : ''} › {trabajadores.length} trabajador{trabajadores.length !== 1 ? 'es' : ''}</span>}
           {gasto > 0 && <span style={{ color: 'var(--danger)', fontWeight: 600 }}>{fmtMoney(gasto)}</span>}
           {cobrado > 0 && <span style={{ color: 'var(--success)', fontWeight: 600 }}>{fmtMoney(cobrado)}</span>}
         </span>
@@ -1603,6 +1605,7 @@ export default function Admin() {
   const [reportesCobros, setReportesCobros] = useState<ReporteCobroDia[]>([])
   const [reportesSubcontratos, setReportesSubcontratos] = useState<ReporteSubcontratoDia[]>([])
   const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
+  const [trabajadoresTarifas, setTrabajadoresTarifas] = useState<Trabajador[]>([])
 
   useEffect(() => {
     const token = localStorage.getItem('horma_admin_token')
@@ -1635,18 +1638,20 @@ export default function Admin() {
   }, [authed, loadPendientes])
 
   const loadObras = useCallback(async () => {
-    const [{ data: diarios }, { data: compras }, { data: cobros }, { data: subcontratos }, { data: maestro }] = await Promise.all([
+    const [{ data: diarios }, { data: compras }, { data: cobros }, { data: subcontratos }, { data: maestro }, { data: tarifas }] = await Promise.all([
       supabase.from('reportes_diarios').select('*').order('fecha', { ascending: false }),
       supabase.from('reportes_compras').select('*').order('fecha', { ascending: false }),
       supabase.from('reportes_cobros').select('*').order('fecha', { ascending: false }),
       supabase.from('reportes_subcontratos').select('*').order('fecha', { ascending: false }),
       supabase.from('obras').select('*').order('nombre'),
+      supabase.from('trabajadores').select('*'),
     ])
     setReportesDiarios((diarios as ReporteTrabajadorDia[]) || [])
     setReportesCompras((compras as ReporteCompraDia[]) || [])
     setReportesCobros((cobros as ReporteCobroDia[]) || [])
     setReportesSubcontratos((subcontratos as ReporteSubcontratoDia[]) || [])
     setObrasMaestro((maestro as Obra[]) || [])
+    setTrabajadoresTarifas((tarifas as Trabajador[]) || [])
   }, [])
 
   async function guardarPresupuesto(obraId: string, monto: number | null) {
@@ -1769,16 +1774,24 @@ export default function Admin() {
     const diasTrabajados = diariosObra.reduce((sum, d) => sum + d.fraccion_jornada, 0)
     const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
     const gastoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
-    const adelantos = diariosObra.reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
+    const adelantos = diariosObra.filter(d => d.tipo_pago !== 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
+    const pagosSemanales = diariosObra.filter(d => d.tipo_pago === 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
+    const manoDeObra = diariosObra.reduce((sum, d) => {
+      const tarifa = trabajadoresTarifas.find(t => t.nombre === d.trabajador)
+      const base = d.fraccion_jornada * (tarifa?.tarifa_diaria || 0)
+      const viaticoMonto = d.viatico ? (tarifa?.viatico_diario || 0) : 0
+      return sum + base + viaticoMonto
+    }, 0)
+    const faltaPagarTrabajadores = manoDeObra - adelantos - pagosSemanales
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0)
-    const saldo = cobrado - gastoCompras - gastoSubcontratos - adelantos
+    const saldo = cobrado - gastoCompras - gastoSubcontratos - adelantos - pagosSemanales
     const presupuestoTotal = maestro?.presupuesto_total ?? null
     const restantePresupuesto = presupuestoTotal != null ? presupuestoTotal - cobrado : null
 
     const fechas = [...diariosObra.map(d => d.fecha), ...comprasObra.map(c => c.fecha), ...cobrosObra.map(c => c.fecha), ...subcontratosObra.map(s => s.fecha)]
     const ultimaFecha = fechas.sort().at(-1) || ''
 
-    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, diasTrabajados, gastoCompras, gastoSubcontratos, adelantos, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
+    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, diasTrabajados, gastoCompras, gastoSubcontratos, manoDeObra, adelantos, pagosSemanales, faltaPagarTrabajadores, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
   }).sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha))
 
   const obrasPorCliente = Object.entries(
@@ -1982,20 +1995,29 @@ export default function Admin() {
                         </button>
                       </div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                        <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
                         <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
                         <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
                         <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
+                        <StatTile label="Pagos semana" valor={fmtMoney(o.pagosSemanales)} />
                         <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
                         <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
                       </div>
-                      <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                        {o.obraId ? (
-                          <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
-                        ) : (
-                          <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
-                        )}
-                        {o.restantePresupuesto != null && (
-                          <span>Falta por cobrar: <strong style={{ color: o.restantePresupuesto > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.restantePresupuesto)}</strong></span>
+                      <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                          {o.obraId ? (
+                            <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
+                          ) : (
+                            <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
+                          )}
+                          {o.restantePresupuesto != null && (
+                            <span>Falta por cobrar: <strong style={{ color: o.restantePresupuesto > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.restantePresupuesto)}</strong></span>
+                          )}
+                        </div>
+                        {o.faltaPagarTrabajadores !== 0 && (
+                          <span style={{ fontSize: 13 }}>
+                            Falta pagar a trabajadores: <strong style={{ color: o.faltaPagarTrabajadores > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.faltaPagarTrabajadores)}</strong>
+                          </span>
                         )}
                       </div>
                     </div>

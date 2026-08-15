@@ -25,6 +25,7 @@ interface TrabajadorState {
   fraccionJornada: number
   viatico: boolean
   adelanto: string
+  tipoPago: 'adelanto' | 'pago_semanal'
 }
 
 interface CompraRow {
@@ -61,6 +62,7 @@ const DEFAULT_TRABAJADOR: TrabajadorState = {
   fraccionJornada: 1,
   viatico: true,
   adelanto: '',
+  tipoPago: 'adelanto',
 }
 
 function todayISO() {
@@ -115,6 +117,7 @@ export default function Reporte({ token }: Props) {
           fraccionJornada: row.fraccion_jornada ?? 1,
           viatico: row.viatico ?? false,
           adelanto: row.adelanto_monto != null ? String(row.adelanto_monto) : '',
+          tipoPago: row.tipo_pago === 'pago_semanal' ? 'pago_semanal' : 'adelanto',
         }
       }
     }
@@ -214,6 +217,7 @@ export default function Reporte({ token }: Props) {
         fraccion_jornada: t.presente ? t.fraccionJornada : 0,
         viatico: t.presente ? t.viatico : false,
         adelanto_monto: t.adelanto.trim() ? Number(t.adelanto) : null,
+        tipo_pago: t.tipoPago,
       }
     })
 
@@ -435,7 +439,7 @@ export default function Reporte({ token }: Props) {
                           </label>
                         </div>
                         <div className="field">
-                          <label>Adelanto o pago hoy (opcional)</label>
+                          <label>Monto pagado hoy (opcional)</label>
                           <input
                             type="number"
                             min="0"
@@ -444,6 +448,18 @@ export default function Reporte({ token }: Props) {
                             onChange={e => actualizarTrabajador(nombre, { adelanto: e.target.value })}
                           />
                         </div>
+                        {t.adelanto.trim() && (
+                          <div className="field">
+                            <label>¿Qué es este monto?</label>
+                            <select
+                              value={t.tipoPago}
+                              onChange={e => actualizarTrabajador(nombre, { tipoPago: e.target.value as 'adelanto' | 'pago_semanal' })}
+                            >
+                              <option value="adelanto">Adelanto (a cuenta de lo que falta pagar)</option>
+                              <option value="pago_semanal">Pago semanal completo (liquidación de la semana)</option>
+                            </select>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

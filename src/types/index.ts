@@ -57,6 +57,7 @@ export interface ReporteTrabajadorDia {
   fraccion_jornada: number
   viatico: boolean
   adelanto_monto: number | null
+  tipo_pago?: 'adelanto' | 'pago_semanal'
 }
 
 export interface ReporteCompraDia {
@@ -97,4 +98,11 @@ export interface Obra {
   cliente: string | null
   presupuesto_total: number | null
   activa: boolean
+}
+
+export interface Trabajador {
+  id: string
+  nombre: string
+  tarifa_diaria: number
+  viatico_diario: number
 }
