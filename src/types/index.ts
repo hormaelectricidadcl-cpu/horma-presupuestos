@@ -124,3 +124,28 @@ export interface AbonoCuenta {
   fecha: string
   monto: number
 }
+
+export interface SubcontratoMaster {
+  id: string
+  subcontratista: string
+  obra: string | null
+  trabajo: string | null
+  total_contrato: number
+}
+
+export interface GastoFijo {
+  id: string
+  concepto: string
+  categoria: string | null
+  monto_mensual: number
+  activo: boolean
+  observaciones: string | null
+}
+
+export interface GastoVariable {
+  id: string
+  fecha: string
+  categoria: string | null
+  descripcion: string | null
+  monto: number
+}

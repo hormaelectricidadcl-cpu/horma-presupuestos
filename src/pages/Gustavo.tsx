@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Pendiente, TipoPendiente, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador, CuentaPorCobrar, AbonoCuenta } from '../types'
+import type { Pendiente, TipoPendiente, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador, CuentaPorCobrar, AbonoCuenta, SubcontratoMaster } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
 
@@ -1292,6 +1292,7 @@ function PanelObras() {
   const [subcontratos, setSubcontratos] = useState<ReporteSubcontratoDia[]>([])
   const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
   const [trabajadoresTarifas, setTrabajadoresTarifas] = useState<Trabajador[]>([])
+  const [subcontratosMaster, setSubcontratosMaster] = useState<SubcontratoMaster[]>([])
   const [loading, setLoading] = useState(true)
   const [historialObra, setHistorialObra] = useState<string | null>(null)
   const [mostrarGuia, setMostrarGuia] = useState(false)
@@ -1304,13 +1305,14 @@ function PanelObras() {
   }, [])
 
   const cargar = useCallback(async () => {
-    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }, { data: t }] = await Promise.all([
+    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }, { data: t }, { data: sm }] = await Promise.all([
       supabase.from('reportes_diarios').select('*'),
       supabase.from('reportes_compras').select('*'),
       supabase.from('reportes_cobros').select('*'),
       supabase.from('reportes_subcontratos').select('*'),
       supabase.from('obras').select('*').order('nombre'),
       supabase.from('trabajadores').select('*'),
+      supabase.from('subcontratos_master').select('*'),
     ])
     setDiarios((d as ReporteTrabajadorDia[]) || [])
     setCompras((c as ReporteCompraDia[]) || [])
@@ -1318,6 +1320,7 @@ function PanelObras() {
     setSubcontratos((s as ReporteSubcontratoDia[]) || [])
     setObrasMaestro((m as Obra[]) || [])
     setTrabajadoresTarifas((t as Trabajador[]) || [])
+    setSubcontratosMaster((sm as SubcontratoMaster[]) || [])
     setLoading(false)
   }, [])
 
@@ -1351,7 +1354,11 @@ function PanelObras() {
     const subcontratosObra = subcontratos.filter(s => s.obra === obra)
 
     const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
-    const gastoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const contratosObra = subcontratosMaster.filter(s => s.obra === obra)
+    const gastoSubcontratos = contratosObra.length > 0
+      ? contratosObra.reduce((sum, s) => sum + s.total_contrato, 0)
+      : subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const pagadoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
     const adelantos = diariosObra.filter(d => d.tipo_pago !== 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
     const pagosSemanales = diariosObra.filter(d => d.tipo_pago === 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
     const manoDeObra = diariosObra.reduce((sum, d) => {
@@ -1365,7 +1372,7 @@ function PanelObras() {
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0)
     const saldo = cobrado - gastoCompras - gastoSubcontratos - adelantos - pagosSemanales
 
-    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, presupuestoTotal: maestro?.presupuesto_total ?? null, gastoCompras, gastoSubcontratos, manoDeObra, adelantos, pagosSemanales, faltaPagarTrabajadores, porReembolsar, cobrado, saldo }
+    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, presupuestoTotal: maestro?.presupuesto_total ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, faltaPagarTrabajadores, porReembolsar, cobrado, saldo }
   })
 
   if (resumen.length === 0) return (
@@ -1434,6 +1441,11 @@ function PanelObras() {
                   {o.faltaPagarTrabajadores !== 0 && (
                     <span>
                       Falta pagar a trabajadores: <strong style={{ color: o.faltaPagarTrabajadores > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.faltaPagarTrabajadores)}</strong>
+                    </span>
+                  )}
+                  {o.gastoSubcontratos !== o.pagadoSubcontratos && (
+                    <span>
+                      Subcontratos: contrato completo {fmtMoney(o.gastoSubcontratos)}, pagado hasta ahora <strong style={{ color: 'var(--warning)' }}>{fmtMoney(o.pagadoSubcontratos)}</strong>
                     </span>
                   )}
                   {o.porReembolsar > 0 && (

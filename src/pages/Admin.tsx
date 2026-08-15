@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador, CuentaPorCobrar, AbonoCuenta } from '../types'
+import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador, CuentaPorCobrar, AbonoCuenta, SubcontratoMaster, GastoFijo, GastoVariable } from '../types'
 
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
@@ -632,6 +632,105 @@ function PanelCuentasPorCobrar() {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+/* ─── Estado de resultados ───────────────────────────── */
+function mesActualISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function PanelEstadoResultados() {
+  const [mes, setMes] = useState(mesActualISO())
+  const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
+  const [compras, setCompras] = useState<ReporteCompraDia[]>([])
+  const [cobros, setCobros] = useState<ReporteCobroDia[]>([])
+  const [subcontratos, setSubcontratos] = useState<ReporteSubcontratoDia[]>([])
+  const [abonos, setAbonos] = useState<AbonoCuenta[]>([])
+  const [tarifas, setTarifas] = useState<Trabajador[]>([])
+  const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>([])
+  const [gastosVariables, setGastosVariables] = useState<GastoVariable[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: ab }, { data: t }, { data: gf }, { data: gv }] = await Promise.all([
+        supabase.from('reportes_diarios').select('*'),
+        supabase.from('reportes_compras').select('*'),
+        supabase.from('reportes_cobros').select('*'),
+        supabase.from('reportes_subcontratos').select('*'),
+        supabase.from('abonos_cuenta').select('*'),
+        supabase.from('trabajadores').select('*'),
+        supabase.from('gastos_fijos').select('*'),
+        supabase.from('gastos_variables').select('*'),
+      ])
+      setDiarios((d as ReporteTrabajadorDia[]) || [])
+      setCompras((c as ReporteCompraDia[]) || [])
+      setCobros((co as ReporteCobroDia[]) || [])
+      setSubcontratos((s as ReporteSubcontratoDia[]) || [])
+      setAbonos((ab as AbonoCuenta[]) || [])
+      setTarifas((t as Trabajador[]) || [])
+      setGastosFijos((gf as GastoFijo[]) || [])
+      setGastosVariables((gv as GastoVariable[]) || [])
+      setLoading(false)
+    })()
+  }, [])
+
+  if (loading) return <div className="spinner" />
+
+  const delMes = (fecha: string) => fecha.startsWith(mes)
+
+  const ingresosCobros = cobros.filter(c => delMes(c.fecha)).reduce((s, c) => s + c.monto, 0)
+  const ingresosAbonos = abonos.filter(a => delMes(a.fecha)).reduce((s, a) => s + a.monto, 0)
+  const ingresos = ingresosCobros + ingresosAbonos
+
+  const costoManoDeObra = diarios.filter(d => d.presente && delMes(d.fecha)).reduce((sum, d) => {
+    const t = tarifas.find(x => x.nombre === d.trabajador)
+    return sum + d.fraccion_jornada * (t?.tarifa_diaria || 0) + (d.viatico ? (t?.viatico_diario || 0) : 0)
+  }, 0)
+
+  const costoMateriales = compras.filter(c => delMes(c.fecha)).reduce((s, c) => s + c.monto, 0)
+  const utilidadBruta = ingresos - costoManoDeObra - costoMateriales
+
+  const gastosFijosTotal = gastosFijos.filter(g => g.activo).reduce((s, g) => s + g.monto_mensual, 0)
+  const gastosVariablesTotal = gastosVariables.filter(g => delMes(g.fecha)).reduce((s, g) => s + g.monto, 0)
+  const pagosSubcontratistas = subcontratos.filter(s => delMes(s.fecha)).reduce((s, x) => s + x.monto, 0)
+
+  const resultado = utilidadBruta - gastosFijosTotal - gastosVariablesTotal - pagosSubcontratistas
+
+  return (
+    <div>
+      <div className="field" style={{ maxWidth: 220, marginBottom: 20 }}>
+        <label>Mes</label>
+        <input type="month" value={mes} onChange={e => setMes(e.target.value)} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        <StatTile label="Ingresos del mes" valor={fmtMoney(ingresos)} tono="positivo" />
+        <StatTile label="Costo mano de obra" valor={fmtMoney(costoManoDeObra)} />
+        <StatTile label="Costo materiales" valor={fmtMoney(costoMateriales)} />
+        <StatTile label="Utilidad bruta operativa" valor={fmtMoney(utilidadBruta)} tono={utilidadBruta >= 0 ? 'positivo' : 'negativo'} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        <StatTile label="Gastos fijos" valor={fmtMoney(gastosFijosTotal)} />
+        <StatTile label="Gastos variables" valor={fmtMoney(gastosVariablesTotal)} />
+        <StatTile label="Pagos a subcontratistas" valor={fmtMoney(pagosSubcontratistas)} />
+      </div>
+
+      <div className="card" style={{ padding: '20px 24px', borderTop: `4px solid ${resultado >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
+        <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 6 }}>
+          Resultado del mes
+        </p>
+        <p className="font-display" style={{ fontSize: 32, fontWeight: 700, color: resultado >= 0 ? 'var(--success)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+          {fmtMoney(resultado)}
+        </p>
+      </div>
+
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 16 }}>
+        Ingresos = cobros registrados + abonos de cuentas por cobrar del mes. Costo mano de obra, materiales, gastos variables y pagos a subcontratistas son en base caja (lo que pasó ese mes). Gastos fijos es el monto mensual completo, sin importar el día en que caiga.
+      </p>
     </div>
   )
 }
@@ -1878,7 +1977,7 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'obras' | 'cuentas'>('activos')
+  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'obras' | 'cuentas' | 'resultados'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
   const [historialObra, setHistorialObra] = useState<string | null>(null)
   const [reportesDiarios, setReportesDiarios] = useState<ReporteTrabajadorDia[]>([])
@@ -1887,6 +1986,7 @@ export default function Admin() {
   const [reportesSubcontratos, setReportesSubcontratos] = useState<ReporteSubcontratoDia[]>([])
   const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
   const [trabajadoresTarifas, setTrabajadoresTarifas] = useState<Trabajador[]>([])
+  const [subcontratosMaster, setSubcontratosMaster] = useState<SubcontratoMaster[]>([])
   const [mostrarGuia, setMostrarGuia] = useState(false)
 
   useEffect(() => {
@@ -1927,13 +2027,14 @@ export default function Admin() {
   }, [authed, loadPendientes])
 
   const loadObras = useCallback(async () => {
-    const [{ data: diarios }, { data: compras }, { data: cobros }, { data: subcontratos }, { data: maestro }, { data: tarifas }] = await Promise.all([
+    const [{ data: diarios }, { data: compras }, { data: cobros }, { data: subcontratos }, { data: maestro }, { data: tarifas }, { data: subMaster }] = await Promise.all([
       supabase.from('reportes_diarios').select('*').order('fecha', { ascending: false }),
       supabase.from('reportes_compras').select('*').order('fecha', { ascending: false }),
       supabase.from('reportes_cobros').select('*').order('fecha', { ascending: false }),
       supabase.from('reportes_subcontratos').select('*').order('fecha', { ascending: false }),
       supabase.from('obras').select('*').order('nombre'),
       supabase.from('trabajadores').select('*'),
+      supabase.from('subcontratos_master').select('*'),
     ])
     setReportesDiarios((diarios as ReporteTrabajadorDia[]) || [])
     setReportesCompras((compras as ReporteCompraDia[]) || [])
@@ -1941,6 +2042,7 @@ export default function Admin() {
     setReportesSubcontratos((subcontratos as ReporteSubcontratoDia[]) || [])
     setObrasMaestro((maestro as Obra[]) || [])
     setTrabajadoresTarifas((tarifas as Trabajador[]) || [])
+    setSubcontratosMaster((subMaster as SubcontratoMaster[]) || [])
   }, [])
 
   async function guardarPresupuesto(obraId: string, monto: number | null) {
@@ -2067,7 +2169,11 @@ export default function Admin() {
 
     const diasTrabajados = diariosObra.reduce((sum, d) => sum + d.fraccion_jornada, 0)
     const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
-    const gastoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const contratosObra = subcontratosMaster.filter(s => s.obra === obra)
+    const gastoSubcontratos = contratosObra.length > 0
+      ? contratosObra.reduce((sum, s) => sum + s.total_contrato, 0)
+      : subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const pagadoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
     const adelantos = diariosObra.filter(d => d.tipo_pago !== 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
     const pagosSemanales = diariosObra.filter(d => d.tipo_pago === 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
     const manoDeObra = diariosObra.reduce((sum, d) => {
@@ -2086,7 +2192,7 @@ export default function Admin() {
     const fechas = [...diariosObra.map(d => d.fecha), ...comprasObra.map(c => c.fecha), ...cobrosObra.map(c => c.fecha), ...subcontratosObra.map(s => s.fecha)]
     const ultimaFecha = fechas.sort().at(-1) || ''
 
-    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, diasTrabajados, gastoCompras, gastoSubcontratos, manoDeObra, adelantos, pagosSemanales, faltaPagarTrabajadores, porReembolsar, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
+    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, diasTrabajados, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, faltaPagarTrabajadores, porReembolsar, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
   }).sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha))
 
   const obrasPorCliente = Object.entries(
@@ -2202,6 +2308,7 @@ export default function Admin() {
           ['clientes', `Clientes (${clientesSummary.length})`, '#7c3aed'],
           ['obras', `Obras (${obrasSummary.length})`, '#c1440e'],
           ['cuentas', 'Cuentas por cobrar', '#0f766e'],
+          ['resultados', 'Estado de resultados', '#14213D'],
         ] as const).map(([k, label, color]) => (
           <button
             key={k}
@@ -2326,6 +2433,11 @@ export default function Admin() {
                             Falta pagar a trabajadores: <strong style={{ color: o.faltaPagarTrabajadores > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.faltaPagarTrabajadores)}</strong>
                           </span>
                         )}
+                        {o.gastoSubcontratos !== o.pagadoSubcontratos && (
+                          <span style={{ fontSize: 13 }}>
+                            Subcontratos: contrato completo {fmtMoney(o.gastoSubcontratos)}, pagado hasta ahora <strong style={{ color: 'var(--warning)' }}>{fmtMoney(o.pagadoSubcontratos)}</strong>
+                          </span>
+                        )}
                         {o.porReembolsar > 0 && (
                           <span style={{ fontSize: 13 }}>
                             Por reembolsar (compras que pagó un trabajador con su plata): <strong style={{ color: 'var(--warning)' }}>{fmtMoney(o.porReembolsar)}</strong>
@@ -2342,6 +2454,8 @@ export default function Admin() {
         </>
       ) : tab === 'cuentas' ? (
         <PanelCuentasPorCobrar />
+      ) : tab === 'resultados' ? (
+        <PanelEstadoResultados />
       ) : clientesSummary.length === 0 ? (
         <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin clientes registrados aún.</p>
       ) : (
