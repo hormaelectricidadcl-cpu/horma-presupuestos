@@ -66,6 +66,8 @@ export interface ReporteCompraDia {
   descripcion: string
   monto: number
   obra: string | null
+  pagado_por?: string | null
+  reembolsado?: boolean
 }
 
 export interface ReporteCobroDia {

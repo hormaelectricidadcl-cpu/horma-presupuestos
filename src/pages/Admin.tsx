@@ -573,11 +573,12 @@ function agruparPorPeriodo(
 }
 
 /* ─── Bloque de contenido de un período (reutilizable) ── */
-function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontratosObra }: {
+function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontratosObra, onMarcarReembolsado }: {
   diariosObra: ReporteTrabajadorDia[]
   comprasObra: ReporteCompraDia[]
   cobrosObra: ReporteCobroDia[]
   subcontratosObra: ReporteSubcontratoDia[]
+  onMarcarReembolsado?: (compraId: string, reembolsado: boolean) => void
 }) {
   return (
     <>
@@ -604,10 +605,24 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
           {comprasObra.map(c => (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
               <span style={{ flex: 1 }}>{c.descripcion}</span>
+              {c.pagado_por && (
+                <span style={{ fontSize: 11, fontWeight: 600, color: c.reembolsado ? 'var(--success)' : 'var(--warning)' }}>
+                  {c.reembolsado ? `Reembolsado a ${c.pagado_por}` : `Pagó ${c.pagado_por} — sin reembolsar`}
+                </span>
+              )}
               <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(c.monto)}</span>
+              {c.pagado_por && onMarcarReembolsado && (
+                <button
+                  onClick={() => onMarcarReembolsado(c.id, !c.reembolsado)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: 11, padding: '3px 8px' }}
+                >
+                  {c.reembolsado ? 'Deshacer' : 'Marcar reembolsado'}
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -647,7 +662,7 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
 }
 
 /* ─── Fila de período colapsable ─────────────────────── */
-function PeriodoRow({ periodo }: { periodo: PeriodoAgrupado }) {
+function PeriodoRow({ periodo, onMarcarReembolsado }: { periodo: PeriodoAgrupado; onMarcarReembolsado?: (compraId: string, reembolsado: boolean) => void }) {
   const [abierto, setAbierto] = useState(false)
   const dias = periodo.diarios.reduce((sum, d) => sum + d.fraccion_jornada, 0)
   const trabajadores = Array.from(new Set(periodo.diarios.map(d => d.trabajador)))
@@ -683,6 +698,7 @@ function PeriodoRow({ periodo }: { periodo: PeriodoAgrupado }) {
             comprasObra={periodo.compras}
             cobrosObra={periodo.cobros}
             subcontratosObra={periodo.subcontratos}
+            onMarcarReembolsado={onMarcarReembolsado}
           />
         </div>
       )}
@@ -697,6 +713,7 @@ function HistorialObraModal({
   cobros,
   subcontratos,
   onClose,
+  onMarcarReembolsado,
 }: {
   obra: string
   diarios: ReporteTrabajadorDia[]
@@ -704,6 +721,7 @@ function HistorialObraModal({
   cobros: ReporteCobroDia[]
   subcontratos: ReporteSubcontratoDia[]
   onClose: () => void
+  onMarcarReembolsado?: (compraId: string, reembolsado: boolean) => void
 }) {
   const [vista, setVista] = useState<VistaPeriodo>('semana')
   const diariosObra = diarios.filter(d => d.obra === obra && d.presente).sort((a, b) => b.fecha.localeCompare(a.fecha))
@@ -756,11 +774,12 @@ function HistorialObraModal({
               comprasObra={comprasObra}
               cobrosObra={cobrosObra}
               subcontratosObra={subcontratosObra}
+              onMarcarReembolsado={onMarcarReembolsado}
             />
           ) : periodos.length === 0 ? (
             <p style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: '2rem 0' }}>Sin registros todavía.</p>
           ) : (
-            periodos.map(p => <PeriodoRow key={p.key} periodo={p} />)
+            periodos.map(p => <PeriodoRow key={p.key} periodo={p} onMarcarReembolsado={onMarcarReembolsado} />)
           )}
         </div>
       </div>
@@ -1659,6 +1678,11 @@ export default function Admin() {
     loadObras()
   }
 
+  async function marcarReembolsado(compraId: string, reembolsado: boolean) {
+    await supabase.from('reportes_compras').update({ reembolsado }).eq('id', compraId)
+    loadObras()
+  }
+
   useEffect(() => {
     if (!authed) return
     loadObras()
@@ -1783,6 +1807,7 @@ export default function Admin() {
       return sum + base + viaticoMonto
     }, 0)
     const faltaPagarTrabajadores = manoDeObra - adelantos - pagosSemanales
+    const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0)
     const saldo = cobrado - gastoCompras - gastoSubcontratos - adelantos - pagosSemanales
     const presupuestoTotal = maestro?.presupuesto_total ?? null
@@ -1791,7 +1816,7 @@ export default function Admin() {
     const fechas = [...diariosObra.map(d => d.fecha), ...comprasObra.map(c => c.fecha), ...cobrosObra.map(c => c.fecha), ...subcontratosObra.map(s => s.fecha)]
     const ultimaFecha = fechas.sort().at(-1) || ''
 
-    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, diasTrabajados, gastoCompras, gastoSubcontratos, manoDeObra, adelantos, pagosSemanales, faltaPagarTrabajadores, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
+    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, diasTrabajados, gastoCompras, gastoSubcontratos, manoDeObra, adelantos, pagosSemanales, faltaPagarTrabajadores, porReembolsar, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
   }).sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha))
 
   const obrasPorCliente = Object.entries(
@@ -2019,6 +2044,11 @@ export default function Admin() {
                             Falta pagar a trabajadores: <strong style={{ color: o.faltaPagarTrabajadores > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.faltaPagarTrabajadores)}</strong>
                           </span>
                         )}
+                        {o.porReembolsar > 0 && (
+                          <span style={{ fontSize: 13 }}>
+                            Por reembolsar (compras que pagó un trabajador con su plata): <strong style={{ color: 'var(--warning)' }}>{fmtMoney(o.porReembolsar)}</strong>
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -2115,6 +2145,7 @@ export default function Admin() {
         cobros={reportesCobros}
         subcontratos={reportesSubcontratos}
         onClose={() => setHistorialObra(null)}
+        onMarcarReembolsado={marcarReembolsado}
       />
     )}
     </div>

@@ -33,6 +33,7 @@ interface CompraRow {
   descripcion: string
   monto: string
   obra: string
+  pagadoPor: string
 }
 
 interface CobroRow {
@@ -122,8 +123,8 @@ export default function Reporte({ token }: Props) {
       }
     }
     setTrabajadores(base)
-    setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null }) => ({
-      id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '',
+    setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null; pagado_por: string | null }) => ({
+      id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', pagadoPor: c.pagado_por || '',
     })))
     setCobros((cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
       id: c.id, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
@@ -165,7 +166,7 @@ export default function Reporte({ token }: Props) {
   }
 
   function agregarCompra() {
-    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '' }])
+    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '', pagadoPor: '' }])
   }
   function actualizarCompra(idx: number, patch: Partial<CompraRow>) {
     setCompras(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
@@ -264,7 +265,7 @@ export default function Reporte({ token }: Props) {
     await supabase.from('reportes_compras').delete().eq('fecha', fecha)
     if (comprasValidas.length) {
       const { error: e2 } = await supabase.from('reportes_compras').insert(
-        comprasValidas.map(c => ({ fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null }))
+        comprasValidas.map(c => ({ fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, pagado_por: c.pagadoPor || null }))
       )
       if (e2) {
         setError('Error al guardar las compras. Intenta de nuevo.')
@@ -500,6 +501,13 @@ export default function Reporte({ token }: Props) {
                           {obras.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                       </div>
+                    </div>
+                    <div className="field">
+                      <label>¿Quién pagó?</label>
+                      <select value={c.pagadoPor} onChange={e => actualizarCompra(idx, { pagadoPor: e.target.value })}>
+                        <option value="">Caja de la empresa</option>
+                        {TRABAJADORES.map(n => <option key={n} value={n}>{n} (con su propia plata — hay que reembolsarle)</option>)}
+                      </select>
                     </div>
                     <button type="button" className="btn btn-ghost" onClick={() => quitarCompra(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
                       ✕ Quitar
