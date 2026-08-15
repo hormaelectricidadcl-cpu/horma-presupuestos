@@ -90,3 +90,11 @@ export interface ReporteTrabajoPuntualDia {
   direccion: string | null
   trabajador: string | null
 }
+
+export interface Obra {
+  id: string
+  nombre: string
+  cliente: string | null
+  presupuesto_total: number | null
+  activa: boolean
+}

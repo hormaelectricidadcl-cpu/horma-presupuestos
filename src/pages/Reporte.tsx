@@ -5,7 +5,8 @@ const REPORTE_TOKEN = import.meta.env.VITE_REPORTE_TOKEN as string
 
 const TRABAJADORES = ['Alejandro', 'Fabriel', 'Henry', 'Manuel', 'Misael', 'Samuel']
 const OBRA_LIMACHE = 'Ohiggins 126 Limache'
-const OBRAS = [
+// Respaldo por si falla la carga desde Supabase (tabla `obras`, fuente real de la lista).
+const OBRAS_FALLBACK = [
   OBRA_LIMACHE,
   'Doctora Eloísa (dirección 5843)',
   'Doctora Eloísa - Obra 1 (dirección 5860)',
@@ -87,6 +88,7 @@ export default function Reporte({ token }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const [trabajadores, setTrabajadores] = useState<Record<string, TrabajadorState>>(defaultTrabajadores())
+  const [obras, setObras] = useState<string[]>(OBRAS_FALLBACK)
   const [obraGeneral, setObraGeneral] = useState('')
   const [compras, setCompras] = useState<CompraRow[]>([])
   const [cobros, setCobros] = useState<CobroRow[]>([])
@@ -136,6 +138,13 @@ export default function Reporte({ token }: Props) {
     if (!tokenValido) return
     cargarDia(fecha)
   }, [tokenValido, fecha, cargarDia])
+
+  useEffect(() => {
+    if (!tokenValido) return
+    supabase.from('obras').select('nombre').eq('activa', true).order('nombre').then(({ data }) => {
+      if (data && data.length) setObras(data.map((o: { nombre: string }) => o.nombre))
+    })
+  }, [tokenValido])
 
   function actualizarTrabajador(nombre: string, patch: Partial<TrabajadorState>) {
     setTrabajadores(prev => ({ ...prev, [nombre]: { ...prev[nombre], ...patch } }))
@@ -358,7 +367,7 @@ export default function Reporte({ token }: Props) {
               <div style={{ display: 'flex', gap: 8 }}>
                 <select value={obraGeneral} onChange={e => setObraGeneral(e.target.value)} style={{ flex: 1 }}>
                   <option value="">Selecciona una obra...</option>
-                  {OBRAS.map(o => <option key={o} value={o}>{o}</option>)}
+                  {obras.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
                 <button type="button" className="btn btn-secondary" onClick={aplicarObraATodos} disabled={!obraGeneral}>
                   Aplicar a todos
@@ -401,7 +410,7 @@ export default function Reporte({ token }: Props) {
                             onChange={e => actualizarTrabajador(nombre, { obra: e.target.value, viatico: viaticoPorObra(e.target.value) })}
                           >
                             <option value="">Selecciona una obra...</option>
-                            {OBRAS.map(o => <option key={o} value={o}>{o}</option>)}
+                            {obras.map(o => <option key={o} value={o}>{o}</option>)}
                           </select>
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
@@ -472,7 +481,7 @@ export default function Reporte({ token }: Props) {
                         <label>Obra</label>
                         <select value={c.obra} onChange={e => actualizarCompra(idx, { obra: e.target.value })}>
                           <option value="">Selecciona...</option>
-                          {OBRAS.map(o => <option key={o} value={o}>{o}</option>)}
+                          {obras.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                       </div>
                     </div>
@@ -517,7 +526,7 @@ export default function Reporte({ token }: Props) {
                         <label>Obra</label>
                         <select value={c.obra} onChange={e => actualizarCobro(idx, { obra: e.target.value })}>
                           <option value="">Selecciona...</option>
-                          {OBRAS.map(o => <option key={o} value={o}>{o}</option>)}
+                          {obras.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                       </div>
                     </div>
@@ -562,7 +571,7 @@ export default function Reporte({ token }: Props) {
                         <label>Obra</label>
                         <select value={s.obra} onChange={e => actualizarSubcontrato(idx, { obra: e.target.value })}>
                           <option value="">Selecciona...</option>
-                          {OBRAS.map(o => <option key={o} value={o}>{o}</option>)}
+                          {obras.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                       </div>
                     </div>

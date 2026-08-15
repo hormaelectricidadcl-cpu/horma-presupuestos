@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Pendiente, TipoPendiente } from '../types'
+import type { Pendiente, TipoPendiente, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
 
@@ -658,6 +658,139 @@ function PanelClientes() {
   )
 }
 
+/* ─── Presupuesto editable ──────────────────────────── */
+function fmtMoney(n: number) {
+  const rounded = Math.round(n)
+  return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString('es-CL')}`
+}
+
+function EditablePresupuesto({ valor, onGuardar }: { valor: number | null; onGuardar: (monto: number | null) => void }) {
+  const [editando, setEditando] = useState(false)
+  const [texto, setTexto] = useState(valor != null ? String(valor) : '')
+
+  if (!editando) {
+    return (
+      <span>
+        Presupuesto: <strong>{valor != null ? fmtMoney(valor) : 'sin definir'}</strong>{' '}
+        <button
+          onClick={() => { setTexto(valor != null ? String(valor) : ''); setEditando(true) }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--primary)', fontWeight: 600, padding: 0 }}
+        >
+          ✎ editar
+        </button>
+      </span>
+    )
+  }
+
+  function guardar() {
+    const n = texto.trim() ? Number(texto) : null
+    onGuardar(n)
+    setEditando(false)
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      Presupuesto:
+      <input
+        type="number"
+        min="0"
+        autoFocus
+        value={texto}
+        onChange={e => setTexto(e.target.value)}
+        onBlur={guardar}
+        onKeyDown={e => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false) }}
+        style={{ width: 120, fontSize: 13, padding: '2px 6px' }}
+      />
+    </span>
+  )
+}
+
+/* ─── Panel de obras ────────────────────────────────── */
+function PanelObras() {
+  const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
+  const [compras, setCompras] = useState<ReporteCompraDia[]>([])
+  const [cobros, setCobros] = useState<ReporteCobroDia[]>([])
+  const [subcontratos, setSubcontratos] = useState<ReporteSubcontratoDia[]>([])
+  const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const cargar = useCallback(async () => {
+    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }] = await Promise.all([
+      supabase.from('reportes_diarios').select('*'),
+      supabase.from('reportes_compras').select('*'),
+      supabase.from('reportes_cobros').select('*'),
+      supabase.from('reportes_subcontratos').select('*'),
+      supabase.from('obras').select('*').order('nombre'),
+    ])
+    setDiarios((d as ReporteTrabajadorDia[]) || [])
+    setCompras((c as ReporteCompraDia[]) || [])
+    setCobros((co as ReporteCobroDia[]) || [])
+    setSubcontratos((s as ReporteSubcontratoDia[]) || [])
+    setObrasMaestro((m as Obra[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function guardarPresupuesto(obraId: string, monto: number | null) {
+    await supabase.from('obras').update({ presupuesto_total: monto }).eq('id', obraId)
+    cargar()
+  }
+
+  if (loading) return <div className="spinner" />
+
+  const nombres = Array.from(new Set([
+    ...obrasMaestro.map(o => o.nombre),
+    ...diarios.filter(d => d.presente && d.obra).map(d => d.obra as string),
+    ...compras.filter(c => c.obra).map(c => c.obra as string),
+    ...cobros.filter(c => c.obra).map(c => c.obra as string),
+    ...subcontratos.filter(s => s.obra).map(s => s.obra as string),
+  ]))
+
+  const resumen = nombres.map(obra => {
+    const maestro = obrasMaestro.find(o => o.nombre === obra)
+    const diariosObra = diarios.filter(d => d.obra === obra && d.presente)
+    const comprasObra = compras.filter(c => c.obra === obra)
+    const cobrosObra = cobros.filter(c => c.obra === obra)
+    const subcontratosObra = subcontratos.filter(s => s.obra === obra)
+
+    const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
+    const gastoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const adelantos = diariosObra.reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
+    const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0)
+    const saldo = cobrado - gastoCompras - gastoSubcontratos - adelantos
+
+    return { obra, obraId: maestro?.id, presupuestoTotal: maestro?.presupuesto_total ?? null, gastoCompras, gastoSubcontratos, adelantos, cobrado, saldo }
+  })
+
+  if (resumen.length === 0) return (
+    <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Sin obras registradas.</p>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {resumen.map(o => (
+        <div key={o.obra} className="card" style={{ padding: '14px 16px', borderLeft: `4px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
+          <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>🏗️ {o.obra}</p>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13, marginBottom: 8 }}>
+            <span>Compras: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoCompras)}</strong></span>
+            <span>Subcontratos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoSubcontratos)}</strong></span>
+            <span>Adelantos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.adelantos)}</strong></span>
+            <span>Cobrado: <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobrado)}</strong></span>
+          </div>
+          <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+            {o.obraId ? (
+              <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
+            ) : (
+              <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ─── Gustavo page ──────────────────────────────────── */
 interface Props {
   token: string | null
@@ -666,7 +799,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'pendientes' | 'clientes'>('pendientes')
+  const [tab, setTab] = useState<'pendientes' | 'clientes' | 'obras'>('pendientes')
 
   const tokenValido = token === GUSTAVO_TOKEN
 
@@ -725,7 +858,7 @@ export default function Gustavo({ token }: Props) {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0 }}>
-          {([['pendientes', '📋 Mis tareas'], ['clientes', '👥 Clientes']] as const).map(([k, label]) => (
+          {([['pendientes', '📋 Mis tareas'], ['clientes', '👥 Clientes'], ['obras', '🏗️ Obras']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -742,6 +875,8 @@ export default function Gustavo({ token }: Props) {
 
         {tab === 'clientes' ? (
           <PanelClientes />
+        ) : tab === 'obras' ? (
+          <PanelObras />
         ) : loading ? (
           <div className="spinner" />
         ) : pendientes.length === 0 ? (

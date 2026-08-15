@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia } from '../types'
+import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra } from '../types'
 
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
@@ -416,6 +416,48 @@ function HistorialModal({
         </div>
       </div>
     </div>
+  )
+}
+
+/* ─── Presupuesto editable ──────────────────────────── */
+function EditablePresupuesto({ valor, onGuardar }: { valor: number | null; onGuardar: (monto: number | null) => void }) {
+  const [editando, setEditando] = useState(false)
+  const [texto, setTexto] = useState(valor != null ? String(valor) : '')
+
+  if (!editando) {
+    return (
+      <span>
+        Presupuesto: <strong>{valor != null ? fmtMoney(valor) : 'sin definir'}</strong>{' '}
+        <button
+          onClick={() => { setTexto(valor != null ? String(valor) : ''); setEditando(true) }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--primary)', fontWeight: 600, padding: 0 }}
+        >
+          ✎ editar
+        </button>
+      </span>
+    )
+  }
+
+  function guardar() {
+    const n = texto.trim() ? Number(texto) : null
+    onGuardar(n)
+    setEditando(false)
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      Presupuesto:
+      <input
+        type="number"
+        min="0"
+        autoFocus
+        value={texto}
+        onChange={e => setTexto(e.target.value)}
+        onBlur={guardar}
+        onKeyDown={e => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false) }}
+        style={{ width: 120, fontSize: 13, padding: '2px 6px' }}
+      />
+    </span>
   )
 }
 
@@ -1376,6 +1418,7 @@ export default function Admin() {
   const [reportesCompras, setReportesCompras] = useState<ReporteCompraDia[]>([])
   const [reportesCobros, setReportesCobros] = useState<ReporteCobroDia[]>([])
   const [reportesSubcontratos, setReportesSubcontratos] = useState<ReporteSubcontratoDia[]>([])
+  const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
 
   useEffect(() => {
     const token = localStorage.getItem('horma_admin_token')
@@ -1408,17 +1451,24 @@ export default function Admin() {
   }, [authed, loadPendientes])
 
   const loadObras = useCallback(async () => {
-    const [{ data: diarios }, { data: compras }, { data: cobros }, { data: subcontratos }] = await Promise.all([
+    const [{ data: diarios }, { data: compras }, { data: cobros }, { data: subcontratos }, { data: maestro }] = await Promise.all([
       supabase.from('reportes_diarios').select('*').order('fecha', { ascending: false }),
       supabase.from('reportes_compras').select('*').order('fecha', { ascending: false }),
       supabase.from('reportes_cobros').select('*').order('fecha', { ascending: false }),
       supabase.from('reportes_subcontratos').select('*').order('fecha', { ascending: false }),
+      supabase.from('obras').select('*').order('nombre'),
     ])
     setReportesDiarios((diarios as ReporteTrabajadorDia[]) || [])
     setReportesCompras((compras as ReporteCompraDia[]) || [])
     setReportesCobros((cobros as ReporteCobroDia[]) || [])
     setReportesSubcontratos((subcontratos as ReporteSubcontratoDia[]) || [])
+    setObrasMaestro((maestro as Obra[]) || [])
   }, [])
+
+  async function guardarPresupuesto(obraId: string, monto: number | null) {
+    await supabase.from('obras').update({ presupuesto_total: monto }).eq('id', obraId)
+    loadObras()
+  }
 
   useEffect(() => {
     if (!authed) return
@@ -1520,6 +1570,7 @@ export default function Admin() {
   }).sort((a, b) => new Date(b.ultimaInteraccion).getTime() - new Date(a.ultimaInteraccion).getTime())
 
   const obraNombres = Array.from(new Set([
+    ...obrasMaestro.map(o => o.nombre),
     ...reportesDiarios.filter(d => d.presente && d.obra).map(d => d.obra as string),
     ...reportesCompras.filter(c => c.obra).map(c => c.obra as string),
     ...reportesCobros.filter(c => c.obra).map(c => c.obra as string),
@@ -1527,6 +1578,7 @@ export default function Admin() {
   ]))
 
   const obrasSummary = obraNombres.map(obra => {
+    const maestro = obrasMaestro.find(o => o.nombre === obra)
     const diariosObra = reportesDiarios.filter(d => d.obra === obra && d.presente)
     const comprasObra = reportesCompras.filter(c => c.obra === obra)
     const cobrosObra = reportesCobros.filter(c => c.obra === obra)
@@ -1535,13 +1587,16 @@ export default function Admin() {
     const diasTrabajados = diariosObra.reduce((sum, d) => sum + d.fraccion_jornada, 0)
     const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
     const gastoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const adelantos = diariosObra.reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0)
-    const saldo = cobrado - gastoCompras - gastoSubcontratos
+    const saldo = cobrado - gastoCompras - gastoSubcontratos - adelantos
+    const presupuestoTotal = maestro?.presupuesto_total ?? null
+    const restantePresupuesto = presupuestoTotal != null ? presupuestoTotal - cobrado : null
 
     const fechas = [...diariosObra.map(d => d.fecha), ...comprasObra.map(c => c.fecha), ...cobrosObra.map(c => c.fecha), ...subcontratosObra.map(s => s.fecha)]
     const ultimaFecha = fechas.sort().at(-1) || ''
 
-    return { obra, diasTrabajados, gastoCompras, gastoSubcontratos, cobrado, saldo, ultimaFecha }
+    return { obra, obraId: maestro?.id, diasTrabajados, gastoCompras, gastoSubcontratos, adelantos, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
   }).sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha))
 
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
@@ -1750,11 +1805,22 @@ export default function Admin() {
                     🕐 Detalle
                   </button>
                 </div>
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13 }}>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginBottom: 8 }}>
                   <span>Compras: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoCompras)}</strong></span>
                   <span>Subcontratos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoSubcontratos)}</strong></span>
+                  <span>Adelantos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.adelantos)}</strong></span>
                   <span>Cobrado: <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobrado)}</strong></span>
                   <span>Saldo: <strong style={{ color: o.saldo >= 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtMoney(o.saldo)}</strong></span>
+                </div>
+                <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {o.obraId ? (
+                    <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
+                  ) : (
+                    <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
+                  )}
+                  {o.restantePresupuesto != null && (
+                    <span>Falta por cobrar: <strong style={{ color: o.restantePresupuesto > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.restantePresupuesto)}</strong></span>
+                  )}
                 </div>
               </div>
             ))}
