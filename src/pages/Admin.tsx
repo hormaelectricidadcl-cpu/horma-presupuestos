@@ -482,6 +482,212 @@ function fmtMoney(n: number) {
   return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString('es-CL')}`
 }
 
+type VistaPeriodo = 'dia' | 'semana' | 'quincena' | 'mes'
+
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+function parseFecha(fecha: string): Date {
+  const [y, m, d] = fecha.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function hoySinHora(): Date {
+  const n = new Date()
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate())
+}
+
+function getPeriodo(fecha: string, vista: VistaPeriodo): { key: string; label: string; enCurso: boolean } {
+  const date = parseFecha(fecha)
+  const today = hoySinHora()
+
+  if (vista === 'mes') {
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    const label = `${MESES[date.getMonth()]} ${date.getFullYear()}`
+    const enCurso = date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth()
+    return { key, label, enCurso }
+  }
+
+  if (vista === 'quincena') {
+    const q = date.getDate() <= 15 ? 1 : 2
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-Q${q}`
+    const startD = q === 1 ? 1 : 16
+    const endD = q === 1 ? 15 : new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+    const label = `${startD}-${endD} ${MESES_CORTOS[date.getMonth()]} ${date.getFullYear()}`
+    const todayQ = today.getDate() <= 15 ? 1 : 2
+    const enCurso = date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && q === todayQ
+    return { key, label, enCurso }
+  }
+
+  if (vista === 'semana') {
+    const dow = (date.getDay() + 6) % 7
+    const monday = new Date(date); monday.setDate(date.getDate() - dow)
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
+    const key = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
+    const label = monday.getMonth() === sunday.getMonth()
+      ? `${monday.getDate()}-${sunday.getDate()} ${MESES_CORTOS[monday.getMonth()]} ${monday.getFullYear()}`
+      : `${monday.getDate()} ${MESES_CORTOS[monday.getMonth()]} - ${sunday.getDate()} ${MESES_CORTOS[sunday.getMonth()]} ${sunday.getFullYear()}`
+    const todayDow = (today.getDay() + 6) % 7
+    const todayMonday = new Date(today); todayMonday.setDate(today.getDate() - todayDow)
+    const enCurso = monday.getTime() === todayMonday.getTime()
+    return { key, label, enCurso }
+  }
+
+  // vista === 'dia': cada fecha es su propio período
+  return { key: fecha, label: fecha.split('-').reverse().join('/'), enCurso: fecha === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}` }
+}
+
+interface PeriodoAgrupado {
+  key: string
+  label: string
+  enCurso: boolean
+  diarios: ReporteTrabajadorDia[]
+  compras: ReporteCompraDia[]
+  cobros: ReporteCobroDia[]
+  subcontratos: ReporteSubcontratoDia[]
+}
+
+function agruparPorPeriodo(
+  vista: VistaPeriodo,
+  diarios: ReporteTrabajadorDia[],
+  compras: ReporteCompraDia[],
+  cobros: ReporteCobroDia[],
+  subcontratos: ReporteSubcontratoDia[]
+): PeriodoAgrupado[] {
+  const mapa = new Map<string, PeriodoAgrupado>()
+
+  function celda(fecha: string): PeriodoAgrupado {
+    const { key, label, enCurso } = getPeriodo(fecha, vista)
+    if (!mapa.has(key)) mapa.set(key, { key, label, enCurso, diarios: [], compras: [], cobros: [], subcontratos: [] })
+    return mapa.get(key)!
+  }
+
+  for (const item of diarios) celda(item.fecha).diarios.push(item)
+  for (const item of compras) celda(item.fecha).compras.push(item)
+  for (const item of cobros) celda(item.fecha).cobros.push(item)
+  for (const item of subcontratos) celda(item.fecha).subcontratos.push(item)
+
+  return Array.from(mapa.values()).sort((a, b) => b.key.localeCompare(a.key))
+}
+
+/* ─── Bloque de contenido de un período (reutilizable) ── */
+function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontratosObra }: {
+  diariosObra: ReporteTrabajadorDia[]
+  comprasObra: ReporteCompraDia[]
+  cobrosObra: ReporteCobroDia[]
+  subcontratosObra: ReporteSubcontratoDia[]
+}) {
+  return (
+    <>
+      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trabajadores por día</h3>
+      {diariosObra.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin jornadas registradas.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+          {diariosObra.map(d => (
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
+              <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
+              <span style={{ color: 'var(--muted)' }}>{d.fraccion_jornada === 1 ? 'Día completo' : 'Medio día'}</span>
+              {d.viatico && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>Viático</span>}
+              {d.adelanto_monto ? <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>Adelanto {fmtMoney(d.adelanto_monto)}</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compras</h3>
+      {comprasObra.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin compras registradas.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+          {comprasObra.map(c => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
+              <span style={{ flex: 1 }}>{c.descripcion}</span>
+              <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(c.monto)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subcontratos</h3>
+      {subcontratosObra.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin subcontratos registrados.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+          {subcontratosObra.map(s => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{s.fecha.split('-').reverse().join('/')}</span>
+              <span style={{ flex: 1 }}>{s.subcontrato}</span>
+              <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(s.monto)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cobros</h3>
+      {cobrosObra.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sin cobros registrados.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {cobrosObra.map(c => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
+              <span style={{ flex: 1 }}>{c.cliente}</span>
+              <span style={{ fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(c.monto)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+/* ─── Fila de período colapsable ─────────────────────── */
+function PeriodoRow({ periodo }: { periodo: PeriodoAgrupado }) {
+  const [abierto, setAbierto] = useState(false)
+  const dias = periodo.diarios.reduce((sum, d) => sum + d.fraccion_jornada, 0)
+  const trabajadores = Array.from(new Set(periodo.diarios.map(d => d.trabajador)))
+  const gasto = periodo.compras.reduce((s, c) => s + c.monto, 0) + periodo.subcontratos.reduce((s, c) => s + c.monto, 0)
+  const cobrado = periodo.cobros.reduce((s, c) => s + c.monto, 0)
+
+  return (
+    <div style={{ marginBottom: 10, border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+      <button
+        onClick={() => setAbierto(a => !a)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+          background: periodo.enCurso ? '#fff8f0' : 'var(--bg)', border: 'none', cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)' }}>{periodo.label}</span>
+        {periodo.enCurso && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: '#fdf2ea', padding: '2px 6px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+            En curso
+          </span>
+        )}
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, color: 'var(--muted)', flexWrap: 'wrap' }}>
+          {dias > 0 && <span>{dias} día{dias !== 1 ? 's' : ''} · {trabajadores.length} trabajador{trabajadores.length !== 1 ? 'es' : ''}</span>}
+          {gasto > 0 && <span style={{ color: 'var(--danger)', fontWeight: 600 }}>{fmtMoney(gasto)}</span>}
+          {cobrado > 0 && <span style={{ color: 'var(--success)', fontWeight: 600 }}>{fmtMoney(cobrado)}</span>}
+        </span>
+        <span style={{ color: 'var(--muted)', fontSize: 12, flexShrink: 0 }}>{abierto ? '▲' : '▼'}</span>
+      </button>
+      {abierto && (
+        <div style={{ padding: '14px 12px' }}>
+          <DetalleObraContenido
+            diariosObra={periodo.diarios}
+            comprasObra={periodo.compras}
+            cobrosObra={periodo.cobros}
+            subcontratosObra={periodo.subcontratos}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function HistorialObraModal({
   obra,
   diarios,
@@ -497,10 +703,12 @@ function HistorialObraModal({
   subcontratos: ReporteSubcontratoDia[]
   onClose: () => void
 }) {
+  const [vista, setVista] = useState<VistaPeriodo>('semana')
   const diariosObra = diarios.filter(d => d.obra === obra && d.presente).sort((a, b) => b.fecha.localeCompare(a.fecha))
   const comprasObra = compras.filter(c => c.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
   const cobrosObra = cobros.filter(c => c.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
   const subcontratosObra = subcontratos.filter(s => s.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const periodos = agruparPorPeriodo(vista, diariosObra, comprasObra, cobrosObra, subcontratosObra)
 
   return (
     <div
@@ -529,67 +737,28 @@ function HistorialObraModal({
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
         </div>
 
+        <div style={{ padding: '12px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Agrupar por</label>
+          <select value={vista} onChange={e => setVista(e.target.value as VistaPeriodo)} style={{ fontSize: 13, padding: '5px 10px', width: 'auto' }}>
+            <option value="dia">Día a día</option>
+            <option value="semana">Semana</option>
+            <option value="quincena">Quincena</option>
+            <option value="mes">Mes</option>
+          </select>
+        </div>
+
         <div style={{ overflowY: 'auto', padding: '1.25rem 1.5rem', flex: 1 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trabajadores por día</h3>
-          {diariosObra.length === 0 ? (
-            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin jornadas registradas.</p>
+          {vista === 'dia' ? (
+            <DetalleObraContenido
+              diariosObra={diariosObra}
+              comprasObra={comprasObra}
+              cobrosObra={cobrosObra}
+              subcontratosObra={subcontratosObra}
+            />
+          ) : periodos.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: '2rem 0' }}>Sin registros todavía.</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-              {diariosObra.map(d => (
-                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
-                  <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
-                  <span style={{ color: 'var(--muted)' }}>{d.fraccion_jornada === 1 ? 'Día completo' : 'Medio día'}</span>
-                  {d.viatico && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>Viático</span>}
-                  {d.adelanto_monto ? <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>Adelanto {fmtMoney(d.adelanto_monto)}</span> : null}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compras</h3>
-          {comprasObra.length === 0 ? (
-            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin compras registradas.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-              {comprasObra.map(c => (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
-                  <span style={{ flex: 1 }}>{c.descripcion}</span>
-                  <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(c.monto)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subcontratos</h3>
-          {subcontratosObra.length === 0 ? (
-            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin subcontratos registrados.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-              {subcontratosObra.map(s => (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{s.fecha.split('-').reverse().join('/')}</span>
-                  <span style={{ flex: 1 }}>{s.subcontrato}</span>
-                  <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(s.monto)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cobros</h3>
-          {cobrosObra.length === 0 ? (
-            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sin cobros registrados.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {cobrosObra.map(c => (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
-                  <span style={{ flex: 1 }}>{c.cliente}</span>
-                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(c.monto)}</span>
-                </div>
-              ))}
-            </div>
+            periodos.map(p => <PeriodoRow key={p.key} periodo={p} />)
           )}
         </div>
       </div>
