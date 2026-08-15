@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario } from '../types'
+import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia } from '../types'
 
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
@@ -413,6 +413,127 @@ function HistorialModal({
           >
             + Nuevo pendiente
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Historial de obra (modal) ─────────────────────── */
+function fmtMoney(n: number) {
+  const rounded = Math.round(n)
+  return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString('es-CL')}`
+}
+
+function HistorialObraModal({
+  obra,
+  diarios,
+  compras,
+  cobros,
+  subcontratos,
+  onClose,
+}: {
+  obra: string
+  diarios: ReporteTrabajadorDia[]
+  compras: ReporteCompraDia[]
+  cobros: ReporteCobroDia[]
+  subcontratos: ReporteSubcontratoDia[]
+  onClose: () => void
+}) {
+  const diariosObra = diarios.filter(d => d.obra === obra && d.presente).sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const comprasObra = compras.filter(c => c.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const cobrosObra = cobros.filter(c => c.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const subcontratosObra = subcontratos.filter(s => s.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+        zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      }}
+    >
+      <div style={{
+        background: 'var(--white)', borderRadius: '16px 16px 0 0',
+        width: '100%', maxWidth: 860, maxHeight: '85vh',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 -4px 32px rgba(0,0,0,0.15)',
+      }}>
+        <div style={{
+          padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+        }}>
+          <div>
+            <h2 style={{ fontSize: 17, fontWeight: 800 }}>🏗️ {obra}</h2>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+              {diariosObra.length} jornada{diariosObra.length !== 1 ? 's' : ''} registradas
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', padding: '1.25rem 1.5rem', flex: 1 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trabajadores por día</h3>
+          {diariosObra.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin jornadas registradas.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {diariosObra.map(d => (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
+                  <span style={{ color: 'var(--muted)' }}>{d.fraccion_jornada === 1 ? 'Día completo' : 'Medio día'}</span>
+                  {d.viatico && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>Viático</span>}
+                  {d.adelanto_monto ? <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>Adelanto {fmtMoney(d.adelanto_monto)}</span> : null}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compras</h3>
+          {comprasObra.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin compras registradas.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {comprasObra.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ flex: 1 }}>{c.descripcion}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(c.monto)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subcontratos</h3>
+          {subcontratosObra.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin subcontratos registrados.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {subcontratosObra.map(s => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{s.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ flex: 1 }}>{s.subcontrato}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(s.monto)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cobros</h3>
+          {cobrosObra.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sin cobros registrados.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {cobrosObra.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ flex: 1 }}>{c.cliente}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(c.monto)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1248,8 +1369,13 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'respondidos_irazu' | 'clientes'>('activos')
+  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'respondidos_irazu' | 'clientes' | 'obras'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
+  const [historialObra, setHistorialObra] = useState<string | null>(null)
+  const [reportesDiarios, setReportesDiarios] = useState<ReporteTrabajadorDia[]>([])
+  const [reportesCompras, setReportesCompras] = useState<ReporteCompraDia[]>([])
+  const [reportesCobros, setReportesCobros] = useState<ReporteCobroDia[]>([])
+  const [reportesSubcontratos, setReportesSubcontratos] = useState<ReporteSubcontratoDia[]>([])
 
   useEffect(() => {
     const token = localStorage.getItem('horma_admin_token')
@@ -1280,6 +1406,24 @@ export default function Admin() {
     const interval = setInterval(() => loadPendientes(false), 60000)
     return () => clearInterval(interval)
   }, [authed, loadPendientes])
+
+  const loadObras = useCallback(async () => {
+    const [{ data: diarios }, { data: compras }, { data: cobros }, { data: subcontratos }] = await Promise.all([
+      supabase.from('reportes_diarios').select('*').order('fecha', { ascending: false }),
+      supabase.from('reportes_compras').select('*').order('fecha', { ascending: false }),
+      supabase.from('reportes_cobros').select('*').order('fecha', { ascending: false }),
+      supabase.from('reportes_subcontratos').select('*').order('fecha', { ascending: false }),
+    ])
+    setReportesDiarios((diarios as ReporteTrabajadorDia[]) || [])
+    setReportesCompras((compras as ReporteCompraDia[]) || [])
+    setReportesCobros((cobros as ReporteCobroDia[]) || [])
+    setReportesSubcontratos((subcontratos as ReporteSubcontratoDia[]) || [])
+  }, [])
+
+  useEffect(() => {
+    if (!authed) return
+    loadObras()
+  }, [authed, loadObras])
 
   function abrirSeguimiento(nombre: string) {
     setClienteInicial(nombre)
@@ -1374,6 +1518,31 @@ export default function Admin() {
     const last = items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
     return { nombre, total: items.length, activos: activos.length, vencidos: vencidos.length, ultimaInteraccion: last.created_at }
   }).sort((a, b) => new Date(b.ultimaInteraccion).getTime() - new Date(a.ultimaInteraccion).getTime())
+
+  const obraNombres = Array.from(new Set([
+    ...reportesDiarios.filter(d => d.presente && d.obra).map(d => d.obra as string),
+    ...reportesCompras.filter(c => c.obra).map(c => c.obra as string),
+    ...reportesCobros.filter(c => c.obra).map(c => c.obra as string),
+    ...reportesSubcontratos.filter(s => s.obra).map(s => s.obra as string),
+  ]))
+
+  const obrasSummary = obraNombres.map(obra => {
+    const diariosObra = reportesDiarios.filter(d => d.obra === obra && d.presente)
+    const comprasObra = reportesCompras.filter(c => c.obra === obra)
+    const cobrosObra = reportesCobros.filter(c => c.obra === obra)
+    const subcontratosObra = reportesSubcontratos.filter(s => s.obra === obra)
+
+    const diasTrabajados = diariosObra.reduce((sum, d) => sum + d.fraccion_jornada, 0)
+    const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
+    const gastoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0)
+    const saldo = cobrado - gastoCompras - gastoSubcontratos
+
+    const fechas = [...diariosObra.map(d => d.fecha), ...comprasObra.map(c => c.fecha), ...cobrosObra.map(c => c.fecha), ...subcontratosObra.map(s => s.fecha)]
+    const ultimaFecha = fechas.sort().at(-1) || ''
+
+    return { obra, diasTrabajados, gastoCompras, gastoSubcontratos, cobrado, saldo, ultimaFecha }
+  }).sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha))
 
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
   const irazuToken = import.meta.env.VITE_IRAZU_TOKEN as string
@@ -1488,6 +1657,7 @@ export default function Admin() {
           ['respondidos_gustavo', `🔧 Gustavo (${respondidosGustavo.length})`, '#0284c7'],
           ['respondidos_irazu', `🧾 Irazú (${respondidosIrazu.length})`, '#0891b2'],
           ['clientes', `👥 Clientes (${clientesSummary.length})`, '#7c3aed'],
+          ['obras', `🏗️ Obras (${obrasSummary.length})`, '#c1440e'],
         ] as const).map(([k, label, color]) => (
           <button
             key={k}
@@ -1550,6 +1720,46 @@ export default function Admin() {
         renderRespondidos(respondidosGustavo)
       ) : tab === 'respondidos_irazu' ? (
         renderRespondidos(respondidosIrazu)
+      ) : tab === 'obras' ? (
+        obrasSummary.length === 0 ? (
+          <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin obras registradas aún.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {obrasSummary.map(o => (
+              <div
+                key={o.obra}
+                className="card"
+                style={{ padding: '14px 16px', borderLeft: `4px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                    background: '#fdf2ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+                  }}>🏗️</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{o.obra}</p>
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {o.diasTrabajados} día{o.diasTrabajados !== 1 ? 's' : ''} trabajados · Última: {o.ultimaFecha.split('-').reverse().join('/')}
+                    </span>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setHistorialObra(o.obra)}
+                    style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
+                  >
+                    🕐 Detalle
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13 }}>
+                  <span>Compras: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoCompras)}</strong></span>
+                  <span>Subcontratos: <strong style={{ color: 'var(--danger)' }}>{fmtMoney(o.gastoSubcontratos)}</strong></span>
+                  <span>Cobrado: <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobrado)}</strong></span>
+                  <span>Saldo: <strong style={{ color: o.saldo >= 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtMoney(o.saldo)}</strong></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : clientesSummary.length === 0 ? (
         <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin clientes registrados aún.</p>
       ) : (
@@ -1627,6 +1837,17 @@ export default function Admin() {
         onClose={() => setHistorialCliente(null)}
         onSeguimiento={abrirSeguimiento}
         onPedirBoleta={pedirBoleta}
+      />
+    )}
+
+    {historialObra && (
+      <HistorialObraModal
+        obra={historialObra}
+        diarios={reportesDiarios}
+        compras={reportesCompras}
+        cobros={reportesCobros}
+        subcontratos={reportesSubcontratos}
+        onClose={() => setHistorialObra(null)}
       />
     )}
     </div>
