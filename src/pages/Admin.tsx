@@ -132,7 +132,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
       <div style={{ background: 'var(--white)', borderRadius: 'var(--radius)', padding: '2.5rem 2rem', width: '100%', maxWidth: 360, boxShadow: 'var(--shadow-md)' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ width: 52, height: 52, background: 'var(--primary)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: 24, fontWeight: 800, color: '#fff' }}>H</div>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Horma — Pendientes</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Horma Grup — Pendientes</h1>
           <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 4 }}>Acceso de administrador</p>
         </div>
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -537,6 +537,60 @@ function getPeriodo(fecha: string, vista: VistaPeriodo): { key: string; label: s
 
   // vista === 'dia': cada fecha es su propio período
   return { key: fecha, label: fecha.split('-').reverse().join('/'), enCurso: fecha === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}` }
+}
+
+const GUIA_OBRAS_PASOS = [
+  { titulo: 'Mano de obra', texto: 'Lo que cuesta el trabajo de los trabajadores en esta obra: días trabajados × su tarifa diaria, más el viático de los días que corresponda.' },
+  { titulo: 'Compras', texto: 'Materiales y otros gastos que la empresa pagó directamente para esta obra.' },
+  { titulo: 'Subcontratos', texto: 'Lo pagado a subcontratistas externos, como un pintor, que no son parte del equipo fijo.' },
+  { titulo: 'Adelantos', texto: 'Plata adelantada a un trabajador a cuenta de lo que se le debe. No es su pago completo de la semana.' },
+  { titulo: 'Pagos semana', texto: 'La liquidación semanal completa que ya se le pagó a un trabajador.' },
+  { titulo: 'Cobrado', texto: 'Lo que el cliente ya pagó por esta obra.' },
+  { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). En rojo significa que la obra todavía no se paga sola.' },
+  { titulo: 'Falta pagar a trabajadores', texto: 'Lo que se les debe en mano de obra, descontando lo que ya se les adelantó o pagó esta semana.' },
+  { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
+]
+
+function GuiaObras({ onClose }: { onClose: () => void }) {
+  const [paso, setPaso] = useState(0)
+  const total = GUIA_OBRAS_PASOS.length
+  const item = GUIA_OBRAS_PASOS[paso]
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+    >
+      <div style={{ background: 'var(--white)', borderRadius: 16, width: '100%', maxWidth: 400, padding: '1.5rem', boxShadow: '0 8px 40px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Paso {paso + 1} de {total}
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 4, marginBottom: 18 }}>
+          {GUIA_OBRAS_PASOS.map((_, i) => (
+            <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= paso ? 'var(--primary)' : 'var(--border)' }} />
+          ))}
+        </div>
+
+        <h3 style={{ fontSize: 19, fontWeight: 800, color: 'var(--secondary)', marginBottom: 10 }}>{item.titulo}</h3>
+        <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5, marginBottom: 24 }}>{item.texto}</p>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          {paso > 0 && (
+            <button className="btn btn-secondary" onClick={() => setPaso(p => p - 1)} style={{ flex: 1 }}>Atrás</button>
+          )}
+          {paso < total - 1 ? (
+            <button className="btn btn-primary" onClick={() => setPaso(p => p + 1)} style={{ flex: 1 }}>Siguiente</button>
+          ) : (
+            <button className="btn btn-primary" onClick={onClose} style={{ flex: 1 }}>Listo, entendido</button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function calcManoDeObra(diarios: ReporteTrabajadorDia[], tarifas: Trabajador[]): number {
@@ -1648,6 +1702,14 @@ export default function Admin() {
   const [reportesSubcontratos, setReportesSubcontratos] = useState<ReporteSubcontratoDia[]>([])
   const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
   const [trabajadoresTarifas, setTrabajadoresTarifas] = useState<Trabajador[]>([])
+  const [mostrarGuia, setMostrarGuia] = useState(false)
+
+  useEffect(() => {
+    if (tab === 'obras' && !localStorage.getItem('horma_guia_obras_vista')) {
+      setMostrarGuia(true)
+      localStorage.setItem('horma_guia_obras_vista', '1')
+    }
+  }, [tab])
 
   useEffect(() => {
     const token = localStorage.getItem('horma_admin_token')
@@ -1866,7 +1928,7 @@ export default function Admin() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 8px 10px 0', marginRight: 8, borderRight: '1px solid var(--border)' }}>
           <div style={{ width: 28, height: 28, background: 'var(--primary)', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fff', fontSize: 14 }}>H</div>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Horma</span>
+          <span className="font-display" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.3px' }}>Horma Grup</span>
         </div>
         {[
           { label: 'Admin', href: '/admin', active: true, color: 'var(--primary)' },
@@ -2011,7 +2073,14 @@ export default function Admin() {
       ) : tab === 'respondidos_gustavo' ? (
         renderRespondidos(respondidosGustavo)
       ) : tab === 'obras' ? (
-        obrasSummary.length === 0 ? (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+            <button className="btn btn-secondary" onClick={() => setMostrarGuia(true)} style={{ fontSize: 13 }}>
+              ¿Cómo se lee esto?
+            </button>
+          </div>
+          {mostrarGuia && <GuiaObras onClose={() => setMostrarGuia(false)} />}
+          {obrasSummary.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin obras registradas aún.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -2079,7 +2148,8 @@ export default function Admin() {
               </div>
             ))}
           </div>
-        )
+        )}
+        </>
       ) : clientesSummary.length === 0 ? (
         <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin clientes registrados aún.</p>
       ) : (
