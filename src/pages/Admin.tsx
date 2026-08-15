@@ -648,11 +648,18 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
   const gastoCompras = comprasObra.reduce((s, c) => s + c.monto, 0)
   const gastoSubcontratos = subcontratosObra.reduce((s, c) => s + c.monto, 0)
   const cobrado = cobrosObra.reduce((s, c) => s + c.monto, 0)
+  const pagosTrabajadores = diariosObra.filter(d => d.adelanto_monto).sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const totalPagadoTrabajadores = pagosTrabajadores.reduce((s, d) => s + (d.adelanto_monto || 0), 0)
+  const faltaPagarPeriodo = manoDeObra - totalPagadoTrabajadores
 
   return (
     <>
       <div style={{ display: 'flex', gap: 16, marginBottom: 18, fontSize: 13, flexWrap: 'wrap' }}>
         <span><strong>Mano de obra:</strong> {fmtMoney(manoDeObra)}</span>
+        <span><strong>Pagado a trabajadores:</strong> {fmtMoney(totalPagadoTrabajadores)}</span>
+        {faltaPagarPeriodo !== 0 && (
+          <span style={{ color: faltaPagarPeriodo > 0 ? 'var(--warning)' : 'var(--success)' }}><strong>Falta pagar:</strong> {fmtMoney(faltaPagarPeriodo)}</span>
+        )}
         <span><strong>Compras:</strong> {fmtMoney(gastoCompras)}</span>
         <span><strong>Subcontratos:</strong> {fmtMoney(gastoSubcontratos)}</span>
         {cobrado > 0 && <span style={{ color: 'var(--success)' }}><strong>Cobrado:</strong> {fmtMoney(cobrado)}</span>}
@@ -669,7 +676,24 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
               <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
               <span style={{ color: 'var(--muted)' }}>{d.fraccion_jornada === 1 ? 'Día completo' : 'Medio día'}</span>
               {d.viatico && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>Viático</span>}
-              {d.adelanto_monto ? <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>{d.tipo_pago === 'pago_semanal' ? 'Pago semana' : 'Adelanto'} {fmtMoney(d.adelanto_monto)}</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pagos a trabajadores</h3>
+      {pagosTrabajadores.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin pagos registrados en este período.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+          {pagosTrabajadores.map(d => (
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
+              <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: d.tipo_pago === 'pago_semanal' ? 'var(--success)' : 'var(--warning)' }}>
+                {d.tipo_pago === 'pago_semanal' ? 'Pago semana' : 'Adelanto'}
+              </span>
+              <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(d.adelanto_monto || 0)}</span>
             </div>
           ))}
         </div>
