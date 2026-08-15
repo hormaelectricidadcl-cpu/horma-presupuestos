@@ -800,7 +800,6 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Pagos semana', texto: 'La liquidación semanal completa que ya se le pagó a un trabajador.' },
   { titulo: 'Cobrado', texto: 'Lo que el cliente ya pagó por esta obra.' },
   { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). En rojo significa que la obra todavía no se paga sola.' },
-  { titulo: 'Falta pagar a trabajadores', texto: 'Lo que se les debe en mano de obra, descontando lo que ya se les adelantó o pagó esta semana.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
 
@@ -2182,7 +2181,6 @@ export default function Admin() {
       const viaticoMonto = d.viatico ? (tarifa?.viatico_diario || 0) : 0
       return sum + base + viaticoMonto
     }, 0)
-    const faltaPagarTrabajadores = manoDeObra - adelantos - pagosSemanales
     const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0)
     const saldo = cobrado - gastoCompras - gastoSubcontratos - adelantos - pagosSemanales
@@ -2192,7 +2190,7 @@ export default function Admin() {
     const fechas = [...diariosObra.map(d => d.fecha), ...comprasObra.map(c => c.fecha), ...cobrosObra.map(c => c.fecha), ...subcontratosObra.map(s => s.fecha)]
     const ultimaFecha = fechas.sort().at(-1) || ''
 
-    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, diasTrabajados, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, faltaPagarTrabajadores, porReembolsar, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
+    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, diasTrabajados, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
   }).sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha))
 
   const obrasPorCliente = Object.entries(
@@ -2216,6 +2214,7 @@ export default function Admin() {
         padding: '0 1rem',
         display: 'flex', alignItems: 'center', gap: 4,
         boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        overflowX: 'auto', WebkitOverflowScrolling: 'touch',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 8px 10px 0', marginRight: 8, borderRight: '1px solid var(--border)' }}>
           <div style={{ width: 28, height: 28, background: 'var(--primary)', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fff', fontSize: 14 }}>H</div>
@@ -2301,7 +2300,7 @@ export default function Admin() {
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: '1rem', borderBottom: '2px solid var(--border)' }}>
+      <div style={{ display: 'flex', gap: 0, marginBottom: '1rem', borderBottom: '2px solid var(--border)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {([
           ['activos', `Activos (${activos.length})`, 'var(--primary)'],
           ['respondidos_gustavo', `Gustavo (${respondidosGustavo.length})`, '#0284c7'],
@@ -2318,7 +2317,7 @@ export default function Admin() {
               fontSize: 13, fontWeight: tab === k ? 700 : 500,
               color: tab === k ? color : 'var(--muted)',
               borderBottom: `2px solid ${tab === k ? color : 'transparent'}`,
-              marginBottom: -2, whiteSpace: 'nowrap',
+              marginBottom: -2, whiteSpace: 'nowrap', flexShrink: 0,
             }}
           >{label}</button>
         ))}
@@ -2428,11 +2427,6 @@ export default function Admin() {
                             <span>Falta por cobrar: <strong style={{ color: o.restantePresupuesto > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.restantePresupuesto)}</strong></span>
                           )}
                         </div>
-                        {o.faltaPagarTrabajadores !== 0 && (
-                          <span style={{ fontSize: 13 }}>
-                            Falta pagar a trabajadores: <strong style={{ color: o.faltaPagarTrabajadores > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.faltaPagarTrabajadores)}</strong>
-                          </span>
-                        )}
                         {o.gastoSubcontratos !== o.pagadoSubcontratos && (
                           <span style={{ fontSize: 13 }}>
                             Subcontratos: contrato completo {fmtMoney(o.gastoSubcontratos)}, pagado hasta ahora <strong style={{ color: 'var(--warning)' }}>{fmtMoney(o.pagadoSubcontratos)}</strong>

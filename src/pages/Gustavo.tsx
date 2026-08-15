@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Pendiente, TipoPendiente, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador, CuentaPorCobrar, AbonoCuenta, SubcontratoMaster } from '../types'
+import type { Pendiente, TipoPendiente, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador, CuentaPorCobrar, AbonoCuenta, SubcontratoMaster, GastoFijo, GastoVariable } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
 
@@ -818,6 +818,105 @@ function PanelCuentasPorCobrar() {
   )
 }
 
+/* ─── Estado de resultados ───────────────────────────── */
+function mesActualISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function PanelEstadoResultados() {
+  const [mes, setMes] = useState(mesActualISO())
+  const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
+  const [compras, setCompras] = useState<ReporteCompraDia[]>([])
+  const [cobros, setCobros] = useState<ReporteCobroDia[]>([])
+  const [subcontratos, setSubcontratos] = useState<ReporteSubcontratoDia[]>([])
+  const [abonos, setAbonos] = useState<AbonoCuenta[]>([])
+  const [tarifas, setTarifas] = useState<Trabajador[]>([])
+  const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>([])
+  const [gastosVariables, setGastosVariables] = useState<GastoVariable[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: ab }, { data: t }, { data: gf }, { data: gv }] = await Promise.all([
+        supabase.from('reportes_diarios').select('*'),
+        supabase.from('reportes_compras').select('*'),
+        supabase.from('reportes_cobros').select('*'),
+        supabase.from('reportes_subcontratos').select('*'),
+        supabase.from('abonos_cuenta').select('*'),
+        supabase.from('trabajadores').select('*'),
+        supabase.from('gastos_fijos').select('*'),
+        supabase.from('gastos_variables').select('*'),
+      ])
+      setDiarios((d as ReporteTrabajadorDia[]) || [])
+      setCompras((c as ReporteCompraDia[]) || [])
+      setCobros((co as ReporteCobroDia[]) || [])
+      setSubcontratos((s as ReporteSubcontratoDia[]) || [])
+      setAbonos((ab as AbonoCuenta[]) || [])
+      setTarifas((t as Trabajador[]) || [])
+      setGastosFijos((gf as GastoFijo[]) || [])
+      setGastosVariables((gv as GastoVariable[]) || [])
+      setLoading(false)
+    })()
+  }, [])
+
+  if (loading) return <div className="spinner" />
+
+  const delMes = (fecha: string) => fecha.startsWith(mes)
+
+  const ingresosCobros = cobros.filter(c => delMes(c.fecha)).reduce((s, c) => s + c.monto, 0)
+  const ingresosAbonos = abonos.filter(a => delMes(a.fecha)).reduce((s, a) => s + a.monto, 0)
+  const ingresos = ingresosCobros + ingresosAbonos
+
+  const costoManoDeObra = diarios.filter(d => d.presente && delMes(d.fecha)).reduce((sum, d) => {
+    const t = tarifas.find(x => x.nombre === d.trabajador)
+    return sum + d.fraccion_jornada * (t?.tarifa_diaria || 0) + (d.viatico ? (t?.viatico_diario || 0) : 0)
+  }, 0)
+
+  const costoMateriales = compras.filter(c => delMes(c.fecha)).reduce((s, c) => s + c.monto, 0)
+  const utilidadBruta = ingresos - costoManoDeObra - costoMateriales
+
+  const gastosFijosTotal = gastosFijos.filter(g => g.activo).reduce((s, g) => s + g.monto_mensual, 0)
+  const gastosVariablesTotal = gastosVariables.filter(g => delMes(g.fecha)).reduce((s, g) => s + g.monto, 0)
+  const pagosSubcontratistas = subcontratos.filter(s => delMes(s.fecha)).reduce((s, x) => s + x.monto, 0)
+
+  const resultado = utilidadBruta - gastosFijosTotal - gastosVariablesTotal - pagosSubcontratistas
+
+  return (
+    <div>
+      <div className="field" style={{ maxWidth: 220, marginBottom: 20 }}>
+        <label>Mes</label>
+        <input type="month" value={mes} onChange={e => setMes(e.target.value)} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        <StatTile label="Ingresos del mes" valor={fmtMoney(ingresos)} tono="positivo" />
+        <StatTile label="Costo mano de obra" valor={fmtMoney(costoManoDeObra)} />
+        <StatTile label="Costo materiales" valor={fmtMoney(costoMateriales)} />
+        <StatTile label="Utilidad bruta operativa" valor={fmtMoney(utilidadBruta)} tono={utilidadBruta >= 0 ? 'positivo' : 'negativo'} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        <StatTile label="Gastos fijos" valor={fmtMoney(gastosFijosTotal)} />
+        <StatTile label="Gastos variables" valor={fmtMoney(gastosVariablesTotal)} />
+        <StatTile label="Pagos a subcontratistas" valor={fmtMoney(pagosSubcontratistas)} />
+      </div>
+
+      <div className="card" style={{ padding: '20px 24px', borderTop: `4px solid ${resultado >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
+        <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 6 }}>
+          Resultado del mes
+        </p>
+        <p className="font-display" style={{ fontSize: 32, fontWeight: 700, color: resultado >= 0 ? 'var(--success)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+          {fmtMoney(resultado)}
+        </p>
+      </div>
+
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 16 }}>
+        Ingresos = cobros registrados + abonos de cuentas por cobrar del mes. Costo mano de obra, materiales, gastos variables y pagos a subcontratistas son en base caja (lo que pasó ese mes). Gastos fijos es el monto mensual completo, sin importar el día en que caiga.
+      </p>
+    </div>
+  )
+}
+
 function StatTile({ label, valor, tono = 'neutral' }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' }) {
   const color = tono === 'positivo' ? 'var(--success)' : tono === 'negativo' ? 'var(--danger)' : 'var(--secondary)'
   return (
@@ -938,7 +1037,6 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Pagos semana', texto: 'La liquidación semanal completa que ya se le pagó a un trabajador.' },
   { titulo: 'Cobrado', texto: 'Lo que el cliente ya pagó por esta obra.' },
   { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). En rojo significa que la obra todavía no se paga sola.' },
-  { titulo: 'Falta pagar a trabajadores', texto: 'Lo que se les debe en mano de obra, descontando lo que ya se les adelantó o pagó esta semana.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
 
@@ -1367,12 +1465,11 @@ function PanelObras() {
       const viaticoMonto = d.viatico ? (tarifa?.viatico_diario || 0) : 0
       return sum + base + viaticoMonto
     }, 0)
-    const faltaPagarTrabajadores = manoDeObra - adelantos - pagosSemanales
     const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0)
     const saldo = cobrado - gastoCompras - gastoSubcontratos - adelantos - pagosSemanales
 
-    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, presupuestoTotal: maestro?.presupuesto_total ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, faltaPagarTrabajadores, porReembolsar, cobrado, saldo }
+    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, presupuestoTotal: maestro?.presupuesto_total ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, saldo }
   })
 
   if (resumen.length === 0) return (
@@ -1438,11 +1535,6 @@ function PanelObras() {
                   ) : (
                     <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
                   )}
-                  {o.faltaPagarTrabajadores !== 0 && (
-                    <span>
-                      Falta pagar a trabajadores: <strong style={{ color: o.faltaPagarTrabajadores > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.faltaPagarTrabajadores)}</strong>
-                    </span>
-                  )}
                   {o.gastoSubcontratos !== o.pagadoSubcontratos && (
                     <span>
                       Subcontratos: contrato completo {fmtMoney(o.gastoSubcontratos)}, pagado hasta ahora <strong style={{ color: 'var(--warning)' }}>{fmtMoney(o.pagadoSubcontratos)}</strong>
@@ -1485,7 +1577,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'pendientes' | 'clientes' | 'obras' | 'cuentas'>('pendientes')
+  const [tab, setTab] = useState<'pendientes' | 'clientes' | 'obras' | 'cuentas' | 'resultados'>('pendientes')
 
   const tokenValido = token === GUSTAVO_TOKEN
 
@@ -1547,8 +1639,8 @@ export default function Gustavo({ token }: Props) {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0 }}>
-          {([['pendientes', 'Mis tareas'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['cuentas', 'Cuentas por cobrar']] as const).map(([k, label]) => (
+        <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {([['pendientes', 'Mis tareas'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['cuentas', 'Cuentas por cobrar'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -1557,7 +1649,7 @@ export default function Gustavo({ token }: Props) {
                 fontSize: 14, fontWeight: tab === k ? 700 : 500,
                 color: tab === k ? 'var(--primary)' : 'var(--muted)',
                 borderBottom: `2px solid ${tab === k ? 'var(--primary)' : 'transparent'}`,
-                marginBottom: -2,
+                marginBottom: -2, whiteSpace: 'nowrap', flexShrink: 0,
               }}
             >{label}</button>
           ))}
@@ -1569,6 +1661,8 @@ export default function Gustavo({ token }: Props) {
           <PanelObras />
         ) : tab === 'cuentas' ? (
           <PanelCuentasPorCobrar />
+        ) : tab === 'resultados' ? (
+          <PanelEstadoResultados />
         ) : loading ? (
           <div className="spinner" />
         ) : pendientes.length === 0 ? (
