@@ -539,6 +539,15 @@ function getPeriodo(fecha: string, vista: VistaPeriodo): { key: string; label: s
   return { key: fecha, label: fecha.split('-').reverse().join('/'), enCurso: fecha === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}` }
 }
 
+function calcManoDeObra(diarios: ReporteTrabajadorDia[], tarifas: Trabajador[]): number {
+  return diarios.reduce((sum, d) => {
+    const tarifa = tarifas.find(t => t.nombre === d.trabajador)
+    const base = d.fraccion_jornada * (tarifa?.tarifa_diaria || 0)
+    const viaticoMonto = d.viatico ? (tarifa?.viatico_diario || 0) : 0
+    return sum + base + viaticoMonto
+  }, 0)
+}
+
 interface PeriodoAgrupado {
   key: string
   label: string
@@ -573,15 +582,28 @@ function agruparPorPeriodo(
 }
 
 /* ─── Bloque de contenido de un período (reutilizable) ── */
-function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontratosObra, onMarcarReembolsado }: {
+function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontratosObra, tarifas, onMarcarReembolsado }: {
   diariosObra: ReporteTrabajadorDia[]
   comprasObra: ReporteCompraDia[]
   cobrosObra: ReporteCobroDia[]
   subcontratosObra: ReporteSubcontratoDia[]
+  tarifas: Trabajador[]
   onMarcarReembolsado?: (compraId: string, reembolsado: boolean) => void
 }) {
+  const manoDeObra = calcManoDeObra(diariosObra, tarifas)
+  const gastoCompras = comprasObra.reduce((s, c) => s + c.monto, 0)
+  const gastoSubcontratos = subcontratosObra.reduce((s, c) => s + c.monto, 0)
+  const cobrado = cobrosObra.reduce((s, c) => s + c.monto, 0)
+
   return (
     <>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 18, fontSize: 13, flexWrap: 'wrap' }}>
+        <span><strong>Mano de obra:</strong> {fmtMoney(manoDeObra)}</span>
+        <span><strong>Compras:</strong> {fmtMoney(gastoCompras)}</span>
+        <span><strong>Subcontratos:</strong> {fmtMoney(gastoSubcontratos)}</span>
+        {cobrado > 0 && <span style={{ color: 'var(--success)' }}><strong>Cobrado:</strong> {fmtMoney(cobrado)}</span>}
+      </div>
+
       <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trabajadores por día</h3>
       {diariosObra.length === 0 ? (
         <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin jornadas registradas.</p>
@@ -593,7 +615,7 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
               <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
               <span style={{ color: 'var(--muted)' }}>{d.fraccion_jornada === 1 ? 'Día completo' : 'Medio día'}</span>
               {d.viatico && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>Viático</span>}
-              {d.adelanto_monto ? <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>Adelanto {fmtMoney(d.adelanto_monto)}</span> : null}
+              {d.adelanto_monto ? <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>{d.tipo_pago === 'pago_semanal' ? 'Pago semana' : 'Adelanto'} {fmtMoney(d.adelanto_monto)}</span> : null}
             </div>
           ))}
         </div>
@@ -662,11 +684,11 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
 }
 
 /* ─── Fila de período colapsable ─────────────────────── */
-function PeriodoRow({ periodo, onMarcarReembolsado }: { periodo: PeriodoAgrupado; onMarcarReembolsado?: (compraId: string, reembolsado: boolean) => void }) {
+function PeriodoRow({ periodo, tarifas, onMarcarReembolsado }: { periodo: PeriodoAgrupado; tarifas: Trabajador[]; onMarcarReembolsado?: (compraId: string, reembolsado: boolean) => void }) {
   const [abierto, setAbierto] = useState(false)
-  const dias = periodo.diarios.reduce((sum, d) => sum + d.fraccion_jornada, 0)
   const trabajadores = Array.from(new Set(periodo.diarios.map(d => d.trabajador)))
-  const gasto = periodo.compras.reduce((s, c) => s + c.monto, 0) + periodo.subcontratos.reduce((s, c) => s + c.monto, 0)
+  const manoDeObra = calcManoDeObra(periodo.diarios, tarifas)
+  const gasto = manoDeObra + periodo.compras.reduce((s, c) => s + c.monto, 0) + periodo.subcontratos.reduce((s, c) => s + c.monto, 0)
   const cobrado = periodo.cobros.reduce((s, c) => s + c.monto, 0)
 
   return (
@@ -685,7 +707,7 @@ function PeriodoRow({ periodo, onMarcarReembolsado }: { periodo: PeriodoAgrupado
           </span>
         )}
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, color: 'var(--muted)', flexWrap: 'wrap' }}>
-          {dias > 0 && <span>{dias} jornada{dias !== 1 ? 's' : ''} › {trabajadores.length} trabajador{trabajadores.length !== 1 ? 'es' : ''}</span>}
+          {trabajadores.length > 0 && <span>{trabajadores.length} trabajador{trabajadores.length !== 1 ? 'es' : ''}</span>}
           {gasto > 0 && <span style={{ color: 'var(--danger)', fontWeight: 600 }}>{fmtMoney(gasto)}</span>}
           {cobrado > 0 && <span style={{ color: 'var(--success)', fontWeight: 600 }}>{fmtMoney(cobrado)}</span>}
         </span>
@@ -698,6 +720,7 @@ function PeriodoRow({ periodo, onMarcarReembolsado }: { periodo: PeriodoAgrupado
             comprasObra={periodo.compras}
             cobrosObra={periodo.cobros}
             subcontratosObra={periodo.subcontratos}
+            tarifas={tarifas}
             onMarcarReembolsado={onMarcarReembolsado}
           />
         </div>
@@ -712,6 +735,7 @@ function HistorialObraModal({
   compras,
   cobros,
   subcontratos,
+  tarifas,
   onClose,
   onMarcarReembolsado,
 }: {
@@ -720,6 +744,7 @@ function HistorialObraModal({
   compras: ReporteCompraDia[]
   cobros: ReporteCobroDia[]
   subcontratos: ReporteSubcontratoDia[]
+  tarifas: Trabajador[]
   onClose: () => void
   onMarcarReembolsado?: (compraId: string, reembolsado: boolean) => void
 }) {
@@ -750,9 +775,6 @@ function HistorialObraModal({
         }}>
           <div>
             <h2 style={{ fontSize: 17, fontWeight: 800 }}>{obra}</h2>
-            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
-              {diariosObra.length} jornada{diariosObra.length !== 1 ? 's' : ''} registradas
-            </p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
         </div>
@@ -774,12 +796,13 @@ function HistorialObraModal({
               comprasObra={comprasObra}
               cobrosObra={cobrosObra}
               subcontratosObra={subcontratosObra}
+              tarifas={tarifas}
               onMarcarReembolsado={onMarcarReembolsado}
             />
           ) : periodos.length === 0 ? (
             <p style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: '2rem 0' }}>Sin registros todavía.</p>
           ) : (
-            periodos.map(p => <PeriodoRow key={p.key} periodo={p} onMarcarReembolsado={onMarcarReembolsado} />)
+            periodos.map(p => <PeriodoRow key={p.key} periodo={p} tarifas={tarifas} onMarcarReembolsado={onMarcarReembolsado} />)
           )}
         </div>
       </div>
@@ -2144,6 +2167,7 @@ export default function Admin() {
         compras={reportesCompras}
         cobros={reportesCobros}
         subcontratos={reportesSubcontratos}
+        tarifas={trabajadoresTarifas}
         onClose={() => setHistorialObra(null)}
         onMarcarReembolsado={marcarReembolsado}
       />

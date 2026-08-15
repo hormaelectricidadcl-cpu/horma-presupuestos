@@ -172,6 +172,7 @@ export default function Reporte({ token }: Props) {
     setCompras(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
   }
   function quitarCompra(idx: number) {
+    if (!window.confirm('¿Seguro que quieres quitar esta compra?')) return
     setCompras(prev => prev.filter((_, i) => i !== idx))
   }
 
@@ -182,6 +183,7 @@ export default function Reporte({ token }: Props) {
     setCobros(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
   }
   function quitarCobro(idx: number) {
+    if (!window.confirm('¿Seguro que quieres quitar este cobro?')) return
     setCobros(prev => prev.filter((_, i) => i !== idx))
   }
 
@@ -192,6 +194,7 @@ export default function Reporte({ token }: Props) {
     setSubcontratos(prev => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
   }
   function quitarSubcontrato(idx: number) {
+    if (!window.confirm('¿Seguro que quieres quitar este subcontrato?')) return
     setSubcontratos(prev => prev.filter((_, i) => i !== idx))
   }
 
@@ -202,6 +205,7 @@ export default function Reporte({ token }: Props) {
     setTrabajosPuntuales(prev => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
   }
   function quitarTrabajoPuntual(idx: number) {
+    if (!window.confirm('¿Seguro que quieres quitar este trabajo puntual?')) return
     setTrabajosPuntuales(prev => prev.filter((_, i) => i !== idx))
   }
 
