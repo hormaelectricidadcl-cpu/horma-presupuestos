@@ -903,7 +903,7 @@ function PeriodoRow({ periodo }: { periodo: PeriodoAgrupado }) {
           </span>
         )}
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, color: 'var(--muted)', flexWrap: 'wrap' }}>
-          {dias > 0 && <span>{dias} día{dias !== 1 ? 's' : ''} · {trabajadores.length} trabajador{trabajadores.length !== 1 ? 'es' : ''}</span>}
+          {dias > 0 && <span>{dias} día{dias !== 1 ? 's' : ''} › {trabajadores.length} trabajador{trabajadores.length !== 1 ? 'es' : ''}</span>}
           {gasto > 0 && <span style={{ color: 'var(--danger)', fontWeight: 600 }}>{fmtMoney(gasto)}</span>}
           {cobrado > 0 && <span style={{ color: 'var(--success)', fontWeight: 600 }}>{fmtMoney(cobrado)}</span>}
         </span>
