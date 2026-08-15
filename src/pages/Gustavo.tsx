@@ -977,7 +977,8 @@ function PeriodoRow({ periodo, tarifas, onMarcarReembolsado }: { periodo: Period
   const [abierto, setAbierto] = useState(false)
   const trabajadores = Array.from(new Set(periodo.diarios.map(d => d.trabajador)))
   const manoDeObra = calcManoDeObra(periodo.diarios, tarifas)
-  const gasto = manoDeObra + periodo.compras.reduce((s, c) => s + c.monto, 0) + periodo.subcontratos.reduce((s, c) => s + c.monto, 0)
+  const gastoCompras = periodo.compras.reduce((s, c) => s + c.monto, 0)
+  const gastoSubcontratos = periodo.subcontratos.reduce((s, c) => s + c.monto, 0)
   const cobrado = periodo.cobros.reduce((s, c) => s + c.monto, 0)
 
   return (
@@ -997,8 +998,10 @@ function PeriodoRow({ periodo, tarifas, onMarcarReembolsado }: { periodo: Period
         )}
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, color: 'var(--muted)', flexWrap: 'wrap' }}>
           {trabajadores.length > 0 && <span>{trabajadores.length} trabajador{trabajadores.length !== 1 ? 'es' : ''}</span>}
-          {gasto > 0 && <span style={{ color: 'var(--danger)', fontWeight: 600 }}>{fmtMoney(gasto)}</span>}
-          {cobrado > 0 && <span style={{ color: 'var(--success)', fontWeight: 600 }}>{fmtMoney(cobrado)}</span>}
+          {manoDeObra > 0 && <span style={{ color: 'var(--danger)', fontWeight: 600 }}>Mano de obra {fmtMoney(manoDeObra)}</span>}
+          {gastoCompras > 0 && <span style={{ color: 'var(--danger)', fontWeight: 600 }}>Compras {fmtMoney(gastoCompras)}</span>}
+          {gastoSubcontratos > 0 && <span style={{ color: 'var(--danger)', fontWeight: 600 }}>Subcontratos {fmtMoney(gastoSubcontratos)}</span>}
+          {cobrado > 0 && <span style={{ color: 'var(--success)', fontWeight: 600 }}>Cobrado {fmtMoney(cobrado)}</span>}
         </span>
         <span style={{ color: 'var(--muted)', fontSize: 12, flexShrink: 0 }}>{abierto ? '▲' : '▼'}</span>
       </button>
@@ -1328,7 +1331,10 @@ export default function Gustavo({ token }: Props) {
     <div className="pendientes">
       <div style={{ maxWidth: 500, margin: '0 auto', padding: '1.25rem 14px 3rem' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.5rem' }}>
+        <div style={{
+          background: 'var(--secondary)', borderRadius: 16, padding: '18px 20px', marginBottom: '1.5rem',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
           <div style={{
             width: 44, height: 44,
             background: 'var(--primary)', borderRadius: 12,
@@ -1336,9 +1342,10 @@ export default function Gustavo({ token }: Props) {
             fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
           }}>H</div>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>Hola Gustavo</h1>
+            <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 2 }}>Horma Grup</p>
+            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#fff' }}>Hola Gustavo</h1>
             {!loading && tab === 'pendientes' && (
-              <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
                 {pendientes.length === 0 ? 'Sin pendientes' : `${pendientes.length} pendiente${pendientes.length !== 1 ? 's' : ''} para responder`}
               </p>
             )}

@@ -345,7 +345,10 @@ export default function Reporte({ token }: Props) {
     <div className="pendientes">
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '1.25rem 14px 4rem' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.25rem' }}>
+        <div style={{
+          background: 'var(--secondary)', borderRadius: 16, padding: '18px 20px', marginBottom: '1.25rem',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
           <div style={{
             width: 44, height: 44,
             background: 'var(--primary)', borderRadius: 12,
@@ -353,8 +356,9 @@ export default function Reporte({ token }: Props) {
             fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
           }}>H</div>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>Reporte diario</h1>
-            <p style={{ fontSize: 13, color: 'var(--muted)' }}>Horma Grup · Cuéntanos cómo fue el día de obra</p>
+            <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 2 }}>Horma Grup</p>
+            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#fff' }}>Reporte diario</h1>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Cuéntanos cómo fue el día de obra</p>
           </div>
         </div>
 
