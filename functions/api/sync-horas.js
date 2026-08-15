@@ -53,7 +53,7 @@ export async function onRequestPost(context) {
   // y encontrar la última fila real con datos (de ahí se copian las fórmulas H:N).
   const colRes = await sheetsFetch(
     accessToken,
-    `${spreadsheetId}/values/${SHEET_NAME}!A2:B3000`,
+    `${spreadsheetId}/values/${SHEET_NAME}!A2:B3000?valueRenderOption=UNFORMATTED_VALUE`,
     'GET'
   )
   const colVals = colRes.values || []
