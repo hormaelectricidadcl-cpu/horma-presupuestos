@@ -10,7 +10,7 @@ const OBRAS_FALLBACK = [
   OBRA_LIMACHE,
   'Doctora Eloísa (dirección 5843)',
   'Doctora Eloísa - Obra 1 (dirección 5860)',
-  'Luisi Carrera',
+  'Luis Carrera',
   'Renato Sanchez',
 ]
 
