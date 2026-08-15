@@ -1609,8 +1609,17 @@ export default function Admin() {
     const fechas = [...diariosObra.map(d => d.fecha), ...comprasObra.map(c => c.fecha), ...cobrosObra.map(c => c.fecha), ...subcontratosObra.map(s => s.fecha)]
     const ultimaFecha = fechas.sort().at(-1) || ''
 
-    return { obra, obraId: maestro?.id, diasTrabajados, gastoCompras, gastoSubcontratos, adelantos, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
+    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, diasTrabajados, gastoCompras, gastoSubcontratos, adelantos, cobrado, saldo, presupuestoTotal, restantePresupuesto, ultimaFecha }
   }).sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha))
+
+  const obrasPorCliente = Object.entries(
+    obrasSummary.reduce<Record<string, typeof obrasSummary>>((acc, o) => {
+      const key = o.cliente || 'Sin cliente asignado'
+      if (!acc[key]) acc[key] = []
+      acc[key].push(o)
+      return acc
+    }, {})
+  ).sort(([a], [b]) => (a === 'Sin cliente asignado' ? 1 : b === 'Sin cliente asignado' ? -1 : a.localeCompare(b)))
 
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
 
@@ -1775,44 +1784,53 @@ export default function Admin() {
         obrasSummary.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin obras registradas aún.</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {obrasSummary.map(o => (
-              <div
-                key={o.obra}
-                className="card"
-                style={{ padding: '16px 18px', borderTop: `3px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p className="font-serif" style={{ fontSize: 22, marginBottom: 2, color: 'var(--secondary)' }}>{o.obra}</p>
-                    <span className="font-display" style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: '0.2px' }}>
-                      {o.diasTrabajados} día{o.diasTrabajados !== 1 ? 's' : ''} trabajados › Última: {o.ultimaFecha.split('-').reverse().join('/')}
-                    </span>
-                  </div>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setHistorialObra(o.obra)}
-                    style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
-                  >
-                    Detalle
-                  </button>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                  <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
-                  <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
-                  <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
-                  <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
-                  <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
-                </div>
-                <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {o.obraId ? (
-                    <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
-                  ) : (
-                    <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
-                  )}
-                  {o.restantePresupuesto != null && (
-                    <span>Falta por cobrar: <strong style={{ color: o.restantePresupuesto > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.restantePresupuesto)}</strong></span>
-                  )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {obrasPorCliente.map(([cliente, obras]) => (
+              <div key={cliente}>
+                <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                  {cliente}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {obras.map(o => (
+                    <div
+                      key={o.obra}
+                      className="card"
+                      style={{ padding: '16px 18px', borderTop: `3px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p className="font-serif" style={{ fontSize: 22, marginBottom: 2, color: 'var(--secondary)' }}>{o.obra}</p>
+                          <span className="font-display" style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: '0.2px' }}>
+                            {o.diasTrabajados} día{o.diasTrabajados !== 1 ? 's' : ''} trabajados › Última: {o.ultimaFecha.split('-').reverse().join('/')}
+                          </span>
+                        </div>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => setHistorialObra(o.obra)}
+                          style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
+                        >
+                          Detalle
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                        <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
+                        <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+                        <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
+                        <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
+                        <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
+                      </div>
+                      <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {o.obraId ? (
+                          <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
+                        ) : (
+                          <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
+                        )}
+                        {o.restantePresupuesto != null && (
+                          <span>Falta por cobrar: <strong style={{ color: o.restantePresupuesto > 0 ? 'var(--warning)' : 'var(--success)' }}>{fmtMoney(o.restantePresupuesto)}</strong></span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

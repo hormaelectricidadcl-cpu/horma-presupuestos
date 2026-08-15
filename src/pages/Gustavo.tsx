@@ -719,6 +719,122 @@ function EditablePresupuesto({ valor, onGuardar }: { valor: number | null; onGua
   )
 }
 
+/* ─── Historial de obra (modal) ─────────────────────── */
+function HistorialObraModal({
+  obra,
+  diarios,
+  compras,
+  cobros,
+  subcontratos,
+  onClose,
+}: {
+  obra: string
+  diarios: ReporteTrabajadorDia[]
+  compras: ReporteCompraDia[]
+  cobros: ReporteCobroDia[]
+  subcontratos: ReporteSubcontratoDia[]
+  onClose: () => void
+}) {
+  const diariosObra = diarios.filter(d => d.obra === obra && d.presente).sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const comprasObra = compras.filter(c => c.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const cobrosObra = cobros.filter(c => c.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const subcontratosObra = subcontratos.filter(s => s.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+        zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      }}
+    >
+      <div style={{
+        background: 'var(--white)', borderRadius: '16px 16px 0 0',
+        width: '100%', maxWidth: 860, maxHeight: '85vh',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 -4px 32px rgba(0,0,0,0.15)',
+      }}>
+        <div style={{
+          padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+        }}>
+          <div>
+            <h2 style={{ fontSize: 17, fontWeight: 800 }}>{obra}</h2>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+              {diariosObra.length} jornada{diariosObra.length !== 1 ? 's' : ''} registradas
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', padding: '1.25rem 1.5rem', flex: 1 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trabajadores por día</h3>
+          {diariosObra.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin jornadas registradas.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {diariosObra.map(d => (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
+                  <span style={{ color: 'var(--muted)' }}>{d.fraccion_jornada === 1 ? 'Día completo' : 'Medio día'}</span>
+                  {d.viatico && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>Viático</span>}
+                  {d.adelanto_monto ? <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>Adelanto {fmtMoney(d.adelanto_monto)}</span> : null}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compras</h3>
+          {comprasObra.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin compras registradas.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {comprasObra.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ flex: 1 }}>{c.descripcion}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(c.monto)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subcontratos</h3>
+          {subcontratosObra.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin subcontratos registrados.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {subcontratosObra.map(s => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{s.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ flex: 1 }}>{s.subcontrato}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(s.monto)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cobros</h3>
+          {cobrosObra.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sin cobros registrados.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {cobrosObra.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ flex: 1 }}>{c.cliente}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(c.monto)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Panel de obras ────────────────────────────────── */
 function PanelObras() {
   const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
@@ -727,6 +843,7 @@ function PanelObras() {
   const [subcontratos, setSubcontratos] = useState<ReporteSubcontratoDia[]>([])
   const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
   const [loading, setLoading] = useState(true)
+  const [historialObra, setHistorialObra] = useState<string | null>(null)
 
   const cargar = useCallback(async () => {
     const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }] = await Promise.all([
@@ -774,34 +891,72 @@ function PanelObras() {
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0)
     const saldo = cobrado - gastoCompras - gastoSubcontratos - adelantos
 
-    return { obra, obraId: maestro?.id, presupuestoTotal: maestro?.presupuesto_total ?? null, gastoCompras, gastoSubcontratos, adelantos, cobrado, saldo }
+    return { obra, obraId: maestro?.id, cliente: maestro?.cliente ?? null, presupuestoTotal: maestro?.presupuesto_total ?? null, gastoCompras, gastoSubcontratos, adelantos, cobrado, saldo }
   })
 
   if (resumen.length === 0) return (
     <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Sin obras registradas.</p>
   )
 
+  const porCliente = Object.entries(
+    resumen.reduce<Record<string, typeof resumen>>((acc, o) => {
+      const key = o.cliente || 'Sin cliente asignado'
+      if (!acc[key]) acc[key] = []
+      acc[key].push(o)
+      return acc
+    }, {})
+  ).sort(([a], [b]) => (a === 'Sin cliente asignado' ? 1 : b === 'Sin cliente asignado' ? -1 : a.localeCompare(b)))
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {resumen.map(o => (
-        <div key={o.obra} className="card" style={{ padding: '16px 18px', borderTop: `3px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
-          <p className="font-serif" style={{ fontSize: 21, marginBottom: 10, color: 'var(--secondary)' }}>{o.obra}</p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-            <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
-            <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
-            <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
-            <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
-            <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
-          </div>
-          <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-            {o.obraId ? (
-              <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
-            ) : (
-              <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
-            )}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {porCliente.map(([cliente, obras]) => (
+        <div key={cliente}>
+          <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+            {cliente}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {obras.map(o => (
+              <div key={o.obra} className="card" style={{ padding: '16px 18px', borderTop: `3px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                  <p className="font-serif" style={{ fontSize: 21, flex: 1, color: 'var(--secondary)' }}>{o.obra}</p>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setHistorialObra(o.obra)}
+                    style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
+                  >
+                    Detalle
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                  <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
+                  <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+                  <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
+                  <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
+                  <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
+                </div>
+                <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                  {o.obraId ? (
+                    <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
+                  ) : (
+                    <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       ))}
+
+      {historialObra && (
+        <HistorialObraModal
+          obra={historialObra}
+          diarios={diarios}
+          compras={compras}
+          cobros={cobros}
+          subcontratos={subcontratos}
+          onClose={() => setHistorialObra(null)}
+        />
+      )}
     </div>
   )
 }
