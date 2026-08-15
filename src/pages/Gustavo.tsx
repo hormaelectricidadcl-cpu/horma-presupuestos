@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Pendiente, TipoPendiente, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador } from '../types'
+import type { Pendiente, TipoPendiente, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador, CuentaPorCobrar, AbonoCuenta } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
 
@@ -664,6 +664,160 @@ function fmtMoney(n: number) {
   return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString('es-CL')}`
 }
 
+/* ─── Cuentas por cobrar ─────────────────────────────── */
+function PanelCuentasPorCobrar() {
+  const [cuentas, setCuentas] = useState<CuentaPorCobrar[]>([])
+  const [abonos, setAbonos] = useState<AbonoCuenta[]>([])
+  const [loading, setLoading] = useState(true)
+  const [mostrarForm, setMostrarForm] = useState(false)
+  const [nuevaCuenta, setNuevaCuenta] = useState({ pagador: '', concepto: '', obra: '', total_presupuesto: '' })
+  const [nuevoAbono, setNuevoAbono] = useState<Record<string, { fecha: string; monto: string }>>({})
+
+  const cargar = useCallback(async () => {
+    const [{ data: c }, { data: a }] = await Promise.all([
+      supabase.from('cuentas_por_cobrar').select('*').order('created_at', { ascending: false }),
+      supabase.from('abonos_cuenta').select('*'),
+    ])
+    setCuentas((c as CuentaPorCobrar[]) || [])
+    setAbonos((a as AbonoCuenta[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function crearCuenta() {
+    if (!nuevaCuenta.pagador.trim() || !nuevaCuenta.concepto.trim() || !nuevaCuenta.total_presupuesto.trim()) {
+      alert('Completa quién paga, el concepto y el presupuesto total.')
+      return
+    }
+    await supabase.from('cuentas_por_cobrar').insert({
+      pagador: nuevaCuenta.pagador.trim(),
+      concepto: nuevaCuenta.concepto.trim(),
+      obra: nuevaCuenta.obra.trim() || null,
+      total_presupuesto: Number(nuevaCuenta.total_presupuesto),
+    })
+    setNuevaCuenta({ pagador: '', concepto: '', obra: '', total_presupuesto: '' })
+    setMostrarForm(false)
+    cargar()
+  }
+
+  async function eliminarCuenta(id: string) {
+    if (!window.confirm('¿Seguro que quieres eliminar esta cuenta y todos sus abonos?')) return
+    await supabase.from('cuentas_por_cobrar').delete().eq('id', id)
+    cargar()
+  }
+
+  async function agregarAbono(cuentaId: string) {
+    const datos = nuevoAbono[cuentaId] || { fecha: '', monto: '' }
+    if (!datos.fecha.trim() || !datos.monto.trim()) {
+      alert('Completa la fecha y el monto del abono.')
+      return
+    }
+    await supabase.from('abonos_cuenta').insert({ cuenta_id: cuentaId, fecha: datos.fecha, monto: Number(datos.monto) })
+    setNuevoAbono(prev => ({ ...prev, [cuentaId]: { fecha: '', monto: '' } }))
+    cargar()
+  }
+
+  async function eliminarAbono(id: string) {
+    if (!window.confirm('¿Seguro que quieres quitar este abono?')) return
+    await supabase.from('abonos_cuenta').delete().eq('id', id)
+    cargar()
+  }
+
+  if (loading) return <div className="spinner" />
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+        <button className="btn btn-primary" onClick={() => setMostrarForm(x => !x)}>
+          {mostrarForm ? 'Cancelar' : '+ Nueva cuenta'}
+        </button>
+      </div>
+
+      {mostrarForm && (
+        <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="field">
+              <label>¿Quién paga?</label>
+              <input type="text" placeholder="Ej: Ignacio" value={nuevaCuenta.pagador} onChange={e => setNuevaCuenta(p => ({ ...p, pagador: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Concepto</label>
+              <input type="text" placeholder="Ej: Doctora Eloísa dirección 5860" value={nuevaCuenta.concepto} onChange={e => setNuevaCuenta(p => ({ ...p, concepto: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Obra relacionada (opcional)</label>
+              <input type="text" placeholder="Ej: Ohiggins 126 Limache" value={nuevaCuenta.obra} onChange={e => setNuevaCuenta(p => ({ ...p, obra: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Presupuesto total</label>
+              <input type="number" min="0" placeholder="Monto en pesos" value={nuevaCuenta.total_presupuesto} onChange={e => setNuevaCuenta(p => ({ ...p, total_presupuesto: e.target.value }))} />
+            </div>
+            <button className="btn btn-primary" onClick={crearCuenta}>Guardar cuenta</button>
+          </div>
+        </div>
+      )}
+
+      {cuentas.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin cuentas registradas todavía.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {cuentas.map(c => {
+            const abonosCuenta = abonos.filter(a => a.cuenta_id === c.id).sort((a, b) => b.fecha.localeCompare(a.fecha))
+            const totalAbonado = abonosCuenta.reduce((s, a) => s + a.monto, 0)
+            const restante = c.total_presupuesto - totalAbonado
+            const datosNuevo = nuevoAbono[c.id] || { fecha: '', monto: '' }
+            return (
+              <div key={c.id} className="card" style={{ padding: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <p className="font-serif" style={{ fontSize: 18, marginBottom: 2, color: 'var(--secondary)' }}>{c.concepto}</p>
+                    <span className="font-display" style={{ fontSize: 12, color: 'var(--muted)' }}>{c.pagador}{c.obra ? ` › ${c.obra}` : ''}</span>
+                  </div>
+                  <button className="btn btn-ghost" onClick={() => eliminarCuenta(c.id)} style={{ fontSize: 12, flexShrink: 0 }}>Eliminar cuenta</button>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <StatTile label="Presupuesto total" valor={fmtMoney(c.total_presupuesto)} />
+                  <StatTile label="Abonado" valor={fmtMoney(totalAbonado)} tono="positivo" />
+                  <StatTile label="Restante" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
+                </div>
+
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Abonos</p>
+                {abonosCuenta.length === 0 ? (
+                  <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12 }}>Sin abonos registrados.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                    {abonosCuenta.map(a => (
+                      <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                        <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{a.fecha.split('-').reverse().join('/')}</span>
+                        <span style={{ flex: 1, fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(a.monto)}</span>
+                        <button onClick={() => eliminarAbono(a.id)} className="btn btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }}>Quitar</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                    <label>Fecha del abono</label>
+                    <input type="date" value={datosNuevo.fecha} onChange={e => setNuevoAbono(prev => ({ ...prev, [c.id]: { ...datosNuevo, fecha: e.target.value } }))} />
+                  </div>
+                  <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                    <label>Monto del abono</label>
+                    <input type="number" min="0" placeholder="Monto en pesos" value={datosNuevo.monto} onChange={e => setNuevoAbono(prev => ({ ...prev, [c.id]: { ...datosNuevo, monto: e.target.value } }))} />
+                  </div>
+                  <button className="btn btn-secondary" onClick={() => agregarAbono(c.id)} style={{ flexShrink: 0 }}>+ Agregar abono</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StatTile({ label, valor, tono = 'neutral' }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' }) {
   const color = tono === 'positivo' ? 'var(--success)' : tono === 'negativo' ? 'var(--danger)' : 'var(--secondary)'
   return (
@@ -1319,7 +1473,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'pendientes' | 'clientes' | 'obras'>('pendientes')
+  const [tab, setTab] = useState<'pendientes' | 'clientes' | 'obras' | 'cuentas'>('pendientes')
 
   const tokenValido = token === GUSTAVO_TOKEN
 
@@ -1382,7 +1536,7 @@ export default function Gustavo({ token }: Props) {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0 }}>
-          {([['pendientes', 'Mis tareas'], ['clientes', 'Clientes'], ['obras', 'Obras']] as const).map(([k, label]) => (
+          {([['pendientes', 'Mis tareas'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['cuentas', 'Cuentas por cobrar']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -1401,6 +1555,8 @@ export default function Gustavo({ token }: Props) {
           <PanelClientes />
         ) : tab === 'obras' ? (
           <PanelObras />
+        ) : tab === 'cuentas' ? (
+          <PanelCuentasPorCobrar />
         ) : loading ? (
           <div className="spinner" />
         ) : pendientes.length === 0 ? (

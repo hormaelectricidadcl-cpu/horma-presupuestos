@@ -108,3 +108,19 @@ export interface Trabajador {
   tarifa_diaria: number
   viatico_diario: number
 }
+
+export interface CuentaPorCobrar {
+  id: string
+  pagador: string
+  concepto: string
+  obra: string | null
+  total_presupuesto: number
+  activa: boolean
+}
+
+export interface AbonoCuenta {
+  id: string
+  cuenta_id: string
+  fecha: string
+  monto: number
+}
