@@ -655,107 +655,111 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
   return (
     <>
       <div style={{ display: 'flex', gap: 16, marginBottom: 18, fontSize: 13, flexWrap: 'wrap' }}>
-        <span><strong>Mano de obra:</strong> {fmtMoney(manoDeObra)}</span>
-        <span><strong>Pagado a trabajadores:</strong> {fmtMoney(totalPagadoTrabajadores)}</span>
+        {manoDeObra > 0 && <span><strong>Mano de obra:</strong> {fmtMoney(manoDeObra)}</span>}
+        {manoDeObra > 0 && <span><strong>Pagado a trabajadores:</strong> {fmtMoney(totalPagadoTrabajadores)}</span>}
         {faltaPagarPeriodo !== 0 && (
           <span style={{ color: faltaPagarPeriodo > 0 ? 'var(--warning)' : 'var(--success)' }}><strong>Falta pagar:</strong> {fmtMoney(faltaPagarPeriodo)}</span>
         )}
-        <span><strong>Compras:</strong> {fmtMoney(gastoCompras)}</span>
-        <span><strong>Subcontratos:</strong> {fmtMoney(gastoSubcontratos)}</span>
+        {gastoCompras > 0 && <span><strong>Compras:</strong> {fmtMoney(gastoCompras)}</span>}
+        {gastoSubcontratos > 0 && <span><strong>Subcontratos:</strong> {fmtMoney(gastoSubcontratos)}</span>}
         {cobrado > 0 && <span style={{ color: 'var(--success)' }}><strong>Cobrado:</strong> {fmtMoney(cobrado)}</span>}
       </div>
 
-      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trabajadores por día</h3>
-      {diariosObra.length === 0 ? (
-        <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin jornadas registradas.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-          {diariosObra.map(d => (
-            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
-              <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
-              <span style={{ color: 'var(--muted)' }}>{d.fraccion_jornada === 1 ? 'Día completo' : 'Medio día'}</span>
-              {d.viatico && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>Viático</span>}
-            </div>
-          ))}
-        </div>
+      {diariosObra.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trabajadores por día</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            {diariosObra.map(d => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
+                <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
+                <span style={{ color: 'var(--muted)' }}>{d.fraccion_jornada === 1 ? 'Día completo' : 'Medio día'}</span>
+                {d.viatico && <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>Viático</span>}
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
-      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pagos a trabajadores</h3>
-      {pagosTrabajadores.length === 0 ? (
-        <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin pagos registrados en este período.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-          {pagosTrabajadores.map(d => (
-            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
-              <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: d.tipo_pago === 'pago_semanal' ? 'var(--success)' : 'var(--warning)' }}>
-                {d.tipo_pago === 'pago_semanal' ? 'Pago semana' : 'Adelanto'}
-              </span>
-              <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(d.adelanto_monto || 0)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compras</h3>
-      {comprasObra.length === 0 ? (
-        <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin compras registradas.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-          {comprasObra.map(c => (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
-              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
-              <span style={{ flex: 1 }}>{c.descripcion}</span>
-              {c.pagado_por && (
-                <span style={{ fontSize: 11, fontWeight: 600, color: c.reembolsado ? 'var(--success)' : 'var(--warning)' }}>
-                  {c.reembolsado ? `Reembolsado a ${c.pagado_por}` : `Pagó ${c.pagado_por} — sin reembolsar`}
+      {pagosTrabajadores.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pagos a trabajadores</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            {pagosTrabajadores.map(d => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
+                <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: d.tipo_pago === 'pago_semanal' ? 'var(--success)' : 'var(--warning)' }}>
+                  {d.tipo_pago === 'pago_semanal' ? 'Pago semana' : 'Adelanto'}
                 </span>
-              )}
-              <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(c.monto)}</span>
-              {c.pagado_por && onMarcarReembolsado && (
-                <button
-                  onClick={() => onMarcarReembolsado(c.id, !c.reembolsado)}
-                  className="btn btn-secondary"
-                  style={{ fontSize: 11, padding: '3px 8px' }}
-                >
-                  {c.reembolsado ? 'Deshacer' : 'Marcar reembolsado'}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+                <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(d.adelanto_monto || 0)}</span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
-      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subcontratos</h3>
-      {subcontratosObra.length === 0 ? (
-        <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Sin subcontratos registrados.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-          {subcontratosObra.map(s => (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{s.fecha.split('-').reverse().join('/')}</span>
-              <span style={{ flex: 1 }}>{s.subcontrato}</span>
+      {comprasObra.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compras</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            {comprasObra.map(c => (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
+                <span style={{ flex: 1 }}>{c.descripcion}</span>
+                {c.pagado_por && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: c.reembolsado ? 'var(--success)' : 'var(--warning)' }}>
+                    {c.reembolsado ? `Reembolsado a ${c.pagado_por}` : `Pagó ${c.pagado_por} — sin reembolsar`}
+                  </span>
+                )}
+                <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(c.monto)}</span>
+                {c.pagado_por && onMarcarReembolsado && (
+                  <button
+                    onClick={() => onMarcarReembolsado(c.id, !c.reembolsado)}
+                    className="btn btn-secondary"
+                    style={{ fontSize: 11, padding: '3px 8px' }}
+                  >
+                    {c.reembolsado ? 'Deshacer' : 'Marcar reembolsado'}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {subcontratosObra.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subcontratos</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            {subcontratosObra.map(s => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{s.fecha.split('-').reverse().join('/')}</span>
+                <span style={{ flex: 1 }}>{s.subcontrato}</span>
               <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(s.monto)}</span>
             </div>
           ))}
         </div>
+        </>
       )}
 
-      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cobros</h3>
-      {cobrosObra.length === 0 ? (
-        <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sin cobros registrados.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {cobrosObra.map(c => (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
-              <span style={{ flex: 1 }}>{c.cliente}</span>
-              <span style={{ fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(c.monto)}</span>
-            </div>
-          ))}
-        </div>
+      {cobrosObra.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cobros</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {cobrosObra.map(c => (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
+                <span style={{ flex: 1 }}>{c.cliente}</span>
+                <span style={{ fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(c.monto)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {diariosObra.length === 0 && pagosTrabajadores.length === 0 && comprasObra.length === 0 && subcontratosObra.length === 0 && cobrosObra.length === 0 && (
+        <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sin registros en este período.</p>
       )}
     </>
   )
