@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import Reporte from './Reporte'
 import type { Pendiente, TipoPendiente, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador, CuentaPorCobrar, AbonoCuenta, SubcontratoMaster, GastoFijo, GastoVariable } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
+const REPORTE_TOKEN = import.meta.env.VITE_REPORTE_TOKEN as string
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
   confirmar_visita: 'Confirmar visita',
@@ -1577,7 +1579,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'pendientes' | 'clientes' | 'obras' | 'cuentas' | 'resultados'>('pendientes')
+  const [tab, setTab] = useState<'pendientes' | 'reporte' | 'clientes' | 'obras' | 'cuentas' | 'resultados'>('pendientes')
 
   const tokenValido = token === GUSTAVO_TOKEN
 
@@ -1640,7 +1642,7 @@ export default function Gustavo({ token }: Props) {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {([['pendientes', 'Mis tareas'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['cuentas', 'Cuentas por cobrar'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
+          {([['pendientes', 'Mis tareas'], ['reporte', 'Reporte diario'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['cuentas', 'Cuentas por cobrar'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -1655,7 +1657,9 @@ export default function Gustavo({ token }: Props) {
           ))}
         </div>
 
-        {tab === 'clientes' ? (
+        {tab === 'reporte' ? (
+          <Reporte token={REPORTE_TOKEN} embedded />
+        ) : tab === 'clientes' ? (
           <PanelClientes />
         ) : tab === 'obras' ? (
           <PanelObras />

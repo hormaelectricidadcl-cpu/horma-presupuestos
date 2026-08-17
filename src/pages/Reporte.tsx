@@ -79,10 +79,11 @@ function defaultTrabajadores(): Record<string, TrabajadorState> {
 /* ─── Reporte page ──────────────────────────────────── */
 interface Props {
   token: string | null
+  embedded?: boolean
 }
 
-export default function Reporte({ token }: Props) {
-  const tokenValido = token === REPORTE_TOKEN
+export default function Reporte({ token, embedded = false }: Props) {
+  const tokenValido = embedded || token === REPORTE_TOKEN
 
   const [fecha, setFecha] = useState(todayISO())
   const [loading, setLoading] = useState(true)
@@ -342,25 +343,27 @@ export default function Reporte({ token }: Props) {
   }
 
   return (
-    <div className="pendientes">
-      <div style={{ maxWidth: 560, margin: '0 auto', padding: '1.25rem 14px 4rem' }}>
+    <div className={embedded ? undefined : 'pendientes'}>
+      <div style={{ maxWidth: 560, margin: '0 auto', padding: embedded ? 0 : '1.25rem 14px 4rem' }}>
         {/* Header */}
-        <div style={{
-          background: 'var(--secondary)', borderRadius: 16, padding: '18px 20px', marginBottom: '1.25rem',
-          display: 'flex', alignItems: 'center', gap: 12,
-        }}>
+        {!embedded && (
           <div style={{
-            width: 44, height: 44,
-            background: 'var(--primary)', borderRadius: 12,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
-          }}>H</div>
-          <div>
-            <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 2 }}>Horma Grup</p>
-            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#fff' }}>Reporte diario</h1>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Cuéntanos cómo fue el día de obra</p>
+            background: 'var(--secondary)', borderRadius: 16, padding: '18px 20px', marginBottom: '1.25rem',
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <div style={{
+              width: 44, height: 44,
+              background: 'var(--primary)', borderRadius: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
+            }}>H</div>
+            <div>
+              <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 2 }}>Horma Grup</p>
+              <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#fff' }}>Reporte diario</h1>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Cuéntanos cómo fue el día de obra</p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Fecha */}
         <div className="field" style={{ marginBottom: 20 }}>
