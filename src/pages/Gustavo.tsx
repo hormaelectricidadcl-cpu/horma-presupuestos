@@ -828,10 +828,12 @@ function mesActualISO() {
 
 function PanelEstadoResultados() {
   const [mes, setMes] = useState(mesActualISO())
+  const [obraFiltro, setObraFiltro] = useState('')
   const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
   const [compras, setCompras] = useState<ReporteCompraDia[]>([])
   const [cobros, setCobros] = useState<ReporteCobroDia[]>([])
   const [subcontratos, setSubcontratos] = useState<ReporteSubcontratoDia[]>([])
+  const [cuentas, setCuentas] = useState<CuentaPorCobrar[]>([])
   const [abonos, setAbonos] = useState<AbonoCuenta[]>([])
   const [tarifas, setTarifas] = useState<Trabajador[]>([])
   const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>([])
@@ -840,11 +842,12 @@ function PanelEstadoResultados() {
 
   useEffect(() => {
     (async () => {
-      const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: ab }, { data: t }, { data: gf }, { data: gv }] = await Promise.all([
+      const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: cu }, { data: ab }, { data: t }, { data: gf }, { data: gv }] = await Promise.all([
         supabase.from('reportes_diarios').select('*'),
         supabase.from('reportes_compras').select('*'),
         supabase.from('reportes_cobros').select('*'),
         supabase.from('reportes_subcontratos').select('*'),
+        supabase.from('cuentas_por_cobrar').select('*'),
         supabase.from('abonos_cuenta').select('*'),
         supabase.from('trabajadores').select('*'),
         supabase.from('gastos_fijos').select('*'),
@@ -854,6 +857,7 @@ function PanelEstadoResultados() {
       setCompras((c as ReporteCompraDia[]) || [])
       setCobros((co as ReporteCobroDia[]) || [])
       setSubcontratos((s as ReporteSubcontratoDia[]) || [])
+      setCuentas((cu as CuentaPorCobrar[]) || [])
       setAbonos((ab as AbonoCuenta[]) || [])
       setTarifas((t as Trabajador[]) || [])
       setGastosFijos((gf as GastoFijo[]) || [])
@@ -864,31 +868,52 @@ function PanelEstadoResultados() {
 
   if (loading) return <div className="spinner" />
 
-  const delMes = (fecha: string) => fecha.startsWith(mes)
+  const obras = Array.from(new Set([
+    ...diarios.filter(d => d.obra).map(d => d.obra as string),
+    ...compras.filter(c => c.obra).map(c => c.obra as string),
+    ...cobros.filter(c => c.obra).map(c => c.obra as string),
+    ...subcontratos.filter(s => s.obra).map(s => s.obra as string),
+  ])).sort()
 
-  const ingresosCobros = cobros.filter(c => delMes(c.fecha)).reduce((s, c) => s + c.monto, 0)
-  const ingresosAbonos = abonos.filter(a => delMes(a.fecha)).reduce((s, a) => s + a.monto, 0)
+  const delMes = (fecha: string) => fecha.startsWith(mes)
+  const deLaObra = <T extends { obra?: string | null }>(items: T[]) => obraFiltro ? items.filter(i => i.obra === obraFiltro) : items
+
+  const cobrosFiltrados = deLaObra(cobros).filter(c => delMes(c.fecha))
+  const ingresosCobros = cobrosFiltrados.reduce((s, c) => s + c.monto, 0)
+
+  const cuentaIdsDeLaObra = obraFiltro ? new Set(cuentas.filter(c => c.obra === obraFiltro).map(c => c.id)) : null
+  const abonosFiltrados = abonos.filter(a => delMes(a.fecha) && (!cuentaIdsDeLaObra || cuentaIdsDeLaObra.has(a.cuenta_id)))
+  const ingresosAbonos = abonosFiltrados.reduce((s, a) => s + a.monto, 0)
   const ingresos = ingresosCobros + ingresosAbonos
 
-  const costoManoDeObra = diarios.filter(d => d.presente && delMes(d.fecha)).reduce((sum, d) => {
+  const costoManoDeObra = deLaObra(diarios).filter(d => d.presente && delMes(d.fecha)).reduce((sum, d) => {
     const t = tarifas.find(x => x.nombre === d.trabajador)
     return sum + d.fraccion_jornada * (t?.tarifa_diaria || 0) + (d.viatico ? (t?.viatico_diario || 0) : 0)
   }, 0)
 
-  const costoMateriales = compras.filter(c => delMes(c.fecha)).reduce((s, c) => s + c.monto, 0)
+  const costoMateriales = deLaObra(compras).filter(c => delMes(c.fecha)).reduce((s, c) => s + c.monto, 0)
   const utilidadBruta = ingresos - costoManoDeObra - costoMateriales
 
-  const gastosFijosTotal = gastosFijos.filter(g => g.activo).reduce((s, g) => s + g.monto_mensual, 0)
-  const gastosVariablesTotal = gastosVariables.filter(g => delMes(g.fecha)).reduce((s, g) => s + g.monto, 0)
-  const pagosSubcontratistas = subcontratos.filter(s => delMes(s.fecha)).reduce((s, x) => s + x.monto, 0)
+  const gastosFijosTotal = obraFiltro ? 0 : gastosFijos.filter(g => g.activo).reduce((s, g) => s + g.monto_mensual, 0)
+  const gastosVariablesTotal = obraFiltro ? 0 : gastosVariables.filter(g => delMes(g.fecha)).reduce((s, g) => s + g.monto, 0)
+  const pagosSubcontratistas = deLaObra(subcontratos).filter(s => delMes(s.fecha)).reduce((s, x) => s + x.monto, 0)
 
   const resultado = utilidadBruta - gastosFijosTotal - gastosVariablesTotal - pagosSubcontratistas
 
   return (
     <div>
-      <div className="field" style={{ maxWidth: 220, marginBottom: 20 }}>
-        <label>Mes</label>
-        <input type="month" value={mes} onChange={e => setMes(e.target.value)} />
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div className="field" style={{ maxWidth: 220 }}>
+          <label>Mes</label>
+          <input type="month" value={mes} onChange={e => setMes(e.target.value)} />
+        </div>
+        <div className="field" style={{ maxWidth: 280 }}>
+          <label>Obra</label>
+          <select value={obraFiltro} onChange={e => setObraFiltro(e.target.value)}>
+            <option value="">Todas las obras (consolidado)</option>
+            {obras.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -905,7 +930,7 @@ function PanelEstadoResultados() {
 
       <div className="card" style={{ padding: '20px 24px', borderTop: `4px solid ${resultado >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
         <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 6 }}>
-          Resultado del mes
+          {obraFiltro ? `Resultado del mes — ${obraFiltro}` : 'Resultado del mes'}
         </p>
         <p className="font-display" style={{ fontSize: 32, fontWeight: 700, color: resultado >= 0 ? 'var(--success)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
           {fmtMoney(resultado)}
@@ -914,6 +939,7 @@ function PanelEstadoResultados() {
 
       <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 16 }}>
         Ingresos = cobros registrados + abonos de cuentas por cobrar del mes. Costo mano de obra, materiales, gastos variables y pagos a subcontratistas son en base caja (lo que pasó ese mes). Gastos fijos es el monto mensual completo, sin importar el día en que caiga.
+        {obraFiltro && ' Al ver una obra específica, los gastos fijos y variables no se incluyen porque son de toda la empresa, no de una obra en particular — para verlos, selecciona "Todas las obras".'}
       </p>
     </div>
   )
