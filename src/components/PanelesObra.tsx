@@ -525,8 +525,17 @@ export function PanelObras() {
     // (cuenta.obra === esta obra) — sin esto, obras como "Doctora Eloísa 5860"
     // muestran Cobrado $0 aunque ya se hayan recibido varios abonos, porque esos
     // abonos viven en abonos_cuenta, no en reportes_cobros.
-    const cuentaIdsObra = new Set(cuentas.filter(c => c.obra === obra).map(c => c.id))
+    const cuentasObra = cuentas.filter(c => c.obra === obra)
+    const cuentaIdsObra = new Set(cuentasObra.map(c => c.id))
     const cobradoManual = abonos.filter(a => cuentaIdsObra.has(a.cuenta_id)).reduce((sum, a) => sum + a.monto, 0)
+    // Lo mismo que "Pendiente" en la pestaña Cuentas por cobrar, sumado — para
+    // que Gustavo vea el mismo número acá sin tener que abrir otra pestaña y
+    // hacer la cuenta él mismo. Si la obra tiene cuenta(s) manual(es), se suma
+    // el restante de esas; si no, se usa presupuesto de la obra menos cobrado.
+    const pendienteManual = cuentasObra.reduce((sum, c) => {
+      const abonadoCuenta = abonos.filter(a => a.cuenta_id === c.id).reduce((s, a) => s + a.monto, 0)
+      return sum + Math.max(c.total_presupuesto - abonadoCuenta, 0)
+    }, 0)
 
     const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
     const contratosObra = subcontratosMaster.filter(s => s.obra === obra)
@@ -549,8 +558,11 @@ export function PanelObras() {
     const facturado = facturas.filter(f => f.obra === obra).reduce((sum, f) => sum + f.monto, 0)
     const porFacturar = presupuestoTotal != null ? presupuestoTotal - facturado : null
     const activa = maestro?.activa ?? true
+    const faltaPorCobrar = cuentasObra.length > 0
+      ? pendienteManual
+      : (presupuestoTotal != null ? Math.max(presupuestoTotal - cobrado, 0) : null)
 
-    return { obra, obraId: maestro?.id, activa, cliente: maestro?.cliente ?? null, presupuestoTotal, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, facturado, porFacturar }
+    return { obra, obraId: maestro?.id, activa, cliente: maestro?.cliente ?? null, presupuestoTotal, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, facturado, porFacturar, faltaPorCobrar }
   })
 
   const enCurso = resumen.filter(o => o.activa)
@@ -662,6 +674,11 @@ export function PanelObras() {
                       <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
                       <StatTile label="Pagos semana" valor={fmtMoney(o.pagosSemanales)} />
                       <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
+                      <StatTile
+                        label="Falta por cobrar"
+                        valor={o.faltaPorCobrar != null ? fmtMoney(o.faltaPorCobrar) : 'sin presupuesto'}
+                        tono={o.faltaPorCobrar == null ? 'neutral' : o.faltaPorCobrar > 0 ? 'alerta' : 'positivo'}
+                      />
                       <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
                       <StatTile label="Facturado" valor={fmtMoney(o.facturado)} />
                       <StatTile label="Por facturar" valor={o.porFacturar != null ? fmtMoney(o.porFacturar) : 'sin presupuesto'} />
@@ -1111,6 +1128,7 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Adelantos', texto: 'Plata adelantada a un trabajador a cuenta de lo que se le debe. No es su pago completo de la semana.' },
   { titulo: 'Pagos semana', texto: 'La liquidación semanal completa que ya se le pagó a un trabajador.' },
   { titulo: 'Cobrado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual.' },
+  { titulo: 'Falta por cobrar', texto: 'Cuánto le queda debiendo el cliente por esta obra, en total — el mismo número que ves en la pestaña "Cuentas por cobrar" para esta obra, sumado en un solo lugar.' },
   { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). Es la plata en caja de la obra hoy, no cuánto falta que pague el cliente — para eso mira "Por facturar".' },
   { titulo: 'Facturado', texto: 'El total que ya se le facturó formalmente al cliente por esta obra, sume o no coincida con lo cobrado (a veces se cobra antes de facturar, o se factura antes de cobrar).' },
   { titulo: 'Por facturar', texto: 'Presupuesto total menos lo facturado — cuánto le queda al cliente por facturarle en total. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto total cargado.' },
