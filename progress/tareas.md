@@ -4,8 +4,11 @@
 ## 🔲 Verificar en producción el sync nuevo a Google Sheets
 `sync-compras.js` / `sync-cobros.js` / `sync-subcontratos.js` (2026-08-20) no se pudieron probar en local (sin wrangler/pages dev). Falta: que alguien cargue un reporte diario real después del deploy y confirme en la planilla "Control de Obra - Horma" que las filas nuevas aparecieron bien (incluida la fila espejo en "Asignación Materiales" para compras).
 
-## 🔲 Portar a Admin.tsx las funciones de obras que solo están en Gustavo.tsx
-Crear obra nueva, editar cliente de una obra, tracking de facturado — viven en `PanelObras` dentro de `Gustavo.tsx`, no en el módulo compartido `PanelesObra.tsx`, porque en `Admin.tsx` la sección de obras está embebida en el componente gigante `Admin()` en vez de ser un componente aislado. Pendiente desde 2026-08-18.
+## ✅ Portar a Admin.tsx las funciones de obras que solo estaban en Gustavo.tsx
+Hecho 2026-08-20: `PanelObras` se extrajo a `PanelesObra.tsx` como componente compartido, Admin.tsx ya no tiene su propia copia embebida.
+
+## 🔲 Falta el presupuesto real de "Doctora Eloísa (dirección 5843)"
+Está "sin definir" en el sistema — no se puede inventar el número, hay que pedírselo a Gustavo/Alexandra y cargarlo con el botón "✎ editar" en la pestaña Obras.
 
 ## 🔲 Seguridad Supabase — RLS deshabilitado
 7 tablas sin RLS. `notas_rapidas` y `tareas_clientes` SÍ son de esta app — activar RLS con política `anon` `using(true)` es seguro y bajo riesgo (no cambia el nivel real de exposición). Las 5 tablas `seo_*` NO son de esta app (comparten la misma base de datos con otra herramienta de Alexandra) — necesitan que ella decida qué hacer antes de tocarlas. Ver memoria `project_horma_app_stakes` para el detalle completo y el SQL de remediación.

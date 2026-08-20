@@ -13,10 +13,20 @@
 - **Sync a Google Sheets ampliado más allá de "Horas"**: 3 funciones nuevas (`sync-compras.js`, `sync-cobros.js`, `sync-subcontratos.js`, mismo patrón que `sync-horas.js`), todas solo-agregar (nunca borran/pisan filas — la planilla tiene entradas manuales viejas con columnas completadas a mano). `sync-compras.js` escribe en dos hojas a la vez (`Gasto en Materiales` + `Asignación Materiales`) porque la columna "Sobrante" de la primera depende de una fila espejo en la segunda vía SUMIF por Factura N° — sin eso, cualquier compra nueva se vería como material sin asignar. **No se pudo probar en vivo** (no hay wrangler/pages dev, solo vite) — pendiente que alguien cargue un reporte real y confirme que la fila aparece en la planilla.
 - **Backfill manual ya hecho esta sesión** (vía MCP de Google Sheets, verificado): 4 compras (14–19/08) y 5 cobros de Ohiggins (17–18/08) que faltaban en la planilla desde antes de que existieran las funciones de sync.
 - **Arnés del proyecto construido** (antes solo existía `CLAUDE.md` desactualizado + `estado_actual.md`): `CLAUDE.md` reescrito con las reglas reales (verificación, límites conocidos, dinero real), `progress/decisiones.md` y `progress/tareas.md` nuevos, `agents/estratega.md`/`constructor.md`/`revisor.md` nuevos (adaptados de `E:\ALEXANDRA TRABAJO`, con la regla extra de verificar contra Supabase antes de aprobar cualquier cambio de dinero), `init.sh` nuevo — probado en vivo, corre `tsc --noEmit` de verdad además de chequear que los archivos existan. Exit code 0 confirmado.
+- **8 anomalías reportadas por Alexandra en la pestaña Obras, todas revisadas contra Supabase y resueltas:**
+  1. Bug real y el más serio de la tanda: **"Cobrado"/"Saldo" de una obra ignoraba la plata cargada vía el sistema manual de cuentas_por_cobrar.** Doctora Eloísa 5860 mostraba Cobrado $0 / Saldo -$753.528 cuando en realidad hay $7.050.000 cobrados y el saldo real es +$6.296.472. Corregido y verificado exacto.
+  2. **`PanelObras` estaba duplicado** — versión completa en Gustavo.tsx, versión vieja/recortada embebida en Admin.tsx (sin Nueva obra/editar cliente/facturado). Se extrajo a `PanelesObra.tsx` compartido — cierra el pendiente abierto desde el 18/08.
+  3. **Obras "En curso"/"Culminadas" nuevo** (reutiliza `obras.activa`, ver decisiones.md) con botón para marcar/reactivar. Solo se marcó Renato Sanchez como culminada (confirmado $0 pendiente); Luis Carrera 2700 sigue en curso porque su cuenta real todavía debe $1.815.000 — la premisa de que "ya se pagó completo" no coincidía con los datos, quedó aclarado.
+  4. Cuentas por cobrar (obras): agregado Facturado/Por facturar, y ya no filtra por `activa` (una obra culminada puede seguir debiendo plata).
+  5. Estado de Resultados: el selector de obra no leía la tabla `obras` ni `cuentas_por_cobrar`, le faltaban Renato Sanchez y Luz 2979. Corregido.
+  6. Guía "¿Cómo se lee esto?": se agregaron los pasos de Facturado/Por facturar (faltaban) y se aclaró que Saldo es posición de caja, no lo mismo que "cuánto falta que pague el cliente".
+  7. **Sin resolver, no es un bug:** a "Doctora Eloísa (dirección 5843)" le falta cargar su presupuesto total real — no se puede inventar el número, pendiente pedírselo a Gustavo.
+  - Todo verificado en vivo contra Supabase (panel de Gustavo) antes de subir, `init.sh` corrido, tsc limpio.
 
 ## Pendiente / hallazgo sin resolver
 - No confirmado en vivo que `sync-compras.js`/`sync-cobros.js`/`sync-subcontratos.js` funcionen en producción — probar con una carga real y revisar la planilla.
-- Sigue pendiente portar a `Admin.tsx` las funciones de crear obra/editar cliente/facturado que solo están en `Gustavo.tsx` (`PanelObras` no se extrajo al módulo compartido).
+- Falta el presupuesto real de "Doctora Eloísa (dirección 5843)" — pedírselo a Gustavo/Alexandra y cargarlo.
+- Anomalías de Google Sheets reportadas por Alexandra — pendientes de pasar y revisar en una sesión aparte (distinta fuente de verdad, distinta forma de verificar).
 
 ## Sesión anterior — 14/08/2026
 

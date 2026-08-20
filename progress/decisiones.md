@@ -1,6 +1,9 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-20 — `obras.activa` significa "en curso", no "activa en general"
+El campo ya existía en la tabla `obras` pero nunca se tocaba (siempre `true`). Se decidió reutilizarlo con el significado "en curso" (`true`) vs "culminada" (`false`), en vez de agregar una columna nueva. Importante: NINGUNA vista que calcule plata pendiente de cobro debe filtrar por `activa` — una obra culminada puede seguir debiendo plata (por eso Cuentas por Cobrar y Estado de Resultados leen todas las obras, no solo las en curso). Los dropdowns operativos (Reporte Diario, nueva cuenta manual) sí filtran por `activa=true`, porque no tiene sentido cargar trabajo nuevo contra una obra ya terminada.
+
 ## 2026-08-20 — Cuentas por cobrar = manual + obras, combinadas sin duplicar
 Hay dos formas de rastrear plata que deben los clientes: la tabla manual `cuentas_por_cobrar` (cargos sueltos, todos "pagador: Ignacio", cargados a mano el 15/08) y las obras con `presupuesto_total` fijo (Ohiggins 126 Limache, Luz 2979), que se rastrean solas vía `reportes_cobros` del Reporte Diario. Ohiggins y Luz 2979 nunca aparecían en "Cuentas por cobrar" porque nadie las cargó ahí a mano — no era un dato faltante, era que ese sistema nunca las incluyó.
 
