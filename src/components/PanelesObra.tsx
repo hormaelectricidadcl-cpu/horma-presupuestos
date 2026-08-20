@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -117,14 +117,20 @@ export function PanelCuentasPorCobrar() {
   const [nuevaCuenta, setNuevaCuenta] = useState({ pagador: '', concepto: '', obra: '', total_presupuesto: '' })
   const [nuevoAbono, setNuevoAbono] = useState<Record<string, { fecha: string; monto: string }>>({})
   const [vista, setVista] = useState<'pendientes' | 'cobradas'>('pendientes')
+  const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
+  const [cobrosObras, setCobrosObras] = useState<ReporteCobroDia[]>([])
 
   const cargar = useCallback(async () => {
-    const [{ data: c }, { data: a }] = await Promise.all([
+    const [{ data: c }, { data: a }, { data: om }, { data: co }] = await Promise.all([
       supabase.from('cuentas_por_cobrar').select('*').order('created_at', { ascending: false }),
       supabase.from('abonos_cuenta').select('*'),
+      supabase.from('obras').select('*').eq('activa', true),
+      supabase.from('reportes_cobros').select('*'),
     ])
     setCuentas((c as CuentaPorCobrar[]) || [])
     setAbonos((a as AbonoCuenta[]) || [])
+    setObrasMaestro((om as Obra[]) || [])
+    setCobrosObras((co as ReporteCobroDia[]) || [])
     setLoading(false)
   }, [])
 
@@ -212,6 +218,21 @@ export function PanelCuentasPorCobrar() {
   const cobradas = cuentasConSaldo.filter(x => x.restante <= 0)
   const listaVisible = vista === 'pendientes' ? pendientes : cobradas
 
+  // Obras con presupuesto fijo (Ohiggins, Luz 2979, futuras) se rastrean solas
+  // vía el Reporte Diario — se muestran acá también para tener un solo lugar
+  // con toda la plata pendiente de cobro, sin duplicar las que ya tienen una
+  // cuenta manual cargada (esas se excluyen por nombre de obra).
+  const obrasConCuentaManual = new Set(cuentas.map(c => c.obra).filter((o): o is string => !!o))
+  const obrasConSaldo = obrasMaestro
+    .filter(o => o.presupuesto_total != null && !obrasConCuentaManual.has(o.nombre))
+    .map(o => {
+      const cobrado = cobrosObras.filter(c => c.obra === o.nombre).reduce((s, c) => s + c.monto, 0)
+      return { obra: o, cobrado, restante: (o.presupuesto_total as number) - cobrado }
+    })
+  const obrasPendientes = obrasConSaldo.filter(x => x.restante > 0)
+  const obrasCobradas = obrasConSaldo.filter(x => x.restante <= 0)
+  const obrasVisibles = vista === 'pendientes' ? obrasPendientes : obrasCobradas
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
@@ -224,7 +245,7 @@ export function PanelCuentasPorCobrar() {
               background: vista === 'pendientes' ? 'var(--primary)' : 'var(--white)',
               color: vista === 'pendientes' ? '#fff' : 'var(--muted)',
             }}
-          >Pendientes ({pendientes.length})</button>
+          >Pendientes ({pendientes.length + obrasPendientes.length})</button>
           <button
             onClick={() => setVista('cobradas')}
             style={{
@@ -233,7 +254,7 @@ export function PanelCuentasPorCobrar() {
               background: vista === 'cobradas' ? 'var(--success)' : 'var(--white)',
               color: vista === 'cobradas' ? '#fff' : 'var(--muted)',
             }}
-          >Cobradas ({cobradas.length})</button>
+          >Cobradas ({cobradas.length + obrasCobradas.length})</button>
         </div>
         <button className="btn btn-primary" onClick={() => setMostrarForm(x => !x)}>
           {mostrarForm ? 'Cancelar' : '+ Nueva cuenta'}
@@ -267,7 +288,33 @@ export function PanelCuentasPorCobrar() {
         </div>
       )}
 
-      {listaVisible.length === 0 ? (
+      {obrasVisibles.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
+          {obrasVisibles.map(({ obra, cobrado, restante }) => (
+            <div key={obra.id} className="card" style={{ padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <p className="font-serif" style={{ fontSize: 18, marginBottom: 2, color: 'var(--secondary)' }}>{obra.nombre}</p>
+                  <span className="font-display" style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {obra.cliente || 'Sin cliente asignado'}
+                    <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px', textTransform: 'uppercase' }}>Obra</span>
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <StatTile label="Presupuesto total" valor={fmtMoney(obra.presupuesto_total as number)} />
+                <StatTile label="Cobrado" valor={fmtMoney(cobrado)} tono="positivo" />
+                <StatTile label="Pendiente" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
+                Se calcula solo — para registrar un cobro nuevo usa el Reporte Diario o la pestaña Obras.
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {listaVisible.length === 0 && obrasVisibles.length === 0 ? (
         <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
           {vista === 'pendientes' ? 'Sin cuentas pendientes.' : 'Todavía no hay cuentas cobradas por completo.'}
         </p>
