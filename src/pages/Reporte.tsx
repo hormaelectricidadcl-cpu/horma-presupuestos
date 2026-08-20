@@ -335,11 +335,13 @@ export default function Reporte({ token, embedded = false }: Props) {
       }
     }
 
-    fetch('/api/sync-horas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fecha }),
-    }).catch(() => {})
+    for (const endpoint of ['/api/sync-horas', '/api/sync-compras', '/api/sync-cobros', '/api/sync-subcontratos']) {
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha }),
+      }).catch(() => {})
+    }
 
     setSaving(false)
     setSaved(true)
