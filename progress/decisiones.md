@@ -1,6 +1,9 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-20 — Regla de diseño: nunca dos números distintos para la misma pregunta
+Alexandra marcó esto como delicado y tiene razón: Gustavo no va a cruzar dos pestañas para reconciliar por qué "Obras" y "Cuentas por cobrar" mostraban plata distinta para la misma obra (Obras no incluía nada de lo pendiente en cuentas manuales). Se agregó "Falta por cobrar" a la tarjeta de Obras, calculado exactamente igual que "Pendiente" en Cuentas por cobrar. **Regla para cualquier feature futura de esta app:** si dos pantallas responden la misma pregunta de plata (cuánto deben, cuánto se pagó, etc.), tienen que mostrar el mismo número, calculado de la misma forma — nunca dos cifras "parecidas pero distintas" que obliguen a alguien a pensar cuál es la correcta.
+
 ## 2026-08-20 — Cuenta "Luis Carrera 2700" separada en dos (original + adicional)
 Cuando se cargaron las cuentas manuales el 15/08, "Luis Carrera 2700" se cargó como UNA cuenta de $4.537.500 — pero Gustavo en realidad se refería a dos cosas distintas que él mismo mezcla al hablar: el **presupuesto original** ($2.722.500, ya pagado con los 3 abonos existentes) y un **presupuesto adicional "a evaluar"** ($1.815.000, propuesta nueva todavía en negociación, sin pagar). Los números cuadran exacto: 2.722.500 + 1.815.000 = 4.537.500. Se separó en dos cuentas reales: "Presupuesto original Luis Carrera" (cobrada) y "Luis Carrera - adicional (a evaluar)" (pendiente). Alexandra confirmó el desglose antes de escribir en Supabase. De paso, `obras.presupuesto_total` de "Luis Carrera 2700" quedó en $2.722.500 (el original) — cargado por Alexandra a mano vía el botón editar, no vía código.
 
