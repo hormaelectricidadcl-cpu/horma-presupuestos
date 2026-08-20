@@ -116,6 +116,7 @@ export function PanelCuentasPorCobrar() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [nuevaCuenta, setNuevaCuenta] = useState({ pagador: '', concepto: '', obra: '', total_presupuesto: '' })
   const [nuevoAbono, setNuevoAbono] = useState<Record<string, { fecha: string; monto: string }>>({})
+  const [vista, setVista] = useState<'pendientes' | 'cobradas'>('pendientes')
 
   const cargar = useCallback(async () => {
     const [{ data: c }, { data: a }] = await Promise.all([
@@ -202,9 +203,38 @@ export function PanelCuentasPorCobrar() {
 
   if (loading) return <div className="spinner" />
 
+  const cuentasConSaldo = cuentas.map(c => {
+    const abonosCuenta = abonos.filter(a => a.cuenta_id === c.id).sort((a, b) => b.fecha.localeCompare(a.fecha))
+    const totalAbonado = abonosCuenta.reduce((s, a) => s + a.monto, 0)
+    return { c, abonosCuenta, totalAbonado, restante: c.total_presupuesto - totalAbonado }
+  })
+  const pendientes = cuentasConSaldo.filter(x => x.restante > 0)
+  const cobradas = cuentasConSaldo.filter(x => x.restante <= 0)
+  const listaVisible = vista === 'pendientes' ? pendientes : cobradas
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => setVista('pendientes')}
+            style={{
+              padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
+              border: `1.5px solid ${vista === 'pendientes' ? 'var(--primary)' : 'var(--border)'}`,
+              background: vista === 'pendientes' ? 'var(--primary)' : 'var(--white)',
+              color: vista === 'pendientes' ? '#fff' : 'var(--muted)',
+            }}
+          >Pendientes ({pendientes.length})</button>
+          <button
+            onClick={() => setVista('cobradas')}
+            style={{
+              padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
+              border: `1.5px solid ${vista === 'cobradas' ? 'var(--success)' : 'var(--border)'}`,
+              background: vista === 'cobradas' ? 'var(--success)' : 'var(--white)',
+              color: vista === 'cobradas' ? '#fff' : 'var(--muted)',
+            }}
+          >Cobradas ({cobradas.length})</button>
+        </div>
         <button className="btn btn-primary" onClick={() => setMostrarForm(x => !x)}>
           {mostrarForm ? 'Cancelar' : '+ Nueva cuenta'}
         </button>
@@ -237,14 +267,13 @@ export function PanelCuentasPorCobrar() {
         </div>
       )}
 
-      {cuentas.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin cuentas registradas todavía.</p>
+      {listaVisible.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
+          {vista === 'pendientes' ? 'Sin cuentas pendientes.' : 'Todavía no hay cuentas cobradas por completo.'}
+        </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {cuentas.map(c => {
-            const abonosCuenta = abonos.filter(a => a.cuenta_id === c.id).sort((a, b) => b.fecha.localeCompare(a.fecha))
-            const totalAbonado = abonosCuenta.reduce((s, a) => s + a.monto, 0)
-            const restante = c.total_presupuesto - totalAbonado
+          {listaVisible.map(({ c, abonosCuenta, totalAbonado, restante }) => {
             const datosNuevo = nuevoAbono[c.id] || { fecha: '', monto: '' }
             return (
               <div key={c.id} className="card" style={{ padding: 16 }}>
