@@ -1,6 +1,11 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-20 — Cobro duplicado de $2.000.000 en Luis Carrera 2700, corregido
+Al agregar "cobradoManual" (sumar reportes_cobros + abonos de cuentas manuales) se generó un doble conteo real: el pago de Ignacio del 5/08 estaba cargado DOS VECES — una vez como cobro de $2.000.000 en `reportes_cobros` (creado 18:53 del 15/08) y otra vez como dos abonos de $1.000.000 en la cuenta manual "Presupuesto original Luis Carrera" (creados 19:21 del 15/08, 28 min después, misma sesión de carga). Se borró la fila de `reportes_cobros` (quedan los 2 abonos manuales, que coinciden con el detalle que dio Gustavo). Cobrado real de esa obra: $3.016.150, no $5.016.150. **Se revisó el resto del sistema cruzando fecha+obra entre `reportes_cobros` y `abonos_cuenta` — este fue el único caso.**
+
+**Lección para cualquier fix futuro que sume dos fuentes de la misma métrica:** antes de sumarlas, cruzar por fecha+obra+monto para descartar que sea el mismo pago cargado dos veces por error humano — no asumir que fuentes distintas son plata distinta.
+
 ## 2026-08-20 — Para Gustavo, "Facturado" = "Cobrado" — Facturado formal se mueve a Detalle
 Facturado (tabla `facturas`) y Cobrado (`reportes_cobros` + cuentas manuales) son conceptos distintos en el sistema, pero Gustavo no los distingue — para él ambos significan "plata que me depositaron". Como no se actualizan al mismo tiempo (un cobro puede tardar en cargarse como factura formal), terminaban mostrando dos "cuánto falta" distintos en la misma tarjeta (ver regla de abajo). Se sacaron Facturado/Por facturar de la tarjeta principal de Obras — quedan solo dentro de "Detalle", para quien necesite el dato de facturación formal (Alexandra/contabilidad). La tarjeta principal solo muestra "Falta por cobrar".
 
