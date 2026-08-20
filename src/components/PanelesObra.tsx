@@ -755,6 +755,128 @@ function agruparPorPeriodo(
   return Array.from(mapa.values()).sort((a, b) => b.key.localeCompare(a.key))
 }
 
+/* ─── Pago semanal a trabajadores (todas las obras) ──── */
+export function PanelPagoSemanal() {
+  const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
+  const [tarifas, setTarifas] = useState<Trabajador[]>([])
+  const [loading, setLoading] = useState(true)
+  const [semanaKey, setSemanaKey] = useState('')
+
+  const cargar = useCallback(async () => {
+    const [{ data: d }, { data: t }] = await Promise.all([
+      supabase.from('reportes_diarios').select('*'),
+      supabase.from('trabajadores').select('*'),
+    ])
+    setDiarios((d as ReporteTrabajadorDia[]) || [])
+    setTarifas((t as Trabajador[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  // Refresco automático mientras la pestaña está abierta, para que se vea
+  // actualizado a medida que Gustavo va cargando el reporte diario.
+  useEffect(() => {
+    const id = setInterval(cargar, 20000)
+    return () => clearInterval(id)
+  }, [cargar])
+
+  if (loading) return <div className="spinner" />
+
+  const semanas = agruparPorPeriodo('semana', diarios, [], [], [])
+  if (semanas.length === 0) {
+    return <p style={{ color: 'var(--muted)', fontSize: 14 }}>Todavía no hay reportes diarios cargados.</p>
+  }
+  const semana = semanas.find(s => s.key === semanaKey) || semanas.find(s => s.enCurso) || semanas[0]
+
+  const filas = tarifas
+    .map(t => {
+      const diasPresentes = semana.diarios.filter(d => d.trabajador === t.nombre && d.presente)
+      const dias = diasPresentes.reduce((s, d) => s + d.fraccion_jornada, 0)
+      const sueldoFijo = t.tarifa_diaria === 0
+      const ganado = sueldoFijo ? 0 : diasPresentes.reduce((s, d) => s + d.fraccion_jornada * t.tarifa_diaria, 0)
+      const viatico = diasPresentes.reduce((s, d) => s + (d.viatico ? t.viatico_diario : 0), 0)
+      return { trabajador: t.nombre, sueldoFijo, dias, ganado, viatico, total: ganado + viatico }
+    })
+    .filter(f => f.dias > 0)
+
+  const totalSemana = filas.reduce((s, f) => s + f.total, 0)
+  const haySueldoFijo = filas.some(f => f.sueldoFijo)
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--secondary)' }}>
+          Semana:
+          <select
+            value={semana.key}
+            onChange={e => setSemanaKey(e.target.value)}
+            style={{
+              width: 'auto', padding: '6px 10px', fontSize: 13, fontWeight: 600, borderRadius: 6,
+              border: '1.5px solid var(--primary)', background: 'var(--white)', color: 'var(--secondary)',
+              cursor: 'pointer', appearance: 'auto',
+            }}
+          >
+            {semanas.map(s => (
+              <option key={s.key} value={s.key}>{s.label}{s.enCurso ? ' (en curso)' : ''}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          onClick={cargar}
+          style={{ padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--white)', cursor: 'pointer', color: 'var(--muted)' }}
+        >↻ Actualizar</button>
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <StatTile label="Total a pagar esa semana" valor={fmtMoney(totalSemana)} tono="alerta" />
+      </div>
+
+      {filas.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 14 }}>Nadie tiene actividad reportada esa semana.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                <th style={{ textAlign: 'left', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Nombre</th>
+                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Días</th>
+                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ganado</th>
+                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Viático</th>
+                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map(f => (
+                <tr key={f.trabajador} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '10px', fontWeight: 700 }}>
+                    {f.trabajador}
+                    {f.sueldoFijo && (
+                      <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, color: 'var(--muted)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px' }}>
+                        Sueldo fijo
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right' }}>{f.dias}</td>
+                  <td style={{ padding: '10px', textAlign: 'right' }}>{f.sueldoFijo ? '—' : fmtMoney(f.ganado)}</td>
+                  <td style={{ padding: '10px', textAlign: 'right' }}>{f.viatico > 0 ? fmtMoney(f.viatico) : '—'}</td>
+                  <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: 'var(--secondary)' }}>{fmtMoney(f.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {haySueldoFijo && (
+        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
+          Los trabajadores marcados "Sueldo fijo" tienen mensualidad fija (ver Gastos Fijos en Estado de Resultados) — acá solo se refleja su viático de esa semana, no un cálculo por día.
+        </p>
+      )}
+    </div>
+  )
+}
+
 /* ─── Bloque de contenido de un período (reutilizable) ── */
 function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontratosObra, tarifas, onMarcarReembolsado }: {
   diariosObra: ReporteTrabajadorDia[]

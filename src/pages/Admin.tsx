@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import { fmtMoney, StatTile, EditablePresupuesto, PanelCuentasPorCobrar, PanelEstadoResultados, GuiaObras, HistorialObraModal } from '../components/PanelesObra'
+import { fmtMoney, StatTile, EditablePresupuesto, PanelCuentasPorCobrar, PanelEstadoResultados, PanelPagoSemanal, GuiaObras, HistorialObraModal } from '../components/PanelesObra'
 import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Obra, Trabajador, SubcontratoMaster } from '../types'
 
 
@@ -1249,7 +1249,7 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'obras' | 'cuentas' | 'resultados'>('activos')
+  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'obras' | 'pagos' | 'cuentas' | 'resultados'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
   const [historialObra, setHistorialObra] = useState<string | null>(null)
   const [reportesDiarios, setReportesDiarios] = useState<ReporteTrabajadorDia[]>([])
@@ -1579,6 +1579,7 @@ export default function Admin() {
           ['respondidos_gustavo', `Gustavo (${respondidosGustavo.length})`, '#0284c7'],
           ['clientes', `Clientes (${clientesSummary.length})`, '#7c3aed'],
           ['obras', `Obras (${obrasSummary.length})`, '#c1440e'],
+          ['pagos', 'Pago semanal', '#e67e22'],
           ['cuentas', 'Cuentas por cobrar', '#0f766e'],
           ['resultados', 'Estado de resultados', '#14213D'],
         ] as const).map(([k, label, color]) => (
@@ -1719,6 +1720,8 @@ export default function Admin() {
           </div>
         )}
         </>
+      ) : tab === 'pagos' ? (
+        <PanelPagoSemanal />
       ) : tab === 'cuentas' ? (
         <PanelCuentasPorCobrar />
       ) : tab === 'resultados' ? (
