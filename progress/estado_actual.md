@@ -1,7 +1,24 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 14/08/2026
+## Última actualización: 20/08/2026
+
+## Sesión 20/08/2026 — Pago semanal, Cuentas por cobrar unificadas, sync Sheets ampliado
+
+- **Refactor grande de la sesión del 18/08 (12+ commits) por fin committeado y pusheado** — llevaba 2 días solo en el disco local. Causa del bloqueo de push: Windows tenía 3 cuentas de GitHub cacheadas y usaba por defecto la incorrecta (`alexandra-albarracin`, sin permiso); se resolvió apuntando el remote a `hormaelectricidadcl-cpu` explícitamente.
+- **Pestaña nueva "Pago semanal"** (`PanelPagoSemanal` en `PanelesObra.tsx`, en Admin y Gustavo): tabla Nombre/Días/Ganado/Viático/Total por trabajador, cruzando todas las obras, con selector de semana y auto-refresco cada 20s. Fabriel (sueldo fijo, sin tarifa diaria) se marca aparte, solo se le calcula viático. Verificado contra Supabase con datos reales.
+- **Cuentas por cobrar dividida en Pendientes/Cobradas** (calculado, no manual — se autocorrige si se agrega o quita un abono). Verificado: las 2 pendientes reales (Doctora Eloísa 5860 $450.000, Luis Carrera $1.815.000) coinciden exacto con lo que Gustavo reportó por WhatsApp el 17/08.
+- **Cuentas por cobrar unificada con las obras de presupuesto fijo**: Ohiggins 126 Limache y Luz 2979 se rastreaban solo en la pestaña Obras (nunca tuvieron una cuenta manual cargada) — ahora también aparecen ahí, de solo lectura, sin duplicar.
+- **Reconciliación completa contra el WhatsApp de Gustavo del 17/08**: todo lo que dijo ya estaba correctamente cargado en Supabase — no había ningún dato faltante, el problema era solo de visibilidad (dos sistemas de cuentas por cobrar separados que no se mostraban juntos).
+- **Sync a Google Sheets ampliado más allá de "Horas"**: 3 funciones nuevas (`sync-compras.js`, `sync-cobros.js`, `sync-subcontratos.js`, mismo patrón que `sync-horas.js`), todas solo-agregar (nunca borran/pisan filas — la planilla tiene entradas manuales viejas con columnas completadas a mano). `sync-compras.js` escribe en dos hojas a la vez (`Gasto en Materiales` + `Asignación Materiales`) porque la columna "Sobrante" de la primera depende de una fila espejo en la segunda vía SUMIF por Factura N° — sin eso, cualquier compra nueva se vería como material sin asignar. **No se pudo probar en vivo** (no hay wrangler/pages dev, solo vite) — pendiente que alguien cargue un reporte real y confirme que la fila aparece en la planilla.
+- **Backfill manual ya hecho esta sesión** (vía MCP de Google Sheets, verificado): 4 compras (14–19/08) y 5 cobros de Ohiggins (17–18/08) que faltaban en la planilla desde antes de que existieran las funciones de sync.
+- **Arnés del proyecto construido** (antes solo existía `CLAUDE.md` desactualizado + `estado_actual.md`): `CLAUDE.md` reescrito con las reglas reales (verificación, límites conocidos, dinero real), `progress/decisiones.md` y `progress/tareas.md` nuevos, `agents/estratega.md`/`constructor.md`/`revisor.md` nuevos (adaptados de `E:\ALEXANDRA TRABAJO`, con la regla extra de verificar contra Supabase antes de aprobar cualquier cambio de dinero), `init.sh` nuevo — probado en vivo, corre `tsc --noEmit` de verdad además de chequear que los archivos existan. Exit code 0 confirmado.
+
+## Pendiente / hallazgo sin resolver
+- No confirmado en vivo que `sync-compras.js`/`sync-cobros.js`/`sync-subcontratos.js` funcionen en producción — probar con una carga real y revisar la planilla.
+- Sigue pendiente portar a `Admin.tsx` las funciones de crear obra/editar cliente/facturado que solo están en `Gustavo.tsx` (`PanelObras` no se extrajo al módulo compartido).
+
+## Sesión anterior — 14/08/2026
 
 ## Estado
 Live en Cloudflare Pages (horma-presupuestos.pages.dev) — el `netlify.toml`/`netlify/functions` sigue en el repo pero el deploy real está en Cloudflare Pages, ojo con eso en sesiones futuras.
