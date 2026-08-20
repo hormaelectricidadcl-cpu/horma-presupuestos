@@ -20,6 +20,11 @@ Al agregar "cobradoManual" (sumar reportes_cobros + abonos de cuentas manuales) 
 
 **Lección para cualquier fix futuro que sume dos fuentes de la misma métrica:** antes de sumarlas, cruzar por fecha+obra+monto para descartar que sea el mismo pago cargado dos veces por error humano — no asumir que fuentes distintas son plata distinta.
 
+## 2026-08-20 — Ohiggins: el 5º cobro ($9.458.056, "Alejandra", 18/08) era duplicado, lo borró Alexandra
+Durante la migración de Ohiggins a `cuentas_por_cobrar` se migraron 5 abonos (suma $33.374.148). Alexandra ya había avisado que el pago de $9.458.056 del 18/08 (cliente "Alejandra", el que no estaba en el WhatsApp original de Gustavo de 4 pagos) era duplicado — Gustavo había confirmado que el restante real era $15.147.740, lo cual solo cuadra con los 4 pagos originales ($23.916.092 facturado). El aviso no se procesó a tiempo (se investigó otro posible duplicado, el $4.729.023 que aparece dos veces — ese SÍ es real, Gustavo lo reportó así dos veces) y Alexandra terminó borrando la fila ella misma desde la app. **Estado final correcto: Facturado $23.916.092, Por facturar $15.147.740 — no volver a agregar ese pago.**
+
+**Lección:** cuando el usuario da una instrucción específica ("elimina X"), no dar la tarea por resuelta investigando algo parecido pero distinto sin confirmar que es lo mismo que pidieron — si hay ambigüedad sobre a qué se refiere exactamente, preguntar antes de cerrar el tema.
+
 ## 2026-08-20 — Merge: "Cuentas por cobrar" deja de ser pestaña, se absorbe en "Obras"
 Con la base de datos ya unificada (ver entrada de arriba), tener dos pestañas mostrando resúmenes de la misma plata seguía confundiendo — aunque los números coincidieran, Alexandra tenía que cruzar dos lugares para confiar en uno. `PanelCuentasPorCobrar` se eliminó del todo (código muerto, no quedó ningún uso). Estructura final, un solo lugar:
 - Pestaña "Obras" (En curso/Culminadas) — la tarjeta principal de cada obra ya tenía "Falta por cobrar" como número único.

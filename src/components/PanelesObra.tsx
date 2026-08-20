@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, Factura, SubcontratoMaster } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -116,7 +116,6 @@ export function PanelObras() {
   const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
   const [trabajadoresTarifas, setTrabajadoresTarifas] = useState<Trabajador[]>([])
   const [subcontratosMaster, setSubcontratosMaster] = useState<SubcontratoMaster[]>([])
-  const [facturas, setFacturas] = useState<Factura[]>([])
   const [cuentas, setCuentas] = useState<CuentaPorCobrar[]>([])
   const [abonos, setAbonos] = useState<AbonoCuenta[]>([])
   const [loading, setLoading] = useState(true)
@@ -136,7 +135,7 @@ export function PanelObras() {
   }, [])
 
   const cargar = useCallback(async () => {
-    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }, { data: t }, { data: sm }, { data: f }, { data: cu }, { data: ab }] = await Promise.all([
+    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }, { data: t }, { data: sm }, { data: cu }, { data: ab }] = await Promise.all([
       supabase.from('reportes_diarios').select('*'),
       supabase.from('reportes_compras').select('*'),
       supabase.from('reportes_cobros').select('*'),
@@ -144,7 +143,6 @@ export function PanelObras() {
       supabase.from('obras').select('*').order('nombre'),
       supabase.from('trabajadores').select('*'),
       supabase.from('subcontratos_master').select('*'),
-      supabase.from('facturas').select('*'),
       supabase.from('cuentas_por_cobrar').select('*'),
       supabase.from('abonos_cuenta').select('*'),
     ])
@@ -155,7 +153,6 @@ export function PanelObras() {
     setObrasMaestro((m as Obra[]) || [])
     setTrabajadoresTarifas((t as Trabajador[]) || [])
     setSubcontratosMaster((sm as SubcontratoMaster[]) || [])
-    setFacturas((f as Factura[]) || [])
     setCuentas((cu as CuentaPorCobrar[]) || [])
     setAbonos((ab as AbonoCuenta[]) || [])
     setLoading(false)
@@ -208,15 +205,6 @@ export function PanelObras() {
     }
     setNuevaObra({ nombre: '', cliente: '', presupuesto_total: '' })
     setMostrarNuevaObra(false)
-    cargar()
-  }
-
-  async function agregarFactura(obra: string, fecha: string, monto: number) {
-    const { error } = await supabase.from('facturas').insert({ fecha, obra, monto })
-    if (error) {
-      alert('No se pudo guardar la factura. Intenta de nuevo.')
-      return
-    }
     cargar()
   }
 
@@ -317,14 +305,12 @@ export function PanelObras() {
     const presupuestoTotal = tieneCuentas
       ? cuentasObra.reduce((sum, c) => sum + c.total_presupuesto, 0)
       : (maestro?.presupuesto_total ?? null)
-    const facturado = facturas.filter(f => f.obra === obra).reduce((sum, f) => sum + f.monto, 0)
-    const porFacturar = presupuestoTotal != null ? presupuestoTotal - facturado : null
     const activa = maestro?.activa ?? true
     const faltaPorCobrar = tieneCuentas
       ? pendienteManual
       : (presupuestoTotal != null ? Math.max(presupuestoTotal - cobrado, 0) : null)
 
-    return { obra, obraId: maestro?.id, activa, tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, facturado, porFacturar, faltaPorCobrar }
+    return { obra, obraId: maestro?.id, activa, tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar }
   })
 
   const enCurso = resumen.filter(o => o.activa)
@@ -463,17 +449,18 @@ export function PanelObras() {
                       </button>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                      <StatTile label="Presupuesto" valor={o.presupuestoTotal != null ? fmtMoney(o.presupuestoTotal) : 'sin definir'} />
+                      <StatTile label="Facturado" valor={fmtMoney(o.cobrado)} tono="positivo" />
+                      <StatTile
+                        label="Por facturar"
+                        valor={o.faltaPorCobrar != null ? fmtMoney(o.faltaPorCobrar) : 'sin presupuesto'}
+                        tono={o.faltaPorCobrar == null ? 'neutral' : o.faltaPorCobrar > 0 ? 'alerta' : 'positivo'}
+                      />
                       <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
                       <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
                       <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
                       <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
                       <StatTile label="Pagos semana" valor={fmtMoney(o.pagosSemanales)} />
-                      <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
-                      <StatTile
-                        label="Falta por cobrar"
-                        valor={o.faltaPorCobrar != null ? fmtMoney(o.faltaPorCobrar) : 'sin presupuesto'}
-                        tono={o.faltaPorCobrar == null ? 'neutral' : o.faltaPorCobrar > 0 ? 'alerta' : 'positivo'}
-                      />
                       <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
                     </div>
                     <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -494,7 +481,7 @@ export function PanelObras() {
                       )}
                       {o.cobradoManual > 0 && (
                         <span>
-                          De lo cobrado, <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobradoManual)}</strong> viene de la cuenta por cobrar manual (no del Reporte Diario).
+                          De lo facturado, <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobradoManual)}</strong> viene de la cuenta por cobrar manual (no del Reporte Diario).
                         </span>
                       )}
                       {o.gastoSubcontratos !== o.pagadoSubcontratos && (
@@ -533,30 +520,24 @@ export function PanelObras() {
         )
       })()}
 
-      {historialObra && (() => {
-        const o = resumen.find(x => x.obra === historialObra)
-        return (
-          <HistorialObraModal
-            obra={historialObra}
-            diarios={diarios}
-            compras={compras}
-            cobros={cobros}
-            subcontratos={subcontratos}
-            tarifas={trabajadoresTarifas}
-            onClose={() => setHistorialObra(null)}
-            onMarcarReembolsado={marcarReembolsado}
-            facturado={o?.facturado}
-            presupuestoTotal={o?.presupuestoTotal}
-            onAgregarFactura={(fecha, monto) => agregarFactura(historialObra, fecha, monto)}
-            cuentasObra={cuentas.filter(c => c.obra === historialObra)}
-            abonos={abonos}
-            onAgregarAbono={agregarAbono}
-            onEliminarAbono={eliminarAbono}
-            onEliminarCuenta={eliminarCuenta}
-            onCrearCuentaObra={(pagador, concepto, monto) => crearCuenta(pagador, concepto, historialObra, monto)}
-          />
-        )
-      })()}
+      {historialObra && (
+        <HistorialObraModal
+          obra={historialObra}
+          diarios={diarios}
+          compras={compras}
+          cobros={cobros}
+          subcontratos={subcontratos}
+          tarifas={trabajadoresTarifas}
+          onClose={() => setHistorialObra(null)}
+          onMarcarReembolsado={marcarReembolsado}
+          cuentasObra={cuentas.filter(c => c.obra === historialObra)}
+          abonos={abonos}
+          onAgregarAbono={agregarAbono}
+          onEliminarAbono={eliminarAbono}
+          onEliminarCuenta={eliminarCuenta}
+          onCrearCuentaObra={(pagador, concepto, monto) => crearCuenta(pagador, concepto, historialObra, monto)}
+        />
+      )}
     </>
   )
 }
@@ -1353,8 +1334,8 @@ function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEli
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         <StatTile label="Presupuesto" valor={fmtMoney(cuenta.total_presupuesto)} />
-        <StatTile label="Abonado" valor={fmtMoney(totalAbonado)} tono="positivo" />
-        <StatTile label="Restante" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
+        <StatTile label="Facturado" valor={fmtMoney(totalAbonado)} tono="positivo" />
+        <StatTile label="Por facturar" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
       </div>
       {abonosCuenta.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
@@ -1400,9 +1381,6 @@ export function HistorialObraModal({
   tarifas,
   onClose,
   onMarcarReembolsado,
-  facturado,
-  presupuestoTotal,
-  onAgregarFactura,
   cuentasObra,
   abonos,
   onAgregarAbono,
@@ -1418,11 +1396,6 @@ export function HistorialObraModal({
   tarifas: Trabajador[]
   onClose: () => void
   onMarcarReembolsado?: (compraId: string, reembolsado: boolean) => void
-  // Facturación formal (para quien la use — Gustavo no distingue esto de
-  // "cobrado", por eso no vive en la tarjeta principal de la obra).
-  facturado?: number
-  presupuestoTotal?: number | null
-  onAgregarFactura?: (fecha: string, monto: number) => void
   // Cuentas por cobrar manuales vinculadas a esta obra (puede haber más de
   // una — ej. "presupuesto original" + "adicional a evaluar").
   cuentasObra?: CuentaPorCobrar[]
@@ -1435,8 +1408,6 @@ export function HistorialObraModal({
   const [mostrarNuevaCuenta, setMostrarNuevaCuenta] = useState(false)
   const [nuevaCuenta, setNuevaCuenta] = useState({ pagador: '', concepto: '', total_presupuesto: '' })
   const [vista, setVista] = useState<VistaPeriodo>('semana')
-  const [nuevaFecha, setNuevaFecha] = useState('')
-  const [nuevoMonto, setNuevoMonto] = useState('')
   const diariosObra = diarios.filter(d => d.obra === obra && d.presente).sort((a, b) => b.fecha.localeCompare(a.fecha))
   const comprasObra = compras.filter(c => c.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
   const cobrosObra = cobros.filter(c => c.obra === obra).sort((a, b) => b.fecha.localeCompare(a.fecha))
@@ -1517,38 +1488,6 @@ export function HistorialObraModal({
                 ))}
               </div>
             )}
-          </div>
-        )}
-
-        {onAgregarFactura && (
-          <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
-              Facturación formal (contable, no es lo mismo que "cobrado")
-            </p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-              <StatTile label="Facturado" valor={fmtMoney(facturado || 0)} />
-              <StatTile label="Por facturar" valor={presupuestoTotal != null ? fmtMoney(presupuestoTotal - (facturado || 0)) : 'sin presupuesto'} />
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                <label>Fecha de la factura</label>
-                <input type="date" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} />
-              </div>
-              <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                <label>Monto facturado</label>
-                <input type="number" min="0" placeholder="Monto en pesos" value={nuevoMonto} onChange={e => setNuevoMonto(e.target.value)} />
-              </div>
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  const monto = Number(nuevoMonto)
-                  if (!nuevaFecha || !Number.isFinite(monto) || monto <= 0) { alert('Completa fecha y un monto válido.'); return }
-                  onAgregarFactura(nuevaFecha, monto)
-                  setNuevaFecha(''); setNuevoMonto('')
-                }}
-                style={{ flexShrink: 0 }}
-              >+ Agregar factura</button>
-            </div>
           </div>
         )}
 
