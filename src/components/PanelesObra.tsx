@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, Factura, SubcontratoMaster } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -119,18 +119,23 @@ export function PanelCuentasPorCobrar() {
   const [vista, setVista] = useState<'pendientes' | 'cobradas'>('pendientes')
   const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
   const [cobrosObras, setCobrosObras] = useState<ReporteCobroDia[]>([])
+  const [facturas, setFacturas] = useState<Factura[]>([])
 
   const cargar = useCallback(async () => {
-    const [{ data: c }, { data: a }, { data: om }, { data: co }] = await Promise.all([
+    const [{ data: c }, { data: a }, { data: om }, { data: co }, { data: f }] = await Promise.all([
       supabase.from('cuentas_por_cobrar').select('*').order('created_at', { ascending: false }),
       supabase.from('abonos_cuenta').select('*'),
-      supabase.from('obras').select('*').eq('activa', true),
+      // Sin filtrar por activa: una obra culminada puede seguir debiendo plata,
+      // no tiene que desaparecer de acá solo porque el trabajo físico terminó.
+      supabase.from('obras').select('*'),
       supabase.from('reportes_cobros').select('*'),
+      supabase.from('facturas').select('*'),
     ])
     setCuentas((c as CuentaPorCobrar[]) || [])
     setAbonos((a as AbonoCuenta[]) || [])
     setObrasMaestro((om as Obra[]) || [])
     setCobrosObras((co as ReporteCobroDia[]) || [])
+    setFacturas((f as Factura[]) || [])
     setLoading(false)
   }, [])
 
@@ -227,7 +232,8 @@ export function PanelCuentasPorCobrar() {
     .filter(o => o.presupuesto_total != null && !obrasConCuentaManual.has(o.nombre))
     .map(o => {
       const cobrado = cobrosObras.filter(c => c.obra === o.nombre).reduce((s, c) => s + c.monto, 0)
-      return { obra: o, cobrado, restante: (o.presupuesto_total as number) - cobrado }
+      const facturado = facturas.filter(f => f.obra === o.nombre).reduce((s, f) => s + f.monto, 0)
+      return { obra: o, cobrado, restante: (o.presupuesto_total as number) - cobrado, facturado, porFacturar: (o.presupuesto_total as number) - facturado }
     })
   const obrasPendientes = obrasConSaldo.filter(x => x.restante > 0)
   const obrasCobradas = obrasConSaldo.filter(x => x.restante <= 0)
@@ -290,7 +296,7 @@ export function PanelCuentasPorCobrar() {
 
       {obrasVisibles.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
-          {obrasVisibles.map(({ obra, cobrado, restante }) => (
+          {obrasVisibles.map(({ obra, cobrado, restante, facturado, porFacturar }) => (
             <div key={obra.id} className="card" style={{ padding: 16 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
                 <div>
@@ -304,7 +310,9 @@ export function PanelCuentasPorCobrar() {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <StatTile label="Presupuesto total" valor={fmtMoney(obra.presupuesto_total as number)} />
                 <StatTile label="Cobrado" valor={fmtMoney(cobrado)} tono="positivo" />
-                <StatTile label="Pendiente" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
+                <StatTile label="Pendiente por cobrar" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
+                <StatTile label="Facturado" valor={fmtMoney(facturado)} />
+                <StatTile label="Por facturar" valor={fmtMoney(porFacturar)} tono={porFacturar > 0 ? 'alerta' : 'positivo'} />
               </div>
               <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
                 Se calcula solo — para registrar un cobro nuevo usa el Reporte Diario o la pestaña Obras.
@@ -373,6 +381,361 @@ export function PanelCuentasPorCobrar() {
   )
 }
 
+/* ─── Obras (En curso / Culminadas) ──────────────────── */
+export function PanelObras() {
+  const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
+  const [compras, setCompras] = useState<ReporteCompraDia[]>([])
+  const [cobros, setCobros] = useState<ReporteCobroDia[]>([])
+  const [subcontratos, setSubcontratos] = useState<ReporteSubcontratoDia[]>([])
+  const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
+  const [trabajadoresTarifas, setTrabajadoresTarifas] = useState<Trabajador[]>([])
+  const [subcontratosMaster, setSubcontratosMaster] = useState<SubcontratoMaster[]>([])
+  const [facturas, setFacturas] = useState<Factura[]>([])
+  const [cuentas, setCuentas] = useState<CuentaPorCobrar[]>([])
+  const [abonos, setAbonos] = useState<AbonoCuenta[]>([])
+  const [loading, setLoading] = useState(true)
+  const [vista, setVista] = useState<'curso' | 'culminadas'>('curso')
+  const [historialObra, setHistorialObra] = useState<string | null>(null)
+  const [mostrarGuia, setMostrarGuia] = useState(false)
+  const [mostrarNuevaObra, setMostrarNuevaObra] = useState(false)
+  const [nuevaObra, setNuevaObra] = useState({ nombre: '', cliente: '', presupuesto_total: '' })
+  const [nuevaFactura, setNuevaFactura] = useState<Record<string, { fecha: string; monto: string }>>({})
+
+  useEffect(() => {
+    if (!localStorage.getItem('horma_guia_obras_vista')) {
+      setMostrarGuia(true)
+      localStorage.setItem('horma_guia_obras_vista', '1')
+    }
+  }, [])
+
+  const cargar = useCallback(async () => {
+    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }, { data: t }, { data: sm }, { data: f }, { data: cu }, { data: ab }] = await Promise.all([
+      supabase.from('reportes_diarios').select('*'),
+      supabase.from('reportes_compras').select('*'),
+      supabase.from('reportes_cobros').select('*'),
+      supabase.from('reportes_subcontratos').select('*'),
+      supabase.from('obras').select('*').order('nombre'),
+      supabase.from('trabajadores').select('*'),
+      supabase.from('subcontratos_master').select('*'),
+      supabase.from('facturas').select('*'),
+      supabase.from('cuentas_por_cobrar').select('*'),
+      supabase.from('abonos_cuenta').select('*'),
+    ])
+    setDiarios((d as ReporteTrabajadorDia[]) || [])
+    setCompras((c as ReporteCompraDia[]) || [])
+    setCobros((co as ReporteCobroDia[]) || [])
+    setSubcontratos((s as ReporteSubcontratoDia[]) || [])
+    setObrasMaestro((m as Obra[]) || [])
+    setTrabajadoresTarifas((t as Trabajador[]) || [])
+    setSubcontratosMaster((sm as SubcontratoMaster[]) || [])
+    setFacturas((f as Factura[]) || [])
+    setCuentas((cu as CuentaPorCobrar[]) || [])
+    setAbonos((ab as AbonoCuenta[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function guardarPresupuesto(obraId: string, monto: number | null) {
+    await supabase.from('obras').update({ presupuesto_total: monto }).eq('id', obraId)
+    cargar()
+  }
+
+  async function guardarCliente(obraId: string, cliente: string | null) {
+    await supabase.from('obras').update({ cliente }).eq('id', obraId)
+    cargar()
+  }
+
+  async function marcarCulminada(obraId: string, culminada: boolean) {
+    await supabase.from('obras').update({ activa: !culminada }).eq('id', obraId)
+    cargar()
+  }
+
+  async function marcarReembolsado(compraId: string, reembolsado: boolean) {
+    await supabase.from('reportes_compras').update({ reembolsado }).eq('id', compraId)
+    cargar()
+  }
+
+  async function crearObra() {
+    if (!nuevaObra.nombre.trim()) {
+      alert('Completa el nombre de la obra.')
+      return
+    }
+    let presupuesto: number | null = null
+    if (nuevaObra.presupuesto_total.trim()) {
+      presupuesto = Number(nuevaObra.presupuesto_total)
+      if (!Number.isFinite(presupuesto) || presupuesto <= 0) {
+        alert('El presupuesto total tiene que ser un número mayor a cero.')
+        return
+      }
+    }
+    const { error } = await supabase.from('obras').insert({
+      nombre: nuevaObra.nombre.trim(),
+      cliente: nuevaObra.cliente.trim() || null,
+      presupuesto_total: presupuesto,
+      activa: true,
+    })
+    if (error) {
+      alert('No se pudo crear la obra. Puede que ya exista una con ese nombre.')
+      return
+    }
+    setNuevaObra({ nombre: '', cliente: '', presupuesto_total: '' })
+    setMostrarNuevaObra(false)
+    cargar()
+  }
+
+  async function agregarFactura(obra: string) {
+    const datos = nuevaFactura[obra] || { fecha: '', monto: '' }
+    if (!datos.fecha.trim()) {
+      alert('Completa la fecha de la factura.')
+      return
+    }
+    const monto = Number(datos.monto)
+    if (!Number.isFinite(monto) || monto <= 0) {
+      alert('El monto de la factura tiene que ser un número mayor a cero.')
+      return
+    }
+    const { error } = await supabase.from('facturas').insert({ fecha: datos.fecha, obra, monto })
+    if (error) {
+      alert('No se pudo guardar la factura. Intenta de nuevo.')
+      return
+    }
+    setNuevaFactura(prev => ({ ...prev, [obra]: { fecha: '', monto: '' } }))
+    cargar()
+  }
+
+  if (loading) return <div className="spinner" />
+
+  const nombres = Array.from(new Set([
+    ...obrasMaestro.map(o => o.nombre),
+    ...diarios.filter(d => d.presente && d.obra).map(d => d.obra as string),
+    ...compras.filter(c => c.obra).map(c => c.obra as string),
+    ...cobros.filter(c => c.obra).map(c => c.obra as string),
+    ...subcontratos.filter(s => s.obra).map(s => s.obra as string),
+    ...cuentas.filter(c => c.obra).map(c => c.obra as string),
+  ]))
+
+  const resumen = nombres.map(obra => {
+    const maestro = obrasMaestro.find(o => o.nombre === obra)
+    const diariosObra = diarios.filter(d => d.obra === obra && d.presente)
+    const comprasObra = compras.filter(c => c.obra === obra)
+    const cobrosObra = cobros.filter(c => c.obra === obra)
+    const subcontratosObra = subcontratos.filter(s => s.obra === obra)
+    // Plata cobrada por esta obra vía el sistema manual de cuentas por cobrar
+    // (cuenta.obra === esta obra) — sin esto, obras como "Doctora Eloísa 5860"
+    // muestran Cobrado $0 aunque ya se hayan recibido varios abonos, porque esos
+    // abonos viven en abonos_cuenta, no en reportes_cobros.
+    const cuentaIdsObra = new Set(cuentas.filter(c => c.obra === obra).map(c => c.id))
+    const cobradoManual = abonos.filter(a => cuentaIdsObra.has(a.cuenta_id)).reduce((sum, a) => sum + a.monto, 0)
+
+    const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
+    const contratosObra = subcontratosMaster.filter(s => s.obra === obra)
+    const gastoSubcontratos = contratosObra.length > 0
+      ? contratosObra.reduce((sum, s) => sum + s.total_contrato, 0)
+      : subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const pagadoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const adelantos = diariosObra.filter(d => d.tipo_pago !== 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
+    const pagosSemanales = diariosObra.filter(d => d.tipo_pago === 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
+    const manoDeObra = diariosObra.reduce((sum, d) => {
+      const tarifa = trabajadoresTarifas.find(t => t.nombre === d.trabajador)
+      const base = d.fraccion_jornada * (tarifa?.tarifa_diaria || 0)
+      const viaticoMonto = d.viatico ? (tarifa?.viatico_diario || 0) : 0
+      return sum + base + viaticoMonto
+    }, 0)
+    const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
+    const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0) + cobradoManual
+    const saldo = cobrado - gastoCompras - pagadoSubcontratos - adelantos - pagosSemanales
+    const presupuestoTotal = maestro?.presupuesto_total ?? null
+    const facturado = facturas.filter(f => f.obra === obra).reduce((sum, f) => sum + f.monto, 0)
+    const porFacturar = presupuestoTotal != null ? presupuestoTotal - facturado : null
+    const activa = maestro?.activa ?? true
+
+    return { obra, obraId: maestro?.id, activa, cliente: maestro?.cliente ?? null, presupuestoTotal, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, facturado, porFacturar }
+  })
+
+  const enCurso = resumen.filter(o => o.activa)
+  const culminadas = resumen.filter(o => !o.activa)
+  const resumenVisible = vista === 'curso' ? enCurso : culminadas
+
+  const formNuevaObra = (
+    <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="field">
+          <label>Nombre de la obra</label>
+          <input type="text" placeholder="Ej: Luz 2979" value={nuevaObra.nombre} onChange={e => setNuevaObra(p => ({ ...p, nombre: e.target.value }))} />
+        </div>
+        <div className="field">
+          <label>Cliente (opcional)</label>
+          <input type="text" placeholder="Ej: Cristian M" value={nuevaObra.cliente} onChange={e => setNuevaObra(p => ({ ...p, cliente: e.target.value }))} />
+        </div>
+        <div className="field">
+          <label>Presupuesto total (opcional)</label>
+          <input type="number" min="0" placeholder="Monto en pesos" value={nuevaObra.presupuesto_total} onChange={e => setNuevaObra(p => ({ ...p, presupuesto_total: e.target.value }))} />
+        </div>
+        <button className="btn btn-primary" onClick={crearObra}>Guardar obra</button>
+      </div>
+    </div>
+  )
+
+  const porCliente = Object.entries(
+    resumenVisible.reduce<Record<string, typeof resumenVisible>>((acc, o) => {
+      const key = o.cliente || 'Sin cliente asignado'
+      if (!acc[key]) acc[key] = []
+      acc[key].push(o)
+      return acc
+    }, {})
+  ).sort(([a], [b]) => (a === 'Sin cliente asignado' ? 1 : b === 'Sin cliente asignado' ? -1 : a.localeCompare(b)))
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => setVista('curso')}
+            style={{
+              padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
+              border: `1.5px solid ${vista === 'curso' ? 'var(--primary)' : 'var(--border)'}`,
+              background: vista === 'curso' ? 'var(--primary)' : 'var(--white)',
+              color: vista === 'curso' ? '#fff' : 'var(--muted)',
+            }}
+          >En curso ({enCurso.length})</button>
+          <button
+            onClick={() => setVista('culminadas')}
+            style={{
+              padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
+              border: `1.5px solid ${vista === 'culminadas' ? 'var(--success)' : 'var(--border)'}`,
+              background: vista === 'culminadas' ? 'var(--success)' : 'var(--white)',
+              color: vista === 'culminadas' ? '#fff' : 'var(--muted)',
+            }}
+          >Culminadas ({culminadas.length})</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => setMostrarNuevaObra(x => !x)} style={{ fontSize: 13 }}>
+            {mostrarNuevaObra ? 'Cancelar' : '+ Nueva obra'}
+          </button>
+          <button className="btn btn-secondary" onClick={() => setMostrarGuia(true)} style={{ fontSize: 13 }}>
+            ¿Cómo se lee esto?
+          </button>
+        </div>
+      </div>
+
+      {mostrarNuevaObra && formNuevaObra}
+      {mostrarGuia && <GuiaObras onClose={() => setMostrarGuia(false)} />}
+
+      {resumenVisible.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>
+          {vista === 'curso' ? 'Sin obras en curso.' : 'Todavía no hay obras marcadas como culminadas.'}
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {porCliente.map(([cliente, obras]) => (
+            <div key={cliente}>
+              <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                {cliente}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {obras.map(o => (
+                  <div key={o.obra} className="card" style={{ padding: '16px 18px', borderTop: `3px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                      <p className="font-serif" style={{ fontSize: 21, flex: 1, color: 'var(--secondary)' }}>{o.obra}</p>
+                      {o.obraId && (
+                        <button
+                          className="btn btn-ghost"
+                          onClick={() => marcarCulminada(o.obraId as string, vista === 'curso')}
+                          style={{ fontSize: 12, padding: '6px 10px', flexShrink: 0 }}
+                        >
+                          {vista === 'curso' ? 'Marcar como culminada' : 'Reactivar'}
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => setHistorialObra(o.obra)}
+                        style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
+                      >
+                        Detalle
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                      <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
+                      <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
+                      <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+                      <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
+                      <StatTile label="Pagos semana" valor={fmtMoney(o.pagosSemanales)} />
+                      <StatTile label="Cobrado" valor={fmtMoney(o.cobrado)} tono="positivo" />
+                      <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
+                      <StatTile label="Facturado" valor={fmtMoney(o.facturado)} />
+                      <StatTile label="Por facturar" valor={o.porFacturar != null ? fmtMoney(o.porFacturar) : 'sin presupuesto'} />
+                    </div>
+                    <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {o.obraId ? (
+                        <>
+                          <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
+                          <EditableCliente valor={o.cliente} onGuardar={cliente => guardarCliente(o.obraId as string, cliente)} />
+                        </>
+                      ) : (
+                        <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
+                      )}
+                      {o.cobradoManual > 0 && (
+                        <span>
+                          De lo cobrado, <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobradoManual)}</strong> viene de la cuenta por cobrar manual (no del Reporte Diario).
+                        </span>
+                      )}
+                      {o.gastoSubcontratos !== o.pagadoSubcontratos && (
+                        <span>
+                          Subcontratos: contrato completo {fmtMoney(o.gastoSubcontratos)}, pagado hasta ahora <strong style={{ color: 'var(--warning)' }}>{fmtMoney(o.pagadoSubcontratos)}</strong>
+                        </span>
+                      )}
+                      {o.porReembolsar > 0 && (
+                        <span>
+                          Por reembolsar (compras que pagó un trabajador con su plata): <strong style={{ color: 'var(--warning)' }}>{fmtMoney(o.porReembolsar)}</strong>
+                        </span>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 4 }}>
+                        <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                          <label>Fecha de la factura</label>
+                          <input
+                            type="date"
+                            value={(nuevaFactura[o.obra] || { fecha: '', monto: '' }).fecha}
+                            onChange={e => setNuevaFactura(prev => ({ ...prev, [o.obra]: { ...(prev[o.obra] || { fecha: '', monto: '' }), fecha: e.target.value } }))}
+                          />
+                        </div>
+                        <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                          <label>Monto facturado</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="Monto en pesos"
+                            value={(nuevaFactura[o.obra] || { fecha: '', monto: '' }).monto}
+                            onChange={e => setNuevaFactura(prev => ({ ...prev, [o.obra]: { ...(prev[o.obra] || { fecha: '', monto: '' }), monto: e.target.value } }))}
+                          />
+                        </div>
+                        <button className="btn btn-secondary" onClick={() => agregarFactura(o.obra)} style={{ flexShrink: 0 }}>+ Agregar factura</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {historialObra && (
+        <HistorialObraModal
+          obra={historialObra}
+          diarios={diarios}
+          compras={compras}
+          cobros={cobros}
+          subcontratos={subcontratos}
+          tarifas={trabajadoresTarifas}
+          onClose={() => setHistorialObra(null)}
+          onMarcarReembolsado={marcarReembolsado}
+        />
+      )}
+    </>
+  )
+}
+
 /* ─── Estado de resultados ───────────────────────────── */
 function mesActualISO() {
   const d = new Date()
@@ -395,6 +758,7 @@ export function PanelEstadoResultados() {
   const [tarifas, setTarifas] = useState<Trabajador[]>([])
   const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>([])
   const [gastosVariables, setGastosVariables] = useState<GastoVariable[]>([])
+  const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarGestionGastos, setMostrarGestionGastos] = useState(false)
   const [mostrarGestionGastosVariables, setMostrarGestionGastosVariables] = useState(false)
@@ -403,7 +767,7 @@ export function PanelEstadoResultados() {
 
   useEffect(() => {
     (async () => {
-      const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: cu }, { data: ab }, { data: t }, { data: gf }, { data: gv }] = await Promise.all([
+      const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: cu }, { data: ab }, { data: t }, { data: gf }, { data: gv }, { data: om }] = await Promise.all([
         supabase.from('reportes_diarios').select('*'),
         supabase.from('reportes_compras').select('*'),
         supabase.from('reportes_cobros').select('*'),
@@ -413,6 +777,7 @@ export function PanelEstadoResultados() {
         supabase.from('trabajadores').select('*'),
         supabase.from('gastos_fijos').select('*'),
         supabase.from('gastos_variables').select('*'),
+        supabase.from('obras').select('*'),
       ])
       setDiarios((d as ReporteTrabajadorDia[]) || [])
       setCompras((c as ReporteCompraDia[]) || [])
@@ -423,6 +788,7 @@ export function PanelEstadoResultados() {
       setTarifas((t as Trabajador[]) || [])
       setGastosFijos((gf as GastoFijo[]) || [])
       setGastosVariables((gv as GastoVariable[]) || [])
+      setObrasMaestro((om as Obra[]) || [])
       setLoading(false)
     })()
   }, [])
@@ -508,6 +874,8 @@ export function PanelEstadoResultados() {
   if (loading) return <div className="spinner" />
 
   const obras = Array.from(new Set([
+    ...obrasMaestro.map(o => o.nombre),
+    ...cuentas.filter(c => c.obra).map(c => c.obra as string),
     ...diarios.filter(d => d.obra).map(d => d.obra as string),
     ...compras.filter(c => c.obra).map(c => c.obra as string),
     ...cobros.filter(c => c.obra).map(c => c.obra as string),
@@ -742,8 +1110,10 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Subcontratos', texto: 'Lo pagado a subcontratistas externos, como un pintor, que no son parte del equipo fijo.' },
   { titulo: 'Adelantos', texto: 'Plata adelantada a un trabajador a cuenta de lo que se le debe. No es su pago completo de la semana.' },
   { titulo: 'Pagos semana', texto: 'La liquidación semanal completa que ya se le pagó a un trabajador.' },
-  { titulo: 'Cobrado', texto: 'Lo que el cliente ya pagó por esta obra.' },
-  { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). En rojo significa que la obra todavía no se paga sola.' },
+  { titulo: 'Cobrado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual.' },
+  { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). Es la plata en caja de la obra hoy, no cuánto falta que pague el cliente — para eso mira "Por facturar".' },
+  { titulo: 'Facturado', texto: 'El total que ya se le facturó formalmente al cliente por esta obra, sume o no coincida con lo cobrado (a veces se cobra antes de facturar, o se factura antes de cobrar).' },
+  { titulo: 'Por facturar', texto: 'Presupuesto total menos lo facturado — cuánto le queda al cliente por facturarle en total. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto total cargado.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
 
