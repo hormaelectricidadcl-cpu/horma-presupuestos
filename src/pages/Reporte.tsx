@@ -39,6 +39,12 @@ interface CompraRow {
 
 interface CobroRow {
   id?: string
+  // De dónde viene esta fila al cargarla — determina si al guardar se borra de
+  // reportes_cobros o de abonos_cuenta. Las filas nuevas (sin id) se resuelven
+  // solas al guardar: si la obra tiene una única cuenta por cobrar activa, el
+  // cobro se guarda ahí (evita el duplicado que ya pasó una vez); si no, cae al
+  // camino viejo (reportes_cobros).
+  origen?: 'reportes_cobros' | 'abono_cuenta'
   obra: string
   cliente: string
   monto: string
@@ -103,12 +109,15 @@ export default function Reporte({ token, embedded = false }: Props) {
   const cargarDia = useCallback(async (f: string) => {
     setLoading(true)
     setError(null)
-    const [{ data: dia }, { data: compr }, { data: cobr }, { data: subc }, { data: punt }] = await Promise.all([
+    const [{ data: dia }, { data: compr }, { data: cobr }, { data: subc }, { data: punt }, { data: aboAquiDia }] = await Promise.all([
       supabase.from('reportes_diarios').select('*').eq('fecha', f),
       supabase.from('reportes_compras').select('*').eq('fecha', f).order('created_at'),
       supabase.from('reportes_cobros').select('*').eq('fecha', f).order('created_at'),
       supabase.from('reportes_subcontratos').select('*').eq('fecha', f).order('created_at'),
       supabase.from('reportes_trabajos_puntuales').select('*').eq('fecha', f).order('created_at'),
+      // Cobros de ese dia que ya viven en una cuenta por cobrar (obra con cuenta
+      // unica) en vez de reportes_cobros — para que se sigan viendo/editando acá.
+      supabase.from('abonos_cuenta').select('id, fecha, monto, cuentas_por_cobrar(obra, pagador)').eq('fecha', f),
     ])
 
     const base = defaultTrabajadores()
@@ -128,9 +137,17 @@ export default function Reporte({ token, embedded = false }: Props) {
     setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null; pagado_por: string | null; reembolsado: boolean | null }) => ({
       id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false,
     })))
-    setCobros((cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
-      id: c.id, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
-    })))
+    const cobrosLegado = (cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
+      id: c.id, origen: 'reportes_cobros' as const, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
+    }))
+    type AbonoConCuenta = { id: string; monto: number; cuentas_por_cobrar: { obra: string | null; pagador: string }[] | { obra: string | null; pagador: string } | null }
+    const cobrosDeCuenta = ((aboAquiDia || []) as AbonoConCuenta[])
+      .map(a => ({ ...a, cuenta: Array.isArray(a.cuentas_por_cobrar) ? a.cuentas_por_cobrar[0] : a.cuentas_por_cobrar }))
+      .filter(a => a.cuenta?.obra)
+      .map(a => ({
+        id: a.id, origen: 'abono_cuenta' as const, obra: a.cuenta!.obra as string, cliente: a.cuenta!.pagador, monto: String(a.monto),
+      }))
+    setCobros([...cobrosLegado, ...cobrosDeCuenta])
     setSubcontratos((subc || []).map((s: { id: string; obra: string | null; subcontrato: string; monto: number }) => ({
       id: s.id, obra: s.obra || '', subcontrato: s.subcontrato, monto: String(s.monto),
     })))
@@ -299,12 +316,87 @@ export default function Reporte({ token, embedded = false }: Props) {
       }
     }
 
+    // Resolver a que cuenta por cobrar corresponde cada obra — solo si tiene UNA
+    // sola cuenta activa (si tiene 0 o varias, ese cobro sigue el camino viejo,
+    // reportes_cobros, para no adivinar a cual de varias cuentas corresponde).
+    const { data: cuentasActivas } = await supabase.from('cuentas_por_cobrar').select('id, obra').eq('activa', true).not('obra', 'is', null)
+    const cuentaIdsPorObra = new Map<string, string[]>()
+    for (const c of cuentasActivas || []) {
+      if (!c.obra) continue
+      if (!cuentaIdsPorObra.has(c.obra)) cuentaIdsPorObra.set(c.obra, [])
+      cuentaIdsPorObra.get(c.obra)!.push(c.id)
+    }
+
+    const cobrosParaCuenta: { fila: CobroRow; cuentaId: string }[] = []
+    const cobrosParaLegado: CobroRow[] = []
+    for (const c of cobrosValidos) {
+      const ids = c.obra ? cuentaIdsPorObra.get(c.obra) : undefined
+      if (c.origen !== 'reportes_cobros' && ids && ids.length === 1) {
+        cobrosParaCuenta.push({ fila: c, cuentaId: ids[0] })
+      } else {
+        cobrosParaLegado.push(c)
+      }
+    }
+
+    // Aviso de posible duplicado — solo para filas nuevas (sin id, recien
+    // tipeadas hoy): si ya existe un monto igual, misma obra, misma fecha, EN
+    // CUALQUIERA de los dos sistemas (el mismo donde va a caer esta fila, o el
+    // otro), es probablemente el mismo pago cargado dos veces por error (esto
+    // fue exactamente el bug real que paso con Luis Carrera 2700).
+    for (const c of cobrosParaCuenta) {
+      if (c.fila.id) continue
+      const [{ data: enLegado }, { data: enMismaCuenta }] = await Promise.all([
+        supabase.from('reportes_cobros').select('id').eq('fecha', fecha).eq('obra', c.fila.obra).eq('monto', Number(c.fila.monto)).limit(1),
+        supabase.from('abonos_cuenta').select('id').eq('fecha', fecha).eq('monto', Number(c.fila.monto)).eq('cuenta_id', c.cuentaId).limit(1),
+      ])
+      if ((enLegado && enLegado.length > 0) || (enMismaCuenta && enMismaCuenta.length > 0)) {
+        if (!window.confirm(`Ya hay un cobro de $${c.fila.monto} para "${c.fila.obra}" el ${fecha} cargado antes. ¿Es un pago distinto (seguir) o el mismo cargado dos veces (cancelar)?`)) {
+          setSaving(false)
+          return
+        }
+      }
+    }
+    for (const c of cobrosParaLegado) {
+      if (c.id) continue
+      const idsObra = c.obra ? cuentaIdsPorObra.get(c.obra) : undefined
+      const [{ data: enMismoLegado }, { data: enCuenta }] = await Promise.all([
+        supabase.from('reportes_cobros').select('id').eq('fecha', fecha).eq('obra', c.obra).eq('monto', Number(c.monto)).limit(1),
+        idsObra && idsObra.length > 0
+          ? supabase.from('abonos_cuenta').select('id').eq('fecha', fecha).eq('monto', Number(c.monto)).in('cuenta_id', idsObra).limit(1)
+          : Promise.resolve({ data: [] as { id: string }[] }),
+      ])
+      if ((enMismoLegado && enMismoLegado.length > 0) || (enCuenta && enCuenta.length > 0)) {
+        if (!window.confirm(`Ya hay un cobro de $${c.monto} para "${c.obra}" el ${fecha} cargado antes. ¿Es un pago distinto (seguir) o el mismo cargado dos veces (cancelar)?`)) {
+          setSaving(false)
+          return
+        }
+      }
+    }
+
+    // Reportes_cobros: se reemplaza completo el dia, como antes — pero solo las
+    // filas que efectivamente corresponden a este camino (las que se enrutaron a
+    // una cuenta no tocan esta tabla).
     await supabase.from('reportes_cobros').delete().eq('fecha', fecha)
-    if (cobrosValidos.length) {
+    if (cobrosParaLegado.length) {
       const { error: e3 } = await supabase.from('reportes_cobros').insert(
-        cobrosValidos.map(c => ({ fecha, obra: c.obra || null, cliente: c.cliente.trim(), monto: Number(c.monto) }))
+        cobrosParaLegado.map(c => ({ fecha, obra: c.obra || null, cliente: c.cliente.trim(), monto: Number(c.monto) }))
       )
       if (e3) {
+        setError('Error al guardar los cobros. Intenta de nuevo.')
+        setSaving(false)
+        return
+      }
+    }
+
+    // Abonos de cuenta: solo se insertan los NUEVOS (sin id) — los que ya
+    // existian (origen 'abono_cuenta', cargados por cargarDia) se dejan como
+    // estan, se editan desde la pestaña Obras > Detalle si hace falta corregirlos.
+    const cobrosNuevosParaCuenta = cobrosParaCuenta.filter(c => !c.fila.id)
+    if (cobrosNuevosParaCuenta.length) {
+      const { error: e3b } = await supabase.from('abonos_cuenta').insert(
+        cobrosNuevosParaCuenta.map(c => ({ cuenta_id: c.cuentaId, fecha, monto: Number(c.fila.monto) }))
+      )
+      if (e3b) {
         setError('Error al guardar los cobros. Intenta de nuevo.')
         setSaving(false)
         return
@@ -558,39 +650,48 @@ export default function Reporte({ token, embedded = false }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
               {cobros.map((c, idx) => (
                 <div key={idx} className="card" style={{ padding: 14 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div className="field">
-                      <label>Cliente</label>
-                      <input
-                        type="text"
-                        placeholder="Nombre del cliente"
-                        value={c.cliente}
-                        onChange={e => actualizarCobro(idx, { cliente: e.target.value })}
-                      />
+                  {c.origen === 'abono_cuenta' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 13 }}><strong>{c.cliente}</strong> — {c.obra}: {c.monto ? `$${Number(c.monto).toLocaleString('es-CL')}` : ''}</span>
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Este cobro ya vive en la cuenta por cobrar de esta obra — para corregirlo, hazlo desde la pestaña Obras → Detalle, no acá.
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      <div className="field" style={{ flex: 1 }}>
-                        <label>Monto</label>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div className="field">
+                        <label>Cliente</label>
                         <input
-                          type="number"
-                          min="0"
-                          placeholder="Monto en pesos"
-                          value={c.monto}
-                          onChange={e => actualizarCobro(idx, { monto: e.target.value })}
+                          type="text"
+                          placeholder="Nombre del cliente"
+                          value={c.cliente}
+                          onChange={e => actualizarCobro(idx, { cliente: e.target.value })}
                         />
                       </div>
-                      <div className="field" style={{ flex: 1 }}>
-                        <label>Obra</label>
-                        <select value={c.obra} onChange={e => actualizarCobro(idx, { obra: e.target.value })}>
-                          <option value="">Selecciona...</option>
-                          {obras.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <div className="field" style={{ flex: 1 }}>
+                          <label>Monto</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="Monto en pesos"
+                            value={c.monto}
+                            onChange={e => actualizarCobro(idx, { monto: e.target.value })}
+                          />
+                        </div>
+                        <div className="field" style={{ flex: 1 }}>
+                          <label>Obra</label>
+                          <select value={c.obra} onChange={e => actualizarCobro(idx, { obra: e.target.value })}>
+                            <option value="">Selecciona...</option>
+                            {obras.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </div>
                       </div>
+                      <button type="button" className="btn btn-ghost" onClick={() => quitarCobro(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
+                        ✕ Quitar
+                      </button>
                     </div>
-                    <button type="button" className="btn btn-ghost" onClick={() => quitarCobro(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
-                      ✕ Quitar
-                    </button>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>

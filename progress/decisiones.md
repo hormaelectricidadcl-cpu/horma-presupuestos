@@ -1,6 +1,20 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-20 — Rediseño: `cuentas_por_cobrar` pasa a ser la única fuente para obras con presupuesto definido
+Causa raíz de casi todos los bugs de plata de hoy: dos caminos independientes para cargar "el cliente pagó" (automático vía `obras.presupuesto_total`+`reportes_cobros`, manual vía `cuentas_por_cobrar`+`abonos_cuenta`), sin ningún cruce entre ellos — de ahí el cobro duplicado de Luis Carrera y los números que no coincidían entre pestañas.
+
+**No se creó tabla nueva ni se cambió el esquema** — no hay acceso a DDL desde acá (la API REST de Supabase no ejecuta `CREATE TABLE`, solo CRUD sobre tablas existentes). En cambio, `cuentas_por_cobrar`+`abonos_cuenta` (que ya eran el modelo más flexible) pasan a ser la única fuente:
+- Ohiggins 126 Limache y Luz 2979 se migraron: se les creó su cuenta, sus `reportes_cobros` se migraron a `abonos_cuenta` (verificado: suma antes = suma después, exacto) y se borraron las filas viejas.
+- **`Reporte.tsx` (el formulario que usa Gustavo todos los días) ahora enruta un cobro nuevo automáticamente**: si la obra tiene exactamente UNA cuenta activa, el cobro se guarda ahí; si tiene 0 o varias (caso raro, solo Luis Carrera hoy con 3 cuentas), sigue cayendo en `reportes_cobros` como antes — no se adivina a cuál cuenta corresponde. Probado en vivo con datos reales (cobro de prueba, verificado en Supabase, borrado después).
+- **Aviso de posible duplicado**: antes de guardar un cobro nuevo, se revisa si ya existe algo igual (misma obra, fecha, monto) en cualquiera de los dos sistemas — si sí, pide confirmación explícita antes de guardar. Probado en vivo: al repetir el mismo cobro de prueba, apareció el aviso y al cancelar no se duplicó nada.
+- Al recargar un día ya guardado, los cobros que ya viven en una cuenta se muestran de solo lectura en el Reporte Diario, con una nota de que se corrigen desde Obras → Detalle (no se puede editar/borrar una cuenta desde ahí, para no arriesgar un borrado accidental sin el contexto completo).
+- `sync-cobros.js` (sync a Google Sheets) actualizado para leer de los dos lugares — sin esto, la planilla hubiera dejado de actualizarse para las obras migradas sin que nadie se diera cuenta.
+
+**Sigue pendiente (anotado en tareas.md):** obras sin presupuesto definido (ej. Doctora Eloísa 5843) se quedan en el camino viejo hasta que alguien les cargue un presupuesto — no se puede migrar sin inventar un número. El merge de las pestañas "Obras" y "Cuentas por cobrar" en una sola (pedido explícito de Alexandra) quedó pendiente para retomar — la base de datos ya está unificada, falta la unificación visual.
+
+**Regla nueva, no re-litigar:** no crear más cuentas manuales sueltas para obras nuevas — toda obra nueva con presupuesto conocido debe crear su `cuentas_por_cobrar` desde el principio (o dejar que se cree automático la primera vez que se define un presupuesto), nunca dejar que conviva con `reportes_cobros` para la misma obra.
+
 ## 2026-08-20 — Cobro duplicado de $2.000.000 en Luis Carrera 2700, corregido
 Al agregar "cobradoManual" (sumar reportes_cobros + abonos de cuentas manuales) se generó un doble conteo real: el pago de Ignacio del 5/08 estaba cargado DOS VECES — una vez como cobro de $2.000.000 en `reportes_cobros` (creado 18:53 del 15/08) y otra vez como dos abonos de $1.000.000 en la cuenta manual "Presupuesto original Luis Carrera" (creados 19:21 del 15/08, 28 min después, misma sesión de carga). Se borró la fila de `reportes_cobros` (quedan los 2 abonos manuales, que coinciden con el detalle que dio Gustavo). Cobrado real de esa obra: $3.016.150, no $5.016.150. **Se revisó el resto del sistema cruzando fecha+obra entre `reportes_cobros` y `abonos_cuenta` — este fue el único caso.**
 

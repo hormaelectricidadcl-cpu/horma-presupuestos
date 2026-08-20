@@ -1,6 +1,12 @@
-// Sincroniza los cobros del dia (Supabase reportes_cobros) con la hoja "Cobrado"
-// de la Google Sheet "Control de Obra - Horma". Se llama desde Reporte.tsx
-// despues de guardar en Supabase, igual que sync-horas.js.
+// Sincroniza los cobros del dia con la hoja "Cobrado" de la Google Sheet
+// "Control de Obra - Horma". Se llama desde Reporte.tsx despues de guardar en
+// Supabase, igual que sync-horas.js.
+//
+// Desde el 20/08/2026 un cobro nuevo puede vivir en DOS lugares segun la obra
+// (ver progress/decisiones.md): reportes_cobros (obras sin cuenta por cobrar
+// propia) o abonos_cuenta (obras que ya tienen su cuenta - la mayoria, despues
+// de la migracion). Esta funcion junta los dos antes de sincronizar, para que
+// la planilla no deje de actualizarse silenciosamente para las obras migradas.
 //
 // A diferencia de "Horas" (upsert por fecha+trabajador), acá no hay una clave
 // natural por fila — un mismo dia puede tener varios cobros de la misma obra
@@ -32,18 +38,25 @@ export async function onRequestPost(context) {
     return json({ error: 'Faltan variables GOOGLE_SERVICE_ACCOUNT_JSON o CONTROL_OBRA_SHEET_ID' }, 500)
   }
 
-  const supaRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/reportes_cobros?select=*&fecha=eq.${fecha}`,
-    {
-      headers: {
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-    }
-  )
-  if (!supaRes.ok) return json({ error: 'Error leyendo Supabase' }, 502)
-  const cobros = await supaRes.json()
-  if (!Array.isArray(cobros) || cobros.length === 0) return json({ ok: true, synced: 0 })
+  const headers = {
+    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+  }
+
+  const [legadoRes, cuentaRes] = await Promise.all([
+    fetch(`${env.SUPABASE_URL}/rest/v1/reportes_cobros?select=*&fecha=eq.${fecha}`, { headers }),
+    fetch(`${env.SUPABASE_URL}/rest/v1/abonos_cuenta?select=fecha,monto,cuentas_por_cobrar(obra,pagador)&fecha=eq.${fecha}`, { headers }),
+  ])
+  if (!legadoRes.ok || !cuentaRes.ok) return json({ error: 'Error leyendo Supabase' }, 502)
+  const cobrosLegado = await legadoRes.json()
+  const abonosCuenta = await cuentaRes.json()
+
+  const cobrosDeCuenta = (Array.isArray(abonosCuenta) ? abonosCuenta : [])
+    .filter(a => a.cuentas_por_cobrar && a.cuentas_por_cobrar.obra)
+    .map(a => ({ fecha: a.fecha, obra: a.cuentas_por_cobrar.obra, cliente: a.cuentas_por_cobrar.pagador, monto: a.monto }))
+
+  const cobros = [...(Array.isArray(cobrosLegado) ? cobrosLegado : []), ...cobrosDeCuenta]
+  if (cobros.length === 0) return json({ ok: true, synced: 0 })
 
   let accessToken
   try {
