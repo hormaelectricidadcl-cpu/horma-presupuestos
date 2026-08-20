@@ -140,6 +140,7 @@ export interface GastoFijo {
   monto_mensual: number
   activo: boolean
   observaciones: string | null
+  vigente_desde: string | null
 }
 
 export interface GastoVariable {
@@ -147,5 +148,12 @@ export interface GastoVariable {
   fecha: string
   categoria: string | null
   descripcion: string | null
+  monto: number
+}
+
+export interface Factura {
+  id: string
+  fecha: string
+  obra: string | null
   monto: number
 }

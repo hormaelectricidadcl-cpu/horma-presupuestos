@@ -34,6 +34,7 @@ interface CompraRow {
   monto: string
   obra: string
   pagadoPor: string
+  reembolsado: boolean
 }
 
 interface CobroRow {
@@ -83,7 +84,7 @@ interface Props {
 }
 
 export default function Reporte({ token, embedded = false }: Props) {
-  const tokenValido = embedded || token === REPORTE_TOKEN
+  const tokenValido = token === REPORTE_TOKEN
 
   const [fecha, setFecha] = useState(todayISO())
   const [loading, setLoading] = useState(true)
@@ -124,8 +125,8 @@ export default function Reporte({ token, embedded = false }: Props) {
       }
     }
     setTrabajadores(base)
-    setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null; pagado_por: string | null }) => ({
-      id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', pagadoPor: c.pagado_por || '',
+    setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null; pagado_por: string | null; reembolsado: boolean | null }) => ({
+      id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false,
     })))
     setCobros((cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
       id: c.id, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
@@ -167,7 +168,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
 
   function agregarCompra() {
-    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '', pagadoPor: '' }])
+    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '', pagadoPor: '', reembolsado: false }])
   }
   function actualizarCompra(idx: number, patch: Partial<CompraRow>) {
     setCompras(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
@@ -232,9 +233,20 @@ export default function Reporte({ token, embedded = false }: Props) {
       return
     }
 
+    if (filasDiarias.some(f => f.adelanto_monto !== null && (!Number.isFinite(f.adelanto_monto) || f.adelanto_monto <= 0))) {
+      alert('El monto pagado hoy de algún trabajador no es válido.')
+      return
+    }
+
+    const montoInvalido = (m: string) => { const n = Number(m); return !Number.isFinite(n) || n <= 0 }
+
     const comprasValidas = compras.filter(c => c.descripcion.trim() || c.monto.trim())
     if (comprasValidas.some(c => !c.descripcion.trim() || !c.monto.trim())) {
       alert('Cada compra necesita descripción y monto.')
+      return
+    }
+    if (comprasValidas.some(c => montoInvalido(c.monto))) {
+      alert('El monto de alguna compra no es válido.')
       return
     }
 
@@ -243,10 +255,18 @@ export default function Reporte({ token, embedded = false }: Props) {
       alert('Cada cobro necesita cliente y monto.')
       return
     }
+    if (cobrosValidos.some(c => montoInvalido(c.monto))) {
+      alert('El monto de algún cobro no es válido.')
+      return
+    }
 
     const subcontratosValidos = subcontratos.filter(s => s.subcontrato.trim() || s.monto.trim())
     if (subcontratosValidos.some(s => !s.subcontrato.trim() || !s.monto.trim())) {
       alert('Cada subcontrato necesita nombre y monto.')
+      return
+    }
+    if (subcontratosValidos.some(s => montoInvalido(s.monto))) {
+      alert('El monto de algún subcontrato no es válido.')
       return
     }
 
@@ -270,7 +290,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     await supabase.from('reportes_compras').delete().eq('fecha', fecha)
     if (comprasValidas.length) {
       const { error: e2 } = await supabase.from('reportes_compras').insert(
-        comprasValidas.map(c => ({ fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, pagado_por: c.pagadoPor || null }))
+        comprasValidas.map(c => ({ fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, pagado_por: c.pagadoPor || null, reembolsado: c.reembolsado }))
       )
       if (e2) {
         setError('Error al guardar las compras. Intenta de nuevo.')

@@ -1,0 +1,15 @@
+-- Corrige que el Estado de Resultados de un mes histórico incluyera gastos
+-- fijos (sueldos, bonos) que en ese momento todavía no existían: no había
+-- ninguna fecha de inicio, así que un gasto fijo agregado hoy se contaba
+-- retroactivamente en todos los meses pasados.
+--
+-- vigente_desde queda NULL en los gastos fijos que ya existen (Sueldo fijo
+-- Fabriel, Bono encargado de obra) para que sigan contando en todos los
+-- meses igual que hasta ahora -- no sabemos la fecha real en que empezaron,
+-- y forzar una fecha inventada podría hacerlos desaparecer de meses donde sí
+-- correspondía cobrarlos.
+--
+-- De acá en adelante, todo gasto fijo NUEVO debería cargarse con
+-- vigente_desde = primer día del mes en que empieza a regir, para que el
+-- filtro por mes en Admin.tsx / Gustavo.tsx lo cuente solo desde ahí.
+alter table gastos_fijos add column if not exists vigente_desde date;
