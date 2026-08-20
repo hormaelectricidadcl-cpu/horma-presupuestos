@@ -20,6 +20,9 @@ Al agregar "cobradoManual" (sumar reportes_cobros + abonos de cuentas manuales) 
 
 **Lección para cualquier fix futuro que sume dos fuentes de la misma métrica:** antes de sumarlas, cruzar por fecha+obra+monto para descartar que sea el mismo pago cargado dos veces por error humano — no asumir que fuentes distintas son plata distinta.
 
+## 2026-08-20 — Luz 2979: se migró su factura vieja ($4.733.671) a abono real
+Al sacar la sección "Facturación formal" de la UI, la tabla `facturas` quedó sin usarse — pero tenía plata real de Luz 2979 ($4.733.671, 17/08) que nunca se había cargado como abono (a diferencia de Ohiggins, cuya factura vieja era la MISMA plata ya contada en sus abonos — esa no se tocó, migrarla habría duplicado). Verificado antes de migrar: Luz 2979 tenía $0 en abonos, la factura era la única plata reportada. Ahora: Facturado $4.733.671, Por facturar $6.978.616 — coincide con lo que Gustavo reportó.
+
 ## 2026-08-20 — Ohiggins: el 5º cobro ($9.458.056, "Alejandra", 18/08) era duplicado, lo borró Alexandra
 Durante la migración de Ohiggins a `cuentas_por_cobrar` se migraron 5 abonos (suma $33.374.148). Alexandra ya había avisado que el pago de $9.458.056 del 18/08 (cliente "Alejandra", el que no estaba en el WhatsApp original de Gustavo de 4 pagos) era duplicado — Gustavo había confirmado que el restante real era $15.147.740, lo cual solo cuadra con los 4 pagos originales ($23.916.092 facturado). El aviso no se procesó a tiempo (se investigó otro posible duplicado, el $4.729.023 que aparece dos veces — ese SÍ es real, Gustavo lo reportó así dos veces) y Alexandra terminó borrando la fila ella misma desde la app. **Estado final correcto: Facturado $23.916.092, Por facturar $15.147.740 — no volver a agregar ese pago.**
 
