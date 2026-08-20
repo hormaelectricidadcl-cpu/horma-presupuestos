@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import { PanelCuentasPorCobrar, PanelEstadoResultados, PanelPagoSemanal, PanelObras } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras } from '../components/PanelesObra'
 import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario } from '../types'
 
 
@@ -1249,7 +1249,7 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'obras' | 'pagos' | 'cuentas' | 'resultados'>('activos')
+  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'obras' | 'pagos' | 'resultados'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1479,7 +1479,6 @@ export default function Admin() {
           ['clientes', `Clientes (${clientesSummary.length})`, '#7c3aed'],
           ['obras', 'Obras', '#c1440e'],
           ['pagos', 'Pago semanal', '#e67e22'],
-          ['cuentas', 'Cuentas por cobrar', '#0f766e'],
           ['resultados', 'Estado de resultados', '#14213D'],
         ] as const).map(([k, label, color]) => (
           <button
@@ -1545,8 +1544,6 @@ export default function Admin() {
         <PanelObras />
       ) : tab === 'pagos' ? (
         <PanelPagoSemanal />
-      ) : tab === 'cuentas' ? (
-        <PanelCuentasPorCobrar />
       ) : tab === 'resultados' ? (
         <PanelEstadoResultados />
       ) : clientesSummary.length === 0 ? (

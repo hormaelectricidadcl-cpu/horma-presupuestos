@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
-import { PanelCuentasPorCobrar, PanelEstadoResultados, PanelPagoSemanal, PanelObras } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras } from '../components/PanelesObra'
 import type { Pendiente, TipoPendiente } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
@@ -669,7 +669,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'pendientes' | 'reporte' | 'clientes' | 'obras' | 'pagos' | 'cuentas' | 'resultados'>('pendientes')
+  const [tab, setTab] = useState<'pendientes' | 'reporte' | 'clientes' | 'obras' | 'pagos' | 'resultados'>('pendientes')
 
   const tokenValido = token === GUSTAVO_TOKEN
 
@@ -732,7 +732,7 @@ export default function Gustavo({ token }: Props) {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {([['pendientes', 'Mis tareas'], ['reporte', 'Reporte diario'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['pagos', 'Pago semanal'], ['cuentas', 'Cuentas por cobrar'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
+          {([['pendientes', 'Mis tareas'], ['reporte', 'Reporte diario'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['pagos', 'Pago semanal'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -755,8 +755,6 @@ export default function Gustavo({ token }: Props) {
           <PanelObras />
         ) : tab === 'pagos' ? (
           <PanelPagoSemanal />
-        ) : tab === 'cuentas' ? (
-          <PanelCuentasPorCobrar />
         ) : tab === 'resultados' ? (
           <PanelEstadoResultados />
         ) : loading ? (

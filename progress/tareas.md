@@ -1,8 +1,8 @@
 # Tareas pendientes
 > Ver decisiones.md 2026-08-20 "Rediseño: cuentas_por_cobrar pasa a ser la única fuente" para el contexto completo de las dos tareas de abajo.
 
-## 🔲 Merge visual de las pestañas "Obras" y "Cuentas por cobrar" en una sola
-Pedido explícito de Alexandra. La base de datos ya quedó unificada (`cuentas_por_cobrar` es la única fuente para obras con presupuesto) — falta la parte visual: una sola pestaña "Obras" (Activas/Culminadas), tarjeta simplificada (Presupuesto/Cobrado/Falta por cobrar/Cliente/Detalle), con el manejo de abonos de las cuentas manuales viviendo dentro de "Detalle" (puede haber más de una cuenta por obra — ej. Luis Carrera tiene 3). Las cuentas sin obra asociada (ej. "Visita Técnica") necesitan un lugar aparte, chico, no una pestaña propia.
+## ✅ Merge visual de las pestañas "Obras" y "Cuentas por cobrar" en una sola
+Hecho 2026-08-20: "Cuentas por cobrar" ya no existe como pestaña separada. `PanelObras` absorbió todo — el manejo de cuentas/abonos vive dentro de "Detalle" de cada obra (soporta más de una cuenta por obra), y las cuentas sin obra ("Visita Técnica") quedan en una sección "Otros cobros (sin obra)" al final de la pestaña Obras. Verificado en vivo.
 
 ## 🔲 Migrar Doctora Eloísa (5843) al sistema unificado cuando tenga presupuesto
 Sigue en el camino viejo (`reportes_cobros`) porque no tiene `presupuesto_total` definido — no se puede crear su cuenta sin inventar el monto. Apenas alguien confirme el presupuesto real, migrar igual que se hizo con Ohiggins/Luz 2979 (crear cuenta, pasar el cobro de $233.750 a abono, verificar suma, borrar la fila vieja).

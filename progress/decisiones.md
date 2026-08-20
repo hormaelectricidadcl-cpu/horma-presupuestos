@@ -20,6 +20,13 @@ Al agregar "cobradoManual" (sumar reportes_cobros + abonos de cuentas manuales) 
 
 **Lección para cualquier fix futuro que sume dos fuentes de la misma métrica:** antes de sumarlas, cruzar por fecha+obra+monto para descartar que sea el mismo pago cargado dos veces por error humano — no asumir que fuentes distintas son plata distinta.
 
+## 2026-08-20 — Merge: "Cuentas por cobrar" deja de ser pestaña, se absorbe en "Obras"
+Con la base de datos ya unificada (ver entrada de arriba), tener dos pestañas mostrando resúmenes de la misma plata seguía confundiendo — aunque los números coincidieran, Alexandra tenía que cruzar dos lugares para confiar en uno. `PanelCuentasPorCobrar` se eliminó del todo (código muerto, no quedó ningún uso). Estructura final, un solo lugar:
+- Pestaña "Obras" (En curso/Culminadas) — la tarjeta principal de cada obra ya tenía "Falta por cobrar" como número único.
+- **Detalle de cada obra** ahora también lista sus cuentas por cobrar manuales (puede haber más de una — ej. Luis Carrera tiene 3), cada una con su propia edición de abonos, más el botón "+ Agregar cuenta" para sumar una nueva (ej. una futura negociación adicional).
+- **Sección "Otros cobros (sin obra)"** al final de la pestaña Obras, para cuentas sin obra asociada (ej. "Visita Técnica") — no justifica una pestaña propia, son pocas y raras.
+- Componente nuevo reusable `CuentaMiniCard` (en PanelesObra.tsx) para no duplicar el render de una cuenta en los dos lugares donde aparece.
+
 ## 2026-08-20 — Para Gustavo, "Facturado" = "Cobrado" — Facturado formal se mueve a Detalle
 Facturado (tabla `facturas`) y Cobrado (`reportes_cobros` + cuentas manuales) son conceptos distintos en el sistema, pero Gustavo no los distingue — para él ambos significan "plata que me depositaron". Como no se actualizan al mismo tiempo (un cobro puede tardar en cargarse como factura formal), terminaban mostrando dos "cuánto falta" distintos en la misma tarjeta (ver regla de abajo). Se sacaron Facturado/Por facturar de la tarjeta principal de Obras — quedan solo dentro de "Detalle", para quien necesite el dato de facturación formal (Alexandra/contabilidad). La tarjeta principal solo muestra "Falta por cobrar".
 

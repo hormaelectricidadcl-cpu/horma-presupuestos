@@ -107,280 +107,6 @@ export function EditableCliente({ valor, onGuardar }: { valor: string | null; on
   )
 }
 
-/* ─── Cuentas por cobrar ─────────────────────────────── */
-export function PanelCuentasPorCobrar() {
-  const [cuentas, setCuentas] = useState<CuentaPorCobrar[]>([])
-  const [abonos, setAbonos] = useState<AbonoCuenta[]>([])
-  const [obrasDisponibles, setObrasDisponibles] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
-  const [mostrarForm, setMostrarForm] = useState(false)
-  const [nuevaCuenta, setNuevaCuenta] = useState({ pagador: '', concepto: '', obra: '', total_presupuesto: '' })
-  const [nuevoAbono, setNuevoAbono] = useState<Record<string, { fecha: string; monto: string }>>({})
-  const [vista, setVista] = useState<'pendientes' | 'cobradas'>('pendientes')
-  const [obrasMaestro, setObrasMaestro] = useState<Obra[]>([])
-  const [cobrosObras, setCobrosObras] = useState<ReporteCobroDia[]>([])
-  const [facturas, setFacturas] = useState<Factura[]>([])
-
-  const cargar = useCallback(async () => {
-    const [{ data: c }, { data: a }, { data: om }, { data: co }, { data: f }] = await Promise.all([
-      supabase.from('cuentas_por_cobrar').select('*').order('created_at', { ascending: false }),
-      supabase.from('abonos_cuenta').select('*'),
-      // Sin filtrar por activa: una obra culminada puede seguir debiendo plata,
-      // no tiene que desaparecer de acá solo porque el trabajo físico terminó.
-      supabase.from('obras').select('*'),
-      supabase.from('reportes_cobros').select('*'),
-      supabase.from('facturas').select('*'),
-    ])
-    setCuentas((c as CuentaPorCobrar[]) || [])
-    setAbonos((a as AbonoCuenta[]) || [])
-    setObrasMaestro((om as Obra[]) || [])
-    setCobrosObras((co as ReporteCobroDia[]) || [])
-    setFacturas((f as Factura[]) || [])
-    setLoading(false)
-  }, [])
-
-  useEffect(() => { cargar() }, [cargar])
-
-  useEffect(() => {
-    supabase.from('obras').select('nombre').eq('activa', true).order('nombre').then(({ data }) => {
-      if (data) setObrasDisponibles(data.map((o: { nombre: string }) => o.nombre))
-    })
-  }, [])
-
-  async function crearCuenta() {
-    if (!nuevaCuenta.pagador.trim() || !nuevaCuenta.concepto.trim() || !nuevaCuenta.total_presupuesto.trim()) {
-      alert('Completa quién paga, el concepto y el presupuesto total.')
-      return
-    }
-    const monto = Number(nuevaCuenta.total_presupuesto)
-    if (!Number.isFinite(monto) || monto <= 0) {
-      alert('El presupuesto total tiene que ser un número mayor a cero.')
-      return
-    }
-    const { error } = await supabase.from('cuentas_por_cobrar').insert({
-      pagador: nuevaCuenta.pagador.trim(),
-      concepto: nuevaCuenta.concepto.trim(),
-      obra: nuevaCuenta.obra.trim() || null,
-      total_presupuesto: monto,
-    })
-    if (error) {
-      alert('No se pudo guardar la cuenta. Intenta de nuevo.')
-      return
-    }
-    setNuevaCuenta({ pagador: '', concepto: '', obra: '', total_presupuesto: '' })
-    setMostrarForm(false)
-    cargar()
-  }
-
-  async function eliminarCuenta(id: string) {
-    if (!window.confirm('¿Seguro que quieres eliminar esta cuenta y todos sus abonos?')) return
-    const { error } = await supabase.from('cuentas_por_cobrar').delete().eq('id', id)
-    if (error) {
-      alert('No se pudo eliminar la cuenta. Intenta de nuevo.')
-      return
-    }
-    cargar()
-  }
-
-  async function agregarAbono(cuentaId: string) {
-    const datos = nuevoAbono[cuentaId] || { fecha: '', monto: '' }
-    if (!datos.fecha.trim() || !datos.monto.trim()) {
-      alert('Completa la fecha y el monto del abono.')
-      return
-    }
-    const monto = Number(datos.monto)
-    if (!Number.isFinite(monto) || monto <= 0) {
-      alert('El monto del abono tiene que ser un número mayor a cero.')
-      return
-    }
-    const { error } = await supabase.from('abonos_cuenta').insert({ cuenta_id: cuentaId, fecha: datos.fecha, monto })
-    if (error) {
-      alert('No se pudo guardar el abono. Intenta de nuevo.')
-      return
-    }
-    setNuevoAbono(prev => ({ ...prev, [cuentaId]: { fecha: '', monto: '' } }))
-    cargar()
-  }
-
-  async function eliminarAbono(id: string) {
-    if (!window.confirm('¿Seguro que quieres quitar este abono?')) return
-    const { error } = await supabase.from('abonos_cuenta').delete().eq('id', id)
-    if (error) {
-      alert('No se pudo quitar el abono. Intenta de nuevo.')
-      return
-    }
-    cargar()
-  }
-
-  if (loading) return <div className="spinner" />
-
-  const cuentasConSaldo = cuentas.map(c => {
-    const abonosCuenta = abonos.filter(a => a.cuenta_id === c.id).sort((a, b) => b.fecha.localeCompare(a.fecha))
-    const totalAbonado = abonosCuenta.reduce((s, a) => s + a.monto, 0)
-    return { c, abonosCuenta, totalAbonado, restante: c.total_presupuesto - totalAbonado }
-  })
-  const pendientes = cuentasConSaldo.filter(x => x.restante > 0)
-  const cobradas = cuentasConSaldo.filter(x => x.restante <= 0)
-  const listaVisible = vista === 'pendientes' ? pendientes : cobradas
-
-  // Obras con presupuesto fijo (Ohiggins, Luz 2979, futuras) se rastrean solas
-  // vía el Reporte Diario — se muestran acá también para tener un solo lugar
-  // con toda la plata pendiente de cobro, sin duplicar las que ya tienen una
-  // cuenta manual cargada (esas se excluyen por nombre de obra).
-  const obrasConCuentaManual = new Set(cuentas.map(c => c.obra).filter((o): o is string => !!o))
-  const obrasConSaldo = obrasMaestro
-    .filter(o => o.presupuesto_total != null && !obrasConCuentaManual.has(o.nombre))
-    .map(o => {
-      const cobrado = cobrosObras.filter(c => c.obra === o.nombre).reduce((s, c) => s + c.monto, 0)
-      const facturado = facturas.filter(f => f.obra === o.nombre).reduce((s, f) => s + f.monto, 0)
-      return { obra: o, cobrado, restante: (o.presupuesto_total as number) - cobrado, facturado, porFacturar: (o.presupuesto_total as number) - facturado }
-    })
-  const obrasPendientes = obrasConSaldo.filter(x => x.restante > 0)
-  const obrasCobradas = obrasConSaldo.filter(x => x.restante <= 0)
-  const obrasVisibles = vista === 'pendientes' ? obrasPendientes : obrasCobradas
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            onClick={() => setVista('pendientes')}
-            style={{
-              padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
-              border: `1.5px solid ${vista === 'pendientes' ? 'var(--primary)' : 'var(--border)'}`,
-              background: vista === 'pendientes' ? 'var(--primary)' : 'var(--white)',
-              color: vista === 'pendientes' ? '#fff' : 'var(--muted)',
-            }}
-          >Pendientes ({pendientes.length + obrasPendientes.length})</button>
-          <button
-            onClick={() => setVista('cobradas')}
-            style={{
-              padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
-              border: `1.5px solid ${vista === 'cobradas' ? 'var(--success)' : 'var(--border)'}`,
-              background: vista === 'cobradas' ? 'var(--success)' : 'var(--white)',
-              color: vista === 'cobradas' ? '#fff' : 'var(--muted)',
-            }}
-          >Cobradas ({cobradas.length + obrasCobradas.length})</button>
-        </div>
-        <button className="btn btn-primary" onClick={() => setMostrarForm(x => !x)}>
-          {mostrarForm ? 'Cancelar' : '+ Nueva cuenta'}
-        </button>
-      </div>
-
-      {mostrarForm && (
-        <div className="card" style={{ padding: 16, marginBottom: 20 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div className="field">
-              <label>¿Quién paga?</label>
-              <input type="text" placeholder="Ej: Ignacio" value={nuevaCuenta.pagador} onChange={e => setNuevaCuenta(p => ({ ...p, pagador: e.target.value }))} />
-            </div>
-            <div className="field">
-              <label>Concepto</label>
-              <input type="text" placeholder="Ej: Doctora Eloísa dirección 5860" value={nuevaCuenta.concepto} onChange={e => setNuevaCuenta(p => ({ ...p, concepto: e.target.value }))} />
-            </div>
-            <div className="field">
-              <label>Obra relacionada (opcional)</label>
-              <select value={nuevaCuenta.obra} onChange={e => setNuevaCuenta(p => ({ ...p, obra: e.target.value }))}>
-                <option value="">Sin obra asociada</option>
-                {obrasDisponibles.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label>Presupuesto total</label>
-              <input type="number" min="0" placeholder="Monto en pesos" value={nuevaCuenta.total_presupuesto} onChange={e => setNuevaCuenta(p => ({ ...p, total_presupuesto: e.target.value }))} />
-            </div>
-            <button className="btn btn-primary" onClick={crearCuenta}>Guardar cuenta</button>
-          </div>
-        </div>
-      )}
-
-      {obrasVisibles.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
-          {obrasVisibles.map(({ obra, cobrado, restante, facturado, porFacturar }) => (
-            <div key={obra.id} className="card" style={{ padding: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-                <div>
-                  <p className="font-serif" style={{ fontSize: 18, marginBottom: 2, color: 'var(--secondary)' }}>{obra.nombre}</p>
-                  <span className="font-display" style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {obra.cliente || 'Sin cliente asignado'}
-                    <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px', textTransform: 'uppercase' }}>Obra</span>
-                  </span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <StatTile label="Presupuesto total" valor={fmtMoney(obra.presupuesto_total as number)} />
-                <StatTile label="Cobrado" valor={fmtMoney(cobrado)} tono="positivo" />
-                <StatTile label="Pendiente por cobrar" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
-                <StatTile label="Facturado" valor={fmtMoney(facturado)} />
-                <StatTile label="Por facturar" valor={fmtMoney(porFacturar)} tono={porFacturar > 0 ? 'alerta' : 'positivo'} />
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
-                Se calcula solo — para registrar un cobro nuevo usa el Reporte Diario o la pestaña Obras.
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {listaVisible.length === 0 && obrasVisibles.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
-          {vista === 'pendientes' ? 'Sin cuentas pendientes.' : 'Todavía no hay cuentas cobradas por completo.'}
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {listaVisible.map(({ c, abonosCuenta, totalAbonado, restante }) => {
-            const datosNuevo = nuevoAbono[c.id] || { fecha: '', monto: '' }
-            return (
-              <div key={c.id} className="card" style={{ padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-                  <div>
-                    <p className="font-serif" style={{ fontSize: 18, marginBottom: 2, color: 'var(--secondary)' }}>{c.concepto}</p>
-                    <span className="font-display" style={{ fontSize: 12, color: 'var(--muted)' }}>{c.pagador}{c.obra ? ` › ${c.obra}` : ''}</span>
-                  </div>
-                  <button className="btn btn-ghost" onClick={() => eliminarCuenta(c.id)} style={{ fontSize: 12, flexShrink: 0 }}>Eliminar cuenta</button>
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                  <StatTile label="Presupuesto total" valor={fmtMoney(c.total_presupuesto)} />
-                  <StatTile label="Abonado" valor={fmtMoney(totalAbonado)} tono="positivo" />
-                  <StatTile label="Restante" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
-                </div>
-
-                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Abonos</p>
-                {abonosCuenta.length === 0 ? (
-                  <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12 }}>Sin abonos registrados.</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-                    {abonosCuenta.map(a => (
-                      <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
-                        <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{a.fecha.split('-').reverse().join('/')}</span>
-                        <span style={{ flex: 1, fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(a.monto)}</span>
-                        <button onClick={() => eliminarAbono(a.id)} className="btn btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }}>Quitar</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                    <label>Fecha del abono</label>
-                    <input type="date" value={datosNuevo.fecha} onChange={e => setNuevoAbono(prev => ({ ...prev, [c.id]: { ...datosNuevo, fecha: e.target.value } }))} />
-                  </div>
-                  <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                    <label>Monto del abono</label>
-                    <input type="number" min="0" placeholder="Monto en pesos" value={datosNuevo.monto} onChange={e => setNuevoAbono(prev => ({ ...prev, [c.id]: { ...datosNuevo, monto: e.target.value } }))} />
-                  </div>
-                  <button className="btn btn-secondary" onClick={() => agregarAbono(c.id)} style={{ flexShrink: 0 }}>+ Agregar abono</button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /* ─── Obras (En curso / Culminadas) ──────────────────── */
 export function PanelObras() {
   const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
@@ -399,6 +125,8 @@ export function PanelObras() {
   const [mostrarGuia, setMostrarGuia] = useState(false)
   const [mostrarNuevaObra, setMostrarNuevaObra] = useState(false)
   const [nuevaObra, setNuevaObra] = useState({ nombre: '', cliente: '', presupuesto_total: '' })
+  const [mostrarNuevaCuentaSuelta, setMostrarNuevaCuentaSuelta] = useState(false)
+  const [nuevaCuentaSuelta, setNuevaCuentaSuelta] = useState({ pagador: '', concepto: '', total_presupuesto: '' })
 
   useEffect(() => {
     if (!localStorage.getItem('horma_guia_obras_vista')) {
@@ -487,6 +215,44 @@ export function PanelObras() {
     const { error } = await supabase.from('facturas').insert({ fecha, obra, monto })
     if (error) {
       alert('No se pudo guardar la factura. Intenta de nuevo.')
+      return
+    }
+    cargar()
+  }
+
+  async function crearCuenta(pagador: string, concepto: string, obra: string | null, total: number) {
+    const { error } = await supabase.from('cuentas_por_cobrar').insert({ pagador, concepto, obra, total_presupuesto: total })
+    if (error) {
+      alert('No se pudo guardar la cuenta. Intenta de nuevo.')
+      return
+    }
+    cargar()
+  }
+
+  async function eliminarCuenta(id: string) {
+    if (!window.confirm('¿Seguro que quieres eliminar esta cuenta y todos sus abonos?')) return
+    const { error } = await supabase.from('cuentas_por_cobrar').delete().eq('id', id)
+    if (error) {
+      alert('No se pudo eliminar la cuenta. Intenta de nuevo.')
+      return
+    }
+    cargar()
+  }
+
+  async function agregarAbono(cuentaId: string, fecha: string, monto: number) {
+    const { error } = await supabase.from('abonos_cuenta').insert({ cuenta_id: cuentaId, fecha, monto })
+    if (error) {
+      alert('No se pudo guardar el abono. Intenta de nuevo.')
+      return
+    }
+    cargar()
+  }
+
+  async function eliminarAbono(id: string) {
+    if (!window.confirm('¿Seguro que quieres quitar este abono?')) return
+    const { error } = await supabase.from('abonos_cuenta').delete().eq('id', id)
+    if (error) {
+      alert('No se pudo quitar el abono. Intenta de nuevo.')
       return
     }
     cargar()
@@ -617,9 +383,12 @@ export function PanelObras() {
             }}
           >Culminadas ({culminadas.length})</button>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={() => setMostrarNuevaObra(x => !x)} style={{ fontSize: 13 }}>
             {mostrarNuevaObra ? 'Cancelar' : '+ Nueva obra'}
+          </button>
+          <button className="btn btn-secondary" onClick={() => setMostrarNuevaCuentaSuelta(x => !x)} style={{ fontSize: 13 }}>
+            {mostrarNuevaCuentaSuelta ? 'Cancelar' : '+ Cobro suelto (sin obra)'}
           </button>
           <button className="btn btn-secondary" onClick={() => setMostrarGuia(true)} style={{ fontSize: 13 }}>
             ¿Cómo se lee esto?
@@ -628,6 +397,36 @@ export function PanelObras() {
       </div>
 
       {mostrarNuevaObra && formNuevaObra}
+      {mostrarNuevaCuentaSuelta && (
+        <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <p style={{ fontSize: 12, color: 'var(--muted)' }}>Para cobros que no corresponden a ninguna obra — ej. una visita técnica.</p>
+            <div className="field">
+              <label>¿Quién paga?</label>
+              <input type="text" placeholder="Ej: Ignacio" value={nuevaCuentaSuelta.pagador} onChange={e => setNuevaCuentaSuelta(p => ({ ...p, pagador: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Concepto</label>
+              <input type="text" placeholder="Ej: Visita técnica" value={nuevaCuentaSuelta.concepto} onChange={e => setNuevaCuentaSuelta(p => ({ ...p, concepto: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Monto</label>
+              <input type="number" min="0" placeholder="Monto en pesos" value={nuevaCuentaSuelta.total_presupuesto} onChange={e => setNuevaCuentaSuelta(p => ({ ...p, total_presupuesto: e.target.value }))} />
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                if (!nuevaCuentaSuelta.pagador.trim() || !nuevaCuentaSuelta.concepto.trim() || !nuevaCuentaSuelta.total_presupuesto.trim()) { alert('Completa quién paga, el concepto y el monto.'); return }
+                const monto = Number(nuevaCuentaSuelta.total_presupuesto)
+                if (!Number.isFinite(monto) || monto <= 0) { alert('El monto tiene que ser un número mayor a cero.'); return }
+                crearCuenta(nuevaCuentaSuelta.pagador.trim(), nuevaCuentaSuelta.concepto.trim(), null, monto)
+                setNuevaCuentaSuelta({ pagador: '', concepto: '', total_presupuesto: '' })
+                setMostrarNuevaCuentaSuelta(false)
+              }}
+            >Guardar</button>
+          </div>
+        </div>
+      )}
       {mostrarGuia && <GuiaObras onClose={() => setMostrarGuia(false)} />}
 
       {resumenVisible.length === 0 ? (
@@ -683,7 +482,7 @@ export function PanelObras() {
                           {o.tieneCuentas ? (
                             <span>
                               Presupuesto: <strong>{fmtMoney(o.presupuestoTotal as number)}</strong>{' '}
-                              <span style={{ color: 'var(--muted)', fontSize: 12 }}>(suma de sus cuentas — se edita cuenta por cuenta en Cuentas por cobrar)</span>
+                              <span style={{ color: 'var(--muted)', fontSize: 12 }}>(suma de sus cuentas — se edita cuenta por cuenta en "Detalle")</span>
                             </span>
                           ) : (
                             <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
@@ -717,6 +516,23 @@ export function PanelObras() {
         </div>
       )}
 
+      {(() => {
+        const cuentasSinObra = cuentas.filter(c => !c.obra)
+        if (cuentasSinObra.length === 0) return null
+        return (
+          <div style={{ marginTop: 28 }}>
+            <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+              Otros cobros (sin obra)
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {cuentasSinObra.map(c => (
+                <CuentaMiniCard key={c.id} cuenta={c} abonos={abonos} onAgregarAbono={agregarAbono} onEliminarAbono={eliminarAbono} onEliminarCuenta={eliminarCuenta} />
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       {historialObra && (() => {
         const o = resumen.find(x => x.obra === historialObra)
         return (
@@ -732,6 +548,12 @@ export function PanelObras() {
             facturado={o?.facturado}
             presupuestoTotal={o?.presupuestoTotal}
             onAgregarFactura={(fecha, monto) => agregarFactura(historialObra, fecha, monto)}
+            cuentasObra={cuentas.filter(c => c.obra === historialObra)}
+            abonos={abonos}
+            onAgregarAbono={agregarAbono}
+            onEliminarAbono={eliminarAbono}
+            onEliminarCuenta={eliminarCuenta}
+            onCrearCuentaObra={(pagador, concepto, monto) => crearCuenta(pagador, concepto, historialObra, monto)}
           />
         )
       })()}
@@ -1114,8 +936,8 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Adelantos', texto: 'Plata adelantada a un trabajador a cuenta de lo que se le debe. No es su pago completo de la semana.' },
   { titulo: 'Pagos semana', texto: 'La liquidación semanal completa que ya se le pagó a un trabajador.' },
   { titulo: 'Cobrado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual.' },
-  { titulo: 'Falta por cobrar', texto: 'Cuánto le queda debiendo el cliente por esta obra, en total — el mismo número que ves en la pestaña "Cuentas por cobrar" para esta obra, sumado en un solo lugar.' },
-  { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). Es la plata en caja de la obra hoy, no cuánto falta que pague el cliente — para eso mira "Por facturar".' },
+  { titulo: 'Falta por cobrar', texto: 'Cuánto le queda debiendo el cliente por esta obra, en total — suma todo lo pendiente de sus cuentas por cobrar (podés ver el detalle de cada una en "Detalle").' },
+  { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). Es la plata en caja de la obra hoy, no cuánto falta que pague el cliente — para eso mira "Falta por cobrar".' },
   { titulo: 'Facturado', texto: 'El total que ya se le facturó formalmente al cliente por esta obra, sume o no coincida con lo cobrado (a veces se cobra antes de facturar, o se factura antes de cobrar).' },
   { titulo: 'Por facturar', texto: 'Presupuesto total menos lo facturado — cuánto le queda al cliente por facturarle en total. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto total cargado.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
@@ -1506,6 +1328,69 @@ function PeriodoRow({ periodo, tarifas, onMarcarReembolsado }: { periodo: Period
   )
 }
 
+/* ─── Tarjeta chica de una cuenta por cobrar (reusable) ── */
+function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEliminarCuenta }: {
+  cuenta: CuentaPorCobrar
+  abonos: AbonoCuenta[]
+  onAgregarAbono: (cuentaId: string, fecha: string, monto: number) => void
+  onEliminarAbono: (id: string) => void
+  onEliminarCuenta: (id: string) => void
+}) {
+  const [fecha, setFecha] = useState('')
+  const [monto, setMonto] = useState('')
+  const abonosCuenta = abonos.filter(a => a.cuenta_id === cuenta.id).sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const totalAbonado = abonosCuenta.reduce((s, a) => s + a.monto, 0)
+  const restante = cuenta.total_presupuesto - totalAbonado
+
+  return (
+    <div className="card" style={{ padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+        <div>
+          <p className="font-serif" style={{ fontSize: 16, marginBottom: 2, color: 'var(--secondary)' }}>{cuenta.concepto}</p>
+          <span className="font-display" style={{ fontSize: 12, color: 'var(--muted)' }}>{cuenta.pagador}</span>
+        </div>
+        <button className="btn btn-ghost" onClick={() => onEliminarCuenta(cuenta.id)} style={{ fontSize: 12, flexShrink: 0 }}>Eliminar cuenta</button>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <StatTile label="Presupuesto" valor={fmtMoney(cuenta.total_presupuesto)} />
+        <StatTile label="Abonado" valor={fmtMoney(totalAbonado)} tono="positivo" />
+        <StatTile label="Restante" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
+      </div>
+      {abonosCuenta.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+          {abonosCuenta.map(a => (
+            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{a.fecha.split('-').reverse().join('/')}</span>
+              <span style={{ flex: 1, fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(a.monto)}</span>
+              <button onClick={() => onEliminarAbono(a.id)} className="btn btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }}>Quitar</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div className="field" style={{ flex: 1, minWidth: 130 }}>
+          <label>Fecha del abono</label>
+          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
+        </div>
+        <div className="field" style={{ flex: 1, minWidth: 130 }}>
+          <label>Monto del abono</label>
+          <input type="number" min="0" placeholder="Monto en pesos" value={monto} onChange={e => setMonto(e.target.value)} />
+        </div>
+        <button
+          className="btn btn-secondary"
+          onClick={() => {
+            const m = Number(monto)
+            if (!fecha || !Number.isFinite(m) || m <= 0) { alert('Completa fecha y un monto válido.'); return }
+            onAgregarAbono(cuenta.id, fecha, m)
+            setFecha(''); setMonto('')
+          }}
+          style={{ flexShrink: 0 }}
+        >+ Agregar abono</button>
+      </div>
+    </div>
+  )
+}
+
 export function HistorialObraModal({
   obra,
   diarios,
@@ -1518,6 +1403,12 @@ export function HistorialObraModal({
   facturado,
   presupuestoTotal,
   onAgregarFactura,
+  cuentasObra,
+  abonos,
+  onAgregarAbono,
+  onEliminarAbono,
+  onEliminarCuenta,
+  onCrearCuentaObra,
 }: {
   obra: string
   diarios: ReporteTrabajadorDia[]
@@ -1532,7 +1423,17 @@ export function HistorialObraModal({
   facturado?: number
   presupuestoTotal?: number | null
   onAgregarFactura?: (fecha: string, monto: number) => void
+  // Cuentas por cobrar manuales vinculadas a esta obra (puede haber más de
+  // una — ej. "presupuesto original" + "adicional a evaluar").
+  cuentasObra?: CuentaPorCobrar[]
+  abonos?: AbonoCuenta[]
+  onAgregarAbono?: (cuentaId: string, fecha: string, monto: number) => void
+  onEliminarAbono?: (id: string) => void
+  onEliminarCuenta?: (id: string) => void
+  onCrearCuentaObra?: (pagador: string, concepto: string, monto: number) => void
 }) {
+  const [mostrarNuevaCuenta, setMostrarNuevaCuenta] = useState(false)
+  const [nuevaCuenta, setNuevaCuenta] = useState({ pagador: '', concepto: '', total_presupuesto: '' })
   const [vista, setVista] = useState<VistaPeriodo>('semana')
   const [nuevaFecha, setNuevaFecha] = useState('')
   const [nuevoMonto, setNuevoMonto] = useState('')
@@ -1565,6 +1466,59 @@ export function HistorialObraModal({
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
         </div>
+
+        {onAgregarAbono && onEliminarAbono && onEliminarCuenta && (
+          <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '40vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Cuentas por cobrar de esta obra
+              </p>
+              {onCrearCuentaObra && (
+                <button className="btn btn-ghost" onClick={() => setMostrarNuevaCuenta(x => !x)} style={{ fontSize: 12 }}>
+                  {mostrarNuevaCuenta ? 'Cancelar' : '+ Agregar cuenta'}
+                </button>
+              )}
+            </div>
+            {mostrarNuevaCuenta && onCrearCuentaObra && (
+              <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="field">
+                    <label>¿Quién paga?</label>
+                    <input type="text" placeholder="Ej: Ignacio" value={nuevaCuenta.pagador} onChange={e => setNuevaCuenta(p => ({ ...p, pagador: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>Concepto</label>
+                    <input type="text" placeholder="Ej: Adicional a evaluar" value={nuevaCuenta.concepto} onChange={e => setNuevaCuenta(p => ({ ...p, concepto: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>Presupuesto de esta cuenta</label>
+                    <input type="number" min="0" placeholder="Monto en pesos" value={nuevaCuenta.total_presupuesto} onChange={e => setNuevaCuenta(p => ({ ...p, total_presupuesto: e.target.value }))} />
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      if (!nuevaCuenta.pagador.trim() || !nuevaCuenta.concepto.trim() || !nuevaCuenta.total_presupuesto.trim()) { alert('Completa quién paga, el concepto y el presupuesto.'); return }
+                      const monto = Number(nuevaCuenta.total_presupuesto)
+                      if (!Number.isFinite(monto) || monto <= 0) { alert('El presupuesto tiene que ser un número mayor a cero.'); return }
+                      onCrearCuentaObra(nuevaCuenta.pagador.trim(), nuevaCuenta.concepto.trim(), monto)
+                      setNuevaCuenta({ pagador: '', concepto: '', total_presupuesto: '' })
+                      setMostrarNuevaCuenta(false)
+                    }}
+                  >Guardar cuenta</button>
+                </div>
+              </div>
+            )}
+            {(!cuentasObra || cuentasObra.length === 0) ? (
+              <p style={{ fontSize: 13, color: 'var(--muted)' }}>Esta obra no tiene cuentas por cobrar manuales cargadas.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {cuentasObra.map(c => (
+                  <CuentaMiniCard key={c.id} cuenta={c} abonos={abonos || []} onAgregarAbono={onAgregarAbono} onEliminarAbono={onEliminarAbono} onEliminarCuenta={onEliminarCuenta} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {onAgregarFactura && (
           <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
