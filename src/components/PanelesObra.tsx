@@ -542,15 +542,23 @@ export function PanelObras() {
     const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0) + cobradoManual
     const saldo = cobrado - gastoCompras - pagadoSubcontratos - adelantos - pagosSemanales
-    const presupuestoTotal = maestro?.presupuesto_total ?? null
+    // Si la obra tiene cuenta(s) por cobrar, el presupuesto real es la SUMA de
+    // esas cuentas — no el campo suelto de la obra, que puede quedar
+    // desactualizado (ej. alguien lo edita a mano reflejando solo una parte,
+    // como paso con Luis Carrera). Con cuenta(s), ese campo pasa a ser de solo
+    // lectura — se edita cuenta por cuenta desde Cuentas por cobrar.
+    const tieneCuentas = cuentasObra.length > 0
+    const presupuestoTotal = tieneCuentas
+      ? cuentasObra.reduce((sum, c) => sum + c.total_presupuesto, 0)
+      : (maestro?.presupuesto_total ?? null)
     const facturado = facturas.filter(f => f.obra === obra).reduce((sum, f) => sum + f.monto, 0)
     const porFacturar = presupuestoTotal != null ? presupuestoTotal - facturado : null
     const activa = maestro?.activa ?? true
-    const faltaPorCobrar = cuentasObra.length > 0
+    const faltaPorCobrar = tieneCuentas
       ? pendienteManual
       : (presupuestoTotal != null ? Math.max(presupuestoTotal - cobrado, 0) : null)
 
-    return { obra, obraId: maestro?.id, activa, cliente: maestro?.cliente ?? null, presupuestoTotal, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, facturado, porFacturar, faltaPorCobrar }
+    return { obra, obraId: maestro?.id, activa, tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, facturado, porFacturar, faltaPorCobrar }
   })
 
   const enCurso = resumen.filter(o => o.activa)
@@ -672,7 +680,14 @@ export function PanelObras() {
                     <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {o.obraId ? (
                         <>
-                          <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
+                          {o.tieneCuentas ? (
+                            <span>
+                              Presupuesto: <strong>{fmtMoney(o.presupuestoTotal as number)}</strong>{' '}
+                              <span style={{ color: 'var(--muted)', fontSize: 12 }}>(suma de sus cuentas — se edita cuenta por cuenta en Cuentas por cobrar)</span>
+                            </span>
+                          ) : (
+                            <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
+                          )}
                           <EditableCliente valor={o.cliente} onGuardar={cliente => guardarCliente(o.obraId as string, cliente)} />
                         </>
                       ) : (
