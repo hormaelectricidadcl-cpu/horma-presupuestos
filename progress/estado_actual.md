@@ -23,10 +23,27 @@
   7. **Sin resolver, no es un bug:** a "Doctora Eloísa (dirección 5843)" le falta cargar su presupuesto total real — no se puede inventar el número, pendiente pedírselo a Gustavo.
   - Todo verificado en vivo contra Supabase (panel de Gustavo) antes de subir, `init.sh` corrido, tsc limpio.
 
+## Sesión 20/08/2026 (continuación) — Rediseño de raíz, merge de pestañas, terminología, confianza en los datos
+
+**Esta fue la parte más importante de la sesión — no parches, sino la causa raíz.** Alexandra notó que llevábamos ~2 horas en bucle arreglando síntomas del mismo problema y pidió explícitamente parar y rediseñar. Detalle completo del razonamiento en `decisiones.md` — acá el resumen de lo que quedó hecho:
+
+- **"Falta por cobrar" dejó de mostrar dos números distintos en dos pestañas** (bug encontrado por Alexandra: Cuentas por cobrar y Obras daban cifras diferentes para la misma obra). Se agregó "Falta por cobrar" a la tarjeta de Obras, calculado exactamente igual que en Cuentas por cobrar.
+- **Rediseño real de la causa raíz**: dos caminos independientes para cargar "el cliente pagó" (`obras.presupuesto_total`+`reportes_cobros` automático vs `cuentas_por_cobrar`+`abonos_cuenta` manual) sin ningún cruce entre ellos. Sin acceso a DDL desde acá (la API REST de Supabase no crea tablas), se migró Ohiggins y Luz 2979 al sistema manual (ya el más flexible) en vez de crear un esquema nuevo. `Reporte.tsx` ahora enruta cobros nuevos automático a la cuenta correcta cuando la obra tiene una sola cuenta, con aviso de posible duplicado antes de guardar (probado en vivo).
+- **Se encontró y corrigió un cobro duplicado real de $2.000.000 en Luis Carrera 2700** — el mismo pago cargado dos veces (una como `reportes_cobros`, otra como 2 abonos de $1M) en la misma sesión de carga del 15/08. Verificado y corregido.
+- **"Presupuesto" de una obra con cuentas ahora suma esas cuentas** en vez de usar un campo suelto que podía quedar desactualizado (pasó con Luis Carrera: mostraba $2.722.500 al lado de "Falta por cobrar $1.815.000" — contradictorio; el presupuesto real era $4.831.150).
+- **Merge de "Obras" + "Cuentas por cobrar" en una sola pestaña** (pedido explícito de Alexandra: dos pestañas mostrando resúmenes de la misma obra confundía aunque los números coincidieran). `PanelCuentasPorCobrar` se eliminó del todo. El manejo de cuentas/abonos vive ahora dentro de "Detalle" de cada obra (soporta más de una cuenta por obra — Luis Carrera tiene 3). Cuentas sin obra (ej. "Visita Técnica") quedan en una sección aparte al final, no pestaña propia.
+- **Terminología unificada a "Facturado"**: para Gustavo, cobrado/facturado/abonado son la misma cosa (plata que le dieron). "Cobrado"→"Facturado", "Falta por cobrar"→"Por facturar", "Abonado"/"Restante" en las cuentas también. Se eliminó la sección "Facturación formal" (tabla `facturas`) de Detalle porque competía con el mismo número usando la misma palabra para dos cosas distintas — los datos siguen en Supabase, solo se sacó de la interfaz.
+- **Tarjeta de Obras reordenada como una historia** (pedido de Alexandra): Presupuesto → Facturado → Por facturar → Mano de obra → Compras → Subcontratos → Adelantos → Pagos semana → Saldo. "Presupuesto" ahora también es una card, no solo texto.
+- **Ohiggins: se confirmó que el 5º cobro ($9.458.056, "Alejandra", 18/08) era duplicado** — Alexandra ya lo había avisado y, al no procesarse a tiempo, lo borró ella misma. Quedó documentada la lección: no dar una instrucción puntual por resuelta investigando algo parecido sin confirmar que es lo mismo.
+- **Luz 2979: se migró su factura vieja ($4.733.671, tabla `facturas`) a abono real** — quedó huérfana al sacar la sección de Facturación formal. Verificado antes: Ohiggins tenía la misma plata en dos lados (no se tocó, migrarla habría duplicado); Luz 2979 no, era plata real sin cargar.
+- **Conversación larga sobre seguridad de los datos** (Alexandra preguntó si esto es seguro, si necesita mantener Google Sheets, si puede ver todo en Supabase directo). Quedó claro: todo vive en Supabase (la app es solo una ventana), Sheets es un espejo de un solo sentido no un respaldo, Supabase tiene Table Editor para ver todo sin pasar por la app ni por mí, Power BI podría conectarse directo a Postgres como alternativa a Sheets. **Pendiente sin confirmar: si el proyecto tiene el plan Pro de Supabase con backups automáticos activados** — se ofreció revisarlo, no se llegó a hacer.
+
 ## Pendiente / hallazgo sin resolver
+- **Confirmar el plan de Supabase (Free vs Pro) y si los backups automáticos están activos** — conversación de esta sesión, no verificado todavía. Prioridad alta dado que esto maneja plata real.
 - No confirmado en vivo que `sync-compras.js`/`sync-cobros.js`/`sync-subcontratos.js` funcionen en producción — probar con una carga real y revisar la planilla.
-- Falta el presupuesto real de "Doctora Eloísa (dirección 5843)" — pedírselo a Gustavo/Alexandra y cargarlo.
+- Falta el presupuesto real de "Doctora Eloísa (dirección 5843)" — pedírselo a Gustavo/Alexandra y cargarlo (recién ahí se puede migrar al sistema unificado).
 - Anomalías de Google Sheets reportadas por Alexandra — pendientes de pasar y revisar en una sesión aparte (distinta fuente de verdad, distinta forma de verificar).
+- Evaluar si Alexandra quiere una conexión de Power BI directa a Supabase (se lo ofrecí, sin decidir todavía).
 
 ## Sesión anterior — 14/08/2026
 
