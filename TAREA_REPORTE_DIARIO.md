@@ -1,3 +1,7 @@
+> ⚠️ **ARCHIVADO — 22/08/2026.** Esta tarea ya se construyó (ver `progress/estado_actual.md`, sesión 14/08/2026 — `/reporte?t=TOKEN`, `src/pages/Reporte.tsx`, tablas `reportes_diarios` y afines). Este archivo describe el pedido original, no el estado actual. No lo uses para arrancar una sesión nueva — el punto de entrada real es `CLAUDE.md`, y las tareas pendientes reales viven en `progress/tareas.md`. Se conserva solo como referencia histórica del brief original.
+
+---
+
 # Tarea: Reporte Diario de Obra — nueva funcionalidad
 
 ## Contexto (por qué)

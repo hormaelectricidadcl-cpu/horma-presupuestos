@@ -1,7 +1,10 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 20/08/2026
+## Última actualización: 22/08/2026
+
+## Sesión 22/08/2026 — Auditoría del arnés (harness engineering), solo capa de configuración
+Auditoría del arnés del proyecto contra el checklist de `harness_engineering.md` (no se tocó `src/`, `functions/`, `sql/` ni lógica de la app). Detalle completo en `decisiones.md` (2026-08-22) — resumen: subagents migrados de `agents/*.md` (texto plano) a `.claude/agents/*.md` con frontmatter real, `SISTEMA.md`/`TAREA_REPORTE_DIARIO.md` marcados como archivados (contenido ya completado / contradecía el deploy real), primer hook del proyecto agregado (`check_git_push_account.py`, avisa si el remote pierde la cuenta correcta antes de un `git push`, fail-open probado a mano). `init.sh` corrido después de cada cambio — sigue en exit 0, `tsc --noEmit` limpio.
 
 ## Sesión 20/08/2026 — Pago semanal, Cuentas por cobrar unificadas, sync Sheets ampliado
 

@@ -11,9 +11,10 @@ Los cálculos de Estado de Resultados / Cuentas por Cobrar / Pago semanal / sald
 Demuestra capacidad técnica full-stack real → caso de estudio para agencias España (ver `E:\ALEXANDRA TRABAJO\CLAUDE.md`, tabla de proyectos verificables).
 
 ## Roles de agente disponibles
-- Planificar / decidir → agents/estratega.md
-- Construir / implementar → agents/constructor.md
-- Verificar / revisar → agents/revisor.md
+Subagents reales en `.claude/agents/` (Claude Code los auto-descubre, no hace falta leerlos a mano):
+- Planificar / decidir → `estratega-horma`
+- Construir / implementar → `constructor-horma`
+- Verificar / revisar → `revisor-horma`
 
 ## Progreso y estado
 - **Estado actual → progress/estado_actual.md** (leer PRIMERO en cada sesión)

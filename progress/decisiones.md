@@ -1,6 +1,13 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-22 — Auditoría del arnés (harness engineering) — subagents migrados, punto de entrada consolidado, primer hook
+Auditoría contra el checklist de `E:\ALEXANDRA TRABAJO\metodologia\harness_engineering.md` (Parte 3). Este proyecto ya tenía buena base (`CLAUDE.md` corto, `progress/`, `init.sh`) — los cambios fueron puntuales, no una reconstrucción:
+- **`agents/*.md` (texto plano, Claude Code no los auto-descubría) migrados a `.claude/agents/estratega-horma.md` / `constructor-horma.md` / `revisor-horma.md`** con frontmatter YAML real. Los archivos viejos en `agents/` quedan marcados como archivados, apuntando a la ubicación nueva. `CLAUDE.md` e `init.sh` actualizados para referenciar la ubicación real.
+- **`SISTEMA.md` y `TAREA_REPORTE_DIARIO.md` (raíz) marcados como archivados**, no borrados: ambos describían trabajo ya completado (`SISTEMA.md` además contradecía a `CLAUDE.md` diciendo que el deploy es Netlify, cuando el real es Cloudflare Pages) y podían competir como "punto de entrada" con `progress/`. Cada uno ahora tiene un banner al inicio apuntando a `CLAUDE.md` y `progress/estado_actual.md`.
+- **Primer hook real del proyecto**: `.claude/hooks/check_git_push_account.py` (`PreToolUse` sobre `Bash`, matchea `git push`). Convierte en chequeo determinístico la regla que ya está en `CLAUDE.md` como texto ("git push puede fallar con 403 por cuenta de GitHub cacheada equivocada" — pasó de verdad el 20/08, bloqueó 12+ commits 2 días). Avisa si el remote `origin` no incluye `hormaelectricidadcl-cpu`; **fail-open, nunca bloquea** (exit 0 siempre, probado a mano con JSON válido/inválido, comando con y sin `git push`, remote correcto e incorrecto).
+- No se tocó nada de `src/`, `functions/`, `sql/`, ni el resto de `CLAUDE.md` (ya pasaba la prueba de la línea — 40 líneas, todo específico del proyecto) ni `progress/decisiones.md`/`tareas.md` previos.
+
 ## 2026-08-20 — Rediseño: `cuentas_por_cobrar` pasa a ser la única fuente para obras con presupuesto definido
 Causa raíz de casi todos los bugs de plata de hoy: dos caminos independientes para cargar "el cliente pagó" (automático vía `obras.presupuesto_total`+`reportes_cobros`, manual vía `cuentas_por_cobrar`+`abonos_cuenta`), sin ningún cruce entre ellos — de ahí el cobro duplicado de Luis Carrera y los números que no coincidían entre pestañas.
 

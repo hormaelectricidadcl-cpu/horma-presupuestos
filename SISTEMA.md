@@ -1,3 +1,7 @@
+> ⚠️ **ARCHIVADO — 22/08/2026.** Este documento es la spec original del "Sistema de Pendientes", ya construido y en producción. Quedó desactualizado (dice deploy en Netlify; el deploy real es **Cloudflare Pages**, ver `CLAUDE.md`). No usar como fuente de verdad — el punto de entrada real es `CLAUDE.md`, y el estado actual vive en `progress/estado_actual.md`. Se conserva solo como referencia histórica de diseño original.
+
+---
+
 # Sistema de Pendientes — Horma Electricidad
 
 ## Resumen del sistema
