@@ -72,7 +72,7 @@ export const generatePDFEtapas = async (
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(15)
   doc.setTextColor(...WHITE)
-  doc.text('PRESUPUESTO HORMA SERVICIOS', tx, 18)
+  doc.text('PRESUPUESTO HORMA ELECTRICIDAD', tx, 18)
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
@@ -82,7 +82,7 @@ export const generatePDFEtapas = async (
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.5)
   doc.setTextColor(210, 210, 210)
-  doc.text('Estándar de ingeniería — Horma Servicios', tx, 34)
+  doc.text('Estándar de ingeniería — Horma Electricidad', tx, 34)
 
   y = hH + 8
 
@@ -90,7 +90,7 @@ export const generatePDFEtapas = async (
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9.5)
   doc.setTextColor(...BLACK)
-  doc.text('HORMA SERVICIOS', margin, y)
+  doc.text('HORMA ELECTRICIDAD', margin, y)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
@@ -323,10 +323,11 @@ export const generatePDFEtapas = async (
   y = (doc as any).lastAutoTable.finalY + 8
 
   // ── 5. TERMS — con sombra suave y esquinas redondeadas ────────────
+  const termsH = 58
   doc.setFillColor(225, 226, 227)
-  doc.roundedRect(margin + 1, y + 1.5, contentW, 34, 3, 3, 'F')
+  doc.roundedRect(margin + 1, y + 1.5, contentW, termsH, 3, 3, 'F')
   doc.setFillColor(...CARBON)
-  doc.roundedRect(margin, y, contentW, 34, 3, 3, 'F')
+  doc.roundedRect(margin, y, contentW, termsH, 3, 3, 'F')
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(8.5)
@@ -340,7 +341,21 @@ export const generatePDFEtapas = async (
     'Forma de pago: 50% Adelanto para compra de equipos y materiales.',
     '50% contra entrega de los trabajos terminados.',
   ].forEach((line, i) => doc.text(line, margin + 8, y + 19 + i * 6))
-  y += 44
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8.5)
+  doc.setTextColor(...AMBER)
+  doc.text('DATOS PARA TRANSFERENCIA', margin + 8, y + 35)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(...WHITE)
+  ;[
+    'Titular: Constructora Horma Grup SPA — RUT: 78.420.993-8',
+    'Mercado Pago — Cuenta Vista — N° de cuenta: 1012891392',
+    'Contacto: contacto@hormagrup.cl / administracion@hormagrup.cl',
+  ].forEach((line, i) => doc.text(line, margin + 8, y + 41 + i * 5.5))
+  y += termsH + 10
 
   // ── 6. FOOTER ────────────────────────────────────────────────────
   doc.setDrawColor(...AMBER)

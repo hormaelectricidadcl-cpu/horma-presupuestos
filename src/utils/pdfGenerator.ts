@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { calculateTotals, isMaterialOrManoObra } from './calculationUtils';
+import logoSrc from '../assets/Logo.PNG';
 
 interface Item {
   id: number;
@@ -59,13 +60,14 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   doc.setFillColor(20, 33, 61); // #14213d
   doc.rect(0, 0, pageWidth, 40, 'F');
 
-  // Title (centered)
+  // Logo + title (alineados a la izquierda, evita superposición con títulos largos)
+  try { doc.addImage(logoSrc, 'PNG', margin, 6, 28, 28); } catch { /* skip */ }
+  const titleX = margin + 34;
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
+  doc.setFontSize(17);
   doc.setTextColor(255, 255, 255);
-  const titleWidth = doc.getTextWidth('PRESUPUESTO HORMA SERVICIOS');
-  const titleX = (pageWidth - titleWidth) / 2;
-  doc.text('PRESUPUESTO HORMA SERVICIOS', titleX, 25);
+  doc.text('PRESUPUESTO HORMA ELECTRICIDAD', titleX, 23);
 
   yPosition = 52;
 
@@ -73,7 +75,7 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
-  doc.text('HORMA SERVICIOS', margin, yPosition);
+  doc.text('HORMA ELECTRICIDAD', margin, yPosition);
 
   doc.setFontSize(10);
 
@@ -279,10 +281,11 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   yPosition = (doc as any).lastAutoTable.finalY + 10;
 
   // 6. TERMS AND CONDITIONS — con sombra suave y esquinas redondeadas
+  const termsHeight = 60;
   doc.setFillColor(225, 226, 227); // sombra: gris claro desplazado
-  doc.roundedRect(margin + 1, yPosition + 1.5, pageWidth - 2 * margin, 45, 3, 3, 'F');
+  doc.roundedRect(margin + 1, yPosition + 1.5, pageWidth - 2 * margin, termsHeight, 3, 3, 'F');
   doc.setFillColor(108, 117, 125); // #6c757d
-  doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 45, 3, 3, 'F');
+  doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, termsHeight, 3, 3, 'F');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
@@ -300,7 +303,24 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
     doc.text(line, margin + 8, yPosition + 20 + index * 5);
   });
 
-  yPosition += 55;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(255, 255, 255);
+  doc.text('DATOS PARA TRANSFERENCIA', margin + 8, yPosition + 36);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const bankText = [
+    'Titular: Constructora Horma Grup SPA — RUT: 78.420.993-8',
+    'Mercado Pago — Cuenta Vista — N° de cuenta: 1012891392',
+    'Contacto: contacto@hormagrup.cl / administracion@hormagrup.cl'
+  ];
+
+  bankText.forEach((line, index) => {
+    doc.text(line, margin + 8, yPosition + 42 + index * 5.5);
+  });
+
+  yPosition += termsHeight + 10;
 
   // 7. FOOTER
   doc.setFont('helvetica', 'bold');

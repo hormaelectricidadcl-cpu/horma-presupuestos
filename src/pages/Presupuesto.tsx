@@ -53,7 +53,7 @@ const Presupuesto: React.FC = () => {
     <div className="app">
       <header className="app-header">
         <span className="eyebrow">Presupuesto</span>
-        <h1>Horma Servicios</h1>
+        <h1>Horma Electricidad</h1>
       </header>
 
       <div className="card config-section">
