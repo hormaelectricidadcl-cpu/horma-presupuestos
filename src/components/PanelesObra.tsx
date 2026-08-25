@@ -1764,6 +1764,9 @@ export function PanelPresupuestos() {
   const [detalleId, setDetalleId] = useState<string | null>(null)
   const [detalle, setDetalle] = useState<PresupuestoDetalle | null>(null)
   const [cargandoDetalle, setCargandoDetalle] = useState(false)
+  const [convirtiendoId, setConvirtiendoId] = useState<string | null>(null)
+  const [nombreObraNueva, setNombreObraNueva] = useState('')
+  const [convirtiendo, setConvirtiendo] = useState(false)
 
   const cargar = useCallback(async () => {
     const { data } = await supabase
@@ -1803,6 +1806,33 @@ export function PanelPresupuestos() {
     }
     setPresupuestos(prev => prev.filter(p => p.id !== id))
     if (detalleId === id) { setDetalleId(null); setDetalle(null) }
+  }
+
+  function abrirConvertir(p: PresupuestoGuardado) {
+    setConvirtiendoId(p.id)
+    setNombreObraNueva(p.cliente_direccion || p.cliente_nombre || '')
+  }
+
+  async function confirmarConvertir(p: PresupuestoGuardado) {
+    if (!nombreObraNueva.trim()) { alert('Completa el nombre de la obra.'); return }
+    setConvirtiendo(true)
+    const { error: errorObra } = await supabase.from('obras').insert({
+      nombre: nombreObraNueva.trim(),
+      cliente: p.cliente_nombre,
+      presupuesto_total: p.total,
+      presupuesto_id: p.id,
+    })
+    if (errorObra) {
+      setConvirtiendo(false)
+      alert('No se pudo crear la obra. Puede que ya exista una con ese nombre.')
+      return
+    }
+    await supabase.from('presupuestos').update({ estado: 'convertido' }).eq('id', p.id)
+    setPresupuestos(prev => prev.map(x => x.id === p.id ? { ...x, estado: 'convertido' } : x))
+    if (detalle?.id === p.id) setDetalle(prev => prev ? { ...prev, estado: 'convertido' } : prev)
+    setConvirtiendo(false)
+    setConvirtiendoId(null)
+    alert(`Obra "${nombreObraNueva.trim()}" creada. Ya la puedes ver en la pestaña Obras.`)
   }
 
   const filtrados = presupuestos.filter(p =>
@@ -1850,10 +1880,29 @@ export function PanelPresupuestos() {
                 <button className="btn btn-secondary" onClick={() => abrirDetalle(p.id)} style={{ fontSize: 12, padding: '6px 12px' }}>
                   Detalle
                 </button>
+                {p.estado === 'aceptado' && (
+                  <button className="btn btn-primary" onClick={() => abrirConvertir(p)} style={{ fontSize: 12, padding: '6px 12px' }}>
+                    Convertir en obra
+                  </button>
+                )}
                 <button className="btn btn-danger" onClick={() => eliminarPresupuesto(p.id, p.cliente_nombre)} style={{ fontSize: 12, padding: '6px 12px', marginLeft: 'auto' }}>
                   Borrar
                 </button>
               </div>
+              {convirtiendoId === p.id && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                    <label>Nombre de la obra</label>
+                    <input type="text" value={nombreObraNueva} onChange={e => setNombreObraNueva(e.target.value)} />
+                  </div>
+                  <button className="btn btn-primary" onClick={() => confirmarConvertir(p)} disabled={convirtiendo} style={{ fontSize: 12, padding: '7px 14px' }}>
+                    {convirtiendo ? 'Creando...' : 'Confirmar'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => setConvirtiendoId(null)} style={{ fontSize: 12, padding: '7px 14px' }}>
+                    Cancelar
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1949,6 +1998,15 @@ export function PanelPresupuestos() {
                       <option key={k} value={k}>{label}</option>
                     ))}
                   </select>
+                  {detalle.estado === 'aceptado' && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => { setDetalleId(null); setDetalle(null); abrirConvertir(detalle) }}
+                      style={{ fontSize: 12, padding: '6px 12px' }}
+                    >
+                      Convertir en obra
+                    </button>
+                  )}
                   <button className="btn btn-danger" onClick={() => eliminarPresupuesto(detalle.id, detalle.cliente_nombre)} style={{ fontSize: 12, padding: '6px 12px', marginLeft: 'auto' }}>
                     Borrar
                   </button>
