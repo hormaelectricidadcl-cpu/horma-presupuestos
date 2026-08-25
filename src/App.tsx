@@ -15,5 +15,5 @@ export default function App() {
   if (path === '/admin') return <Admin />
   if (path === '/itemizado') return <PresupuestoEtapas />
 
-  return <Presupuesto />
+  return <Presupuesto token={params.get('t')} />
 }

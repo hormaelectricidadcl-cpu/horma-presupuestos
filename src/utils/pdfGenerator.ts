@@ -19,7 +19,7 @@ interface Client {
   address: string;
 }
 
-export const generatePDF = (client: Client, items: Item[], porcentajeGastos: number = 10) => {
+export const generatePDF = (client: Client, items: Item[], porcentajeGastos: number = 10, referencia?: string) => {
   console.log('Generando PDF con:', items.length, 'items');
   console.log('Cliente:', client);
   console.log('Items:', items);
@@ -89,6 +89,14 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
 
   doc.text(dateText, rightX, yPosition + 5);
   doc.text(validText, rightX, yPosition + 10);
+
+  if (referencia) {
+    const refText = `Ref: ${referencia}`;
+    const refWidth = doc.getTextWidth(refText);
+    doc.setTextColor(120, 120, 120);
+    doc.text(refText, pageWidth - margin - refWidth, yPosition + 15);
+    doc.setTextColor(0, 0, 0);
+  }
 
   yPosition += 35;
 

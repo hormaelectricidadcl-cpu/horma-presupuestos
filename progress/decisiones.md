@@ -1,6 +1,30 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-25 — Convención de nombres para `sql/*.sql`, de acá en adelante
+Alexandra pidió un sistema de nombres para no perderse entre migraciones. Desde esta fecha en adelante:
+
+- **Nombre del archivo:** `YYYYMMDD_descripcion_corta.sql` (fecha de cuando se escribió, no de cuando se corre). Ej: `20260825_pendientes_cliente_id.sql`.
+- **Nombre de la consulta guardada en el SQL Editor de Supabase: el mismo nombre, sin `.sql`.** Así el archivo del repo y lo que aparece en Supabase quedan sincronizados con un solo nombre — no hay que llevar dos sistemas en la cabeza.
+- Se eligió fecha en vez de número correlativo (`001_`, `002_`...) porque no requiere que nadie recuerde "en qué número íbamos" entre sesiones — la fecha es autoevidente y ya está siempre disponible.
+- **No se renombraron los archivos viejos** (`clientes.sql`, `presupuestos_migracion.sql`, etc.) — ya fueron corridos, renombrarlos no cambia nada funcional, sería solo cosmético. La convención aplica de acá en adelante, no retroactivo.
+
+## 2026-08-25 — "Gustavo puede anotar sus propias cosas" se resuelve con notas, no con pendientes
+Al diseñar la tarea 1.3, la primera idea (que Gustavo cree sus propios "pendientes") no encajaba: el sistema de pendientes es para cuando una persona le pide algo a la OTRA y espera respuesta (Gustavo solo ve pendientes con `destinatario='gustavo'`, los que Alexandra le asigna). Alexandra planteó el caso real en la conversación: a veces es ella quien tiene que comprar el material, a veces es Gustavo mismo — y lo que describió para el segundo caso ("que sea un pendiente para él mismo así no se le olvida, y lo marca como hecho") es un checklist autoasignado, no un pedido formal.
+
+**Decisión:** se reusó `notas_rapidas` (ya existía, solo para Alexandra en /admin) en vez de forzar un nuevo valor de `destinatario`. Ahora tiene columna `autor` (`'alexandra'|'gustavo'`) y Gustavo tiene su propia pestaña "Mis notas" en `/g`, mismo componente compartido. El sistema de pendientes sigue existiendo sin tocar, para cuando sí hace falta que la OTRA persona actúe.
+
+**Regla para el futuro:** cuando alguien pide "que X pueda crear/marcar algo para sí mismo", primero preguntar si es un checklist personal (notas) o un pedido a otra persona (pendientes) — son modelos de datos distintos, no la misma tabla con un campo más.
+
+**De paso:** se encontró (advisor de Supabase, sesión 25/08) que `notas_rapidas` no tenía RLS habilitado en absoluto — quedó expuesta sin ninguna restricción a la anon key desde que se creó. Se cerró en la misma migración (`sql/notas_rapidas_gustavo.sql`) con el patrón `anon full access` ya usado en el resto de la app.
+
+## 2026-08-25 — `presupuestos` se abre a `anon` igual que el resto de la app, y se le agrega `tipo` para distinguir simple/etapas
+Al verificar el esquema real de `presupuestos` (tarea 0.2), sus políticas RLS solo cubrían el rol `authenticated` (heredado de que `PresupuestoEtapas.tsx` es el único que la usaba, con login real). Para que el presupuesto simple (`Presupuesto.tsx`, sin login, protegido solo por el token de URL) también pueda guardar, se agregó una policy `anon full access` — mismo modelo de confianza que ya usan `pendientes`/`obras`/`reportes_*`/`clientes` (el control de acceso real lo hace el token, no RLS). No es un precedente nuevo, es consistencia con lo ya decidido.
+
+Como el presupuesto simple usa una lista plana de ítems (`Item[]`) y no la estructura de `etapas` (fases de PresupuestoEtapas.tsx), se agregó una columna `items` jsonb separada en vez de forzar una sola forma de datos, más una columna `tipo` (`'simple'|'etapas'`) para que Nivel 2.1 ("Mis presupuestos") pueda listar y renderizar ambos sin adivinar. También se agregó `referencia` (el ID `HRM-XXXXX` que ya se generaba pero solo vivía client-side) y `cliente_id` (FK real a `clientes`, siguiendo el principio de la propuesta de no usar texto suelto donde debería haber una referencia).
+
+Migración en `sql/presupuestos_migracion.sql`, sin correr todavía — pendiente que Alexandra la pegue en el SQL Editor de Supabase.
+
 ## 2026-08-22 — Auditoría del arnés (harness engineering) — subagents migrados, punto de entrada consolidado, primer hook
 Auditoría contra el checklist de `E:\ALEXANDRA TRABAJO\metodologia\harness_engineering.md` (Parte 3). Este proyecto ya tenía buena base (`CLAUDE.md` corto, `progress/`, `init.sh`) — los cambios fueron puntuales, no una reconstrucción:
 - **`agents/*.md` (texto plano, Claude Code no los auto-descubría) migrados a `.claude/agents/estratega-horma.md` / `constructor-horma.md` / `revisor-horma.md`** con frontmatter YAML real. Los archivos viejos en `agents/` quedan marcados como archivados, apuntando a la ubicación nueva. `CLAUDE.md` e `init.sh` actualizados para referenciar la ubicación real.

@@ -1,4 +1,4 @@
-export type TipoPendiente = 'confirmar_visita' | 'revisar_fotos' | 'presupuesto' | 'otro' | 'emitir_boleta' | 'emitir_factura' | 'cobro'
+export type TipoPendiente = 'confirmar_visita' | 'revisar_fotos' | 'presupuesto' | 'otro' | 'emitir_boleta' | 'emitir_factura' | 'cobro' | 'seguimiento' | 'pedido_material'
 export type EstadoPendiente = 'pendiente' | 'recordatorio_enviado' | 'respondido'
 export type Destinatario = 'gustavo' | 'irazu'
 
@@ -18,6 +18,7 @@ export interface Pendiente {
   id: string
   created_at: string
   cliente_nombre: string
+  cliente_id?: string | null
   tipo: TipoPendiente
   descripcion: string | null
   mensaje_cliente: string | null
@@ -38,6 +39,7 @@ export interface Pendiente {
 
 export interface NuevoPendiente {
   cliente_nombre: string
+  cliente_id?: string | null
   tipo: TipoPendiente
   descripcion: string
   mensaje_cliente: string
@@ -92,13 +94,39 @@ export interface ReporteTrabajoPuntualDia {
   descripcion: string
   direccion: string | null
   trabajador: string | null
+  monto: number | null
 }
+
+export type EstadoPresupuesto = 'borrador' | 'enviado' | 'aceptado' | 'convertido'
+
+export interface PresupuestoGuardado {
+  id: string
+  created_at: string
+  cliente_id: string | null
+  cliente_nombre: string | null
+  cliente_telefono: string | null
+  cliente_email: string | null
+  cliente_direccion: string | null
+  referencia: string | null
+  tipo: 'simple' | 'etapas'
+  estado: EstadoPresupuesto
+  subtotal: number | null
+  iva: number | null
+  total: number | null
+}
+
+export type EstadoObra = 'en_curso' | 'terminada_terreno' | 'facturada' | 'en_garantia' | 'cerrada'
 
 export interface Obra {
   id: string
   nombre: string
   cliente: string | null
   presupuesto_total: number | null
+  presupuesto_id?: string | null
+  estado_obra: EstadoObra
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  garantia_hasta: string | null
   activa: boolean
 }
 
@@ -156,4 +184,15 @@ export interface Factura {
   fecha: string
   obra: string | null
   monto: number
+}
+
+export interface Cliente {
+  id: string
+  nombre: string
+  telefono: string | null
+  email: string | null
+  rut: string | null
+  comuna: string | null
+  archivado: boolean
+  archivado_at: string | null
 }

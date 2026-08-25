@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras } from '../components/PanelesObra'
-import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario } from '../types'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos } from '../components/PanelesObra'
+import { NotasRapidas } from '../components/NotasRapidas'
+import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, Cliente } from '../types'
 
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
@@ -13,10 +14,12 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
   emitir_boleta: 'Emitir boleta',
   emitir_factura: 'Emitir factura',
   cobro: 'Cobro pendiente',
+  seguimiento: 'Seguimiento',
+  pedido_material: 'Pedido de material',
 }
 
-const TIPOS_GUSTAVO: TipoPendiente[] = ['confirmar_visita', 'revisar_fotos', 'presupuesto', 'otro']
-const TIPOS_IRAZU: TipoPendiente[] = ['emitir_boleta', 'emitir_factura', 'cobro', 'otro']
+const TIPOS_GUSTAVO: TipoPendiente[] = ['confirmar_visita', 'revisar_fotos', 'presupuesto', 'pedido_material', 'seguimiento', 'otro']
+const TIPOS_IRAZU: TipoPendiente[] = ['emitir_boleta', 'emitir_factura', 'cobro', 'seguimiento', 'otro']
 
 const ACCION_LABELS: Record<string, string> = {
   recordatorio: 'Recordatorio enviado',
@@ -341,7 +344,7 @@ function HistorialModal({
                       {p.estado === 'respondido' && p.respuesta && (
                         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: p.descripcion ? 0 : 0 }}>
                           <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 4 }}>
-                            ✓ {p.destinatario === 'irazu' ? 'Irazú' : 'Gustavo'} respondió — {p.respondido_at ? fmtFecha(p.respondido_at) : ''}
+                            ✓ {p.destinatario === 'irazu' ? 'Admin' : 'Gustavo'} respondió — {p.respondido_at ? fmtFecha(p.respondido_at) : ''}
                           </p>
                           <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{p.respuesta}</p>
                         </div>
@@ -405,7 +408,7 @@ function HistorialModal({
             style={{ flex: 1, fontWeight: 600, fontSize: 14 }}
             onClick={() => { onPedirBoleta(cliente); onClose() }}
           >
-            Pedir boleta a Irazú
+            Pedir boleta a Admin
           </button>
           <button
             className="btn btn-primary"
@@ -465,22 +468,32 @@ function CrearForm({
   const [form, setForm] = useState<FormState>(() => emptyForm(clienteInicial, destinatarioInicial, tipoInicial))
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [subiendo, setSubiendo] = useState(false)
+  const [linkManual, setLinkManual] = useState('')
 
   function setField<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm(f => ({ ...f, [k]: v }))
   }
 
-  function setLink(i: number, v: string) {
+  async function subirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0]
+    e.target.value = ''
+    if (!archivo) return
+    setSubiendo(true)
+    const ext = archivo.name.split('.').pop() || 'bin'
+    const filename = `pendiente-${Date.now()}.${ext}`
+    const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+    if (error) {
+      setMsg('Error al subir el archivo: ' + error.message)
+      setSubiendo(false)
+      return
+    }
+    const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
     setForm(f => {
-      const links = [...f.drive_links]
-      links[i] = v
-      return { ...f, drive_links: links }
+      const links = f.drive_links.filter(l => l.trim())
+      return { ...f, drive_links: [...links, urlData.publicUrl] }
     })
-  }
-
-  function addLink() { setForm(f => ({ ...f, drive_links: [...f.drive_links, ''] })) }
-  function removeLink(i: number) {
-    setForm(f => ({ ...f, drive_links: f.drive_links.filter((_, j) => j !== i) }))
+    setSubiendo(false)
   }
 
   async function submit(e: React.FormEvent) {
@@ -489,8 +502,16 @@ function CrearForm({
     setSaving(true)
     setMsg('')
 
+    const nombreCliente = form.cliente_nombre.trim()
+    const { data: cliente } = await supabase
+      .from('clientes')
+      .upsert({ nombre: nombreCliente }, { onConflict: 'nombre' })
+      .select('id')
+      .single()
+
     const payload: NuevoPendiente = {
-      cliente_nombre: form.cliente_nombre.trim(),
+      cliente_nombre: nombreCliente,
+      cliente_id: cliente?.id ?? null,
       tipo: form.tipo,
       descripcion: form.descripcion.trim(),
       mensaje_cliente: form.mensaje_cliente.trim(),
@@ -545,7 +566,7 @@ function CrearForm({
                 color: form.destinatario === d ? 'var(--primary)' : 'var(--muted)',
               }}
             >
-              {d === 'gustavo' ? 'Gustavo' : 'Irazú'}
+              {d === 'gustavo' ? 'Gustavo' : 'Admin'}
             </button>
           ))}
         </div>
@@ -576,7 +597,7 @@ function CrearForm({
         </div>
 
         <div className="field">
-          <label>Tu instrucción para {form.destinatario === 'gustavo' ? 'Gustavo' : 'Irazú'}</label>
+          <label>Tu instrucción para {form.destinatario === 'gustavo' ? 'Gustavo' : 'Admin'}</label>
           <textarea value={form.descripcion} onChange={e => setField('descripcion', e.target.value)} placeholder={form.destinatario === 'gustavo' ? 'Ej: Ir a revisar el tablero y confirmar si necesita reemplazo completo...' : 'Ej: Emitir boleta por instalación de tablero, monto $85.000...'} rows={3} />
         </div>
 
@@ -601,18 +622,37 @@ function CrearForm({
         )}
 
         <div className="field">
-          <label>Links de Drive (fotos / docs)</label>
-          {form.drive_links.map((link, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-              <input value={link} onChange={e => setLink(i, e.target.value)} placeholder="https://drive.google.com/..." style={{ flex: 1 }} />
-              {form.drive_links.length > 1 && (
-                <button type="button" className="btn btn-ghost" onClick={() => removeLink(i)} style={{ padding: '8px 12px', flexShrink: 0 }}>×</button>
-              )}
+          <label>Fotos / documentos</label>
+          {form.drive_links.filter(l => l.trim()).map((link, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <a href={link} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: 13, color: '#0891b2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {link}
+              </a>
+              <button type="button" className="btn btn-ghost" onClick={() => setForm(f => ({ ...f, drive_links: f.drive_links.filter(l => l !== link) }))} style={{ padding: '8px 12px', flexShrink: 0 }}>×</button>
             </div>
           ))}
-          <button type="button" className="btn btn-secondary" onClick={addLink} style={{ alignSelf: 'flex-start', fontSize: 13, padding: '6px 14px' }}>
-            + Agregar link
-          </button>
+          <label className="btn btn-secondary" style={{ display: 'inline-block', alignSelf: 'flex-start', fontSize: 13, padding: '6px 14px', cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
+            {subiendo ? 'Subiendo...' : '+ Subir foto o archivo'}
+            <input type="file" accept="image/*,.pdf" onChange={subirArchivo} disabled={subiendo} style={{ display: 'none' }} />
+          </label>
+          <details style={{ marginTop: 6 }}>
+            <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>¿Ya tenés un link (Drive, etc.)? Pegalo acá</summary>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <input value={linkManual} onChange={e => setLinkManual(e.target.value)} placeholder="https://..." style={{ flex: 1 }} />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flexShrink: 0 }}
+                onClick={() => {
+                  if (!linkManual.trim()) return
+                  setForm(f => ({ ...f, drive_links: [...f.drive_links.filter(l => l.trim()), linkManual.trim()] }))
+                  setLinkManual('')
+                }}
+              >
+                Agregar
+              </button>
+            </div>
+          </details>
         </div>
 
         {msg && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{msg}</p>}
@@ -652,6 +692,23 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
     drive_links: p.drive_links?.length > 0 ? p.drive_links : [''],
   })
   const [saving, setSaving] = useState(false)
+  const [subiendo, setSubiendo] = useState(false)
+  const [linkManual, setLinkManual] = useState('')
+
+  async function subirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0]
+    e.target.value = ''
+    if (!archivo) return
+    setSubiendo(true)
+    const ext = archivo.name.split('.').pop() || 'bin'
+    const filename = `pendiente-${Date.now()}.${ext}`
+    const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+    if (!error && data) {
+      const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
+      setForm(f => ({ ...f, drive_links: [...f.drive_links.filter(l => l.trim()), urlData.publicUrl] }))
+    }
+    setSubiendo(false)
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -708,31 +765,41 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
         <textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} rows={2} placeholder="Contexto / instrucción..." />
       </div>
       <div className="field">
-        <label>Links de Drive</label>
-        {form.drive_links.map((link, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-            <input
-              value={link}
-              onChange={e => {
-                const links = [...form.drive_links]
-                links[i] = e.target.value
-                setForm(f => ({ ...f, drive_links: links }))
-              }}
-              placeholder="https://drive.google.com/..."
-              style={{ flex: 1 }}
-            />
-            {form.drive_links.length > 1 && (
-              <button type="button" className="btn btn-ghost" onClick={() => setForm(f => ({ ...f, drive_links: f.drive_links.filter((_, j) => j !== i) }))} style={{ padding: '8px 12px', flexShrink: 0 }}>×</button>
-            )}
+        <label>Fotos / documentos</label>
+        {form.drive_links.filter(l => l.trim()).map((link, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <a href={link} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: 13, color: '#0891b2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {link}
+            </a>
+            <button type="button" className="btn btn-ghost" onClick={() => setForm(f => ({ ...f, drive_links: f.drive_links.filter(l => l !== link) }))} style={{ padding: '8px 12px', flexShrink: 0 }}>×</button>
           </div>
         ))}
-        <button type="button" className="btn btn-secondary" onClick={() => setForm(f => ({ ...f, drive_links: [...f.drive_links, ''] }))} style={{ fontSize: 13, padding: '6px 14px' }}>
-          + Agregar link
-        </button>
+        <label className="btn btn-secondary" style={{ display: 'inline-block', fontSize: 13, padding: '6px 14px', cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
+          {subiendo ? 'Subiendo...' : '+ Subir foto o archivo'}
+          <input type="file" accept="image/*,.pdf" onChange={subirArchivo} disabled={subiendo} style={{ display: 'none' }} />
+        </label>
+        <details style={{ marginTop: 6 }}>
+          <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>¿Ya tenés un link (Drive, etc.)? Pegalo acá</summary>
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <input value={linkManual} onChange={e => setLinkManual(e.target.value)} placeholder="https://..." style={{ flex: 1 }} />
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ flexShrink: 0 }}
+              onClick={() => {
+                if (!linkManual.trim()) return
+                setForm(f => ({ ...f, drive_links: [...f.drive_links.filter(l => l.trim()), linkManual.trim()] }))
+                setLinkManual('')
+              }}
+            >
+              Agregar
+            </button>
+          </div>
+        </details>
       </div>
       {p.estado === 'respondido' && (
         <div className="field">
-          <label>✏️ Respuesta de {p.destinatario === 'irazu' ? 'Irazú' : 'Gustavo'} (editable)</label>
+          <label>✏️ Respuesta de {p.destinatario === 'irazu' ? 'Admin' : 'Gustavo'} (editable)</label>
           <textarea value={form.respuesta} onChange={e => setForm(f => ({ ...f, respuesta: e.target.value }))} rows={4} style={{ fontFamily: 'inherit' }} />
         </div>
       )}
@@ -998,7 +1065,7 @@ function PendienteCard({
                     <div style={{ marginTop: 10 }}>
                       {p.destinatario === 'irazu' ? (
                         <>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 8 }}>Archivo adjunto de Irazú</p>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 8 }}>Archivo adjunto de Admin</p>
                           {/\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(p.audio_url) ? (
                             <>
                               <img src={p.audio_url} alt="Archivo adjunto" style={{ width: '100%', borderRadius: 8, marginBottom: 8, display: 'block' }} />
@@ -1156,91 +1223,6 @@ function PendienteCard({
   )
 }
 
-/* ─── Notas rápidas ─────────────────────────────────── */
-interface Nota { id: string; texto: string; hecho: boolean }
-
-function NotasRapidas() {
-  const [notas, setNotas] = useState<Nota[]>([])
-  const [input, setInput] = useState('')
-
-  useEffect(() => {
-    supabase.from('notas_rapidas').select('*').order('created_at')
-      .then(({ data }) => setNotas((data as Nota[]) || []))
-  }, [])
-
-  async function agregar() {
-    const texto = input.trim()
-    if (!texto) return
-    const { data } = await supabase.from('notas_rapidas').insert({ texto, hecho: false }).select().single()
-    if (data) setNotas(prev => [...prev, data as Nota])
-    setInput('')
-  }
-
-  async function toggleHecho(n: Nota) {
-    await supabase.from('notas_rapidas').update({ hecho: !n.hecho }).eq('id', n.id)
-    setNotas(prev => prev.map(x => x.id === n.id ? { ...x, hecho: !x.hecho } : x))
-  }
-
-  async function eliminar(id: string) {
-    await supabase.from('notas_rapidas').delete().eq('id', id)
-    setNotas(prev => prev.filter(x => x.id !== id))
-  }
-
-  async function limpiarCompletadas() {
-    const ids = notas.filter(n => n.hecho).map(n => n.id)
-    if (ids.length) await supabase.from('notas_rapidas').delete().in('id', ids)
-    setNotas(prev => prev.filter(n => !n.hecho))
-  }
-
-  const pendientes = notas.filter(n => !n.hecho)
-  const hechas = notas.filter(n => n.hecho)
-
-  return (
-    <div className="card" style={{ marginBottom: '1.25rem', padding: '1rem 1.25rem' }}>
-      <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-        Mis notas
-      </h3>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && agregar()}
-          placeholder="Escribí una nota y presioná Enter..."
-          style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14, background: 'var(--white)' }}
-        />
-        <button className="btn btn-primary" onClick={agregar} style={{ padding: '9px 18px', fontSize: 15, fontWeight: 700 }}>+</button>
-      </div>
-      {notas.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '4px 0 2px' }}>Ninguna nota por ahora.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {pendientes.map(nota => (
-            <div key={nota.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--white)', borderRadius: 8, border: '1px solid var(--border)' }}>
-              <input type="checkbox" checked={false} onChange={() => toggleHecho(nota)} style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }} />
-              <span style={{ flex: 1, fontSize: 14, lineHeight: 1.4 }}>{nota.texto}</span>
-              <button onClick={() => eliminar(nota.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, color: 'var(--muted)', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>✕</button>
-            </div>
-          ))}
-          {hechas.length > 0 && (
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 3 }}>
-              {hechas.map(nota => (
-                <div key={nota.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', opacity: 0.5 }}>
-                  <input type="checkbox" checked={true} onChange={() => toggleHecho(nota)} style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }} />
-                  <span style={{ flex: 1, fontSize: 13, textDecoration: 'line-through', color: 'var(--muted)' }}>{nota.texto}</span>
-                  <button onClick={() => eliminar(nota.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--muted)', lineHeight: 1, padding: '0 2px' }}>✕</button>
-                </div>
-              ))}
-              <button onClick={limpiarCompletadas} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', padding: '4px 10px', width: '100%', textAlign: 'right' }}>
-                Limpiar completadas
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /* ─── Admin page ────────────────────────────────────── */
 export default function Admin() {
   const [authed, setAuthed] = useState(false)
@@ -1249,8 +1231,10 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'obras' | 'pagos' | 'resultados'>('activos')
+  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'pagos' | 'resultados'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [verArchivados, setVerArchivados] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('horma_admin_token')
@@ -1275,9 +1259,23 @@ export default function Admin() {
     if (showSpinner) setLoading(false)
   }, [])
 
+  const loadClientes = useCallback(async () => {
+    const { data } = await supabase.from('clientes').select('*')
+    setClientes((data as Cliente[]) || [])
+  }, [])
+
+  async function archivarCliente(nombre: string, archivar: boolean) {
+    await supabase.from('clientes').upsert(
+      { nombre, archivado: archivar, archivado_at: archivar ? new Date().toISOString() : null },
+      { onConflict: 'nombre' }
+    )
+    loadClientes()
+  }
+
   useEffect(() => {
     if (!authed) return
     loadPendientes(true)
+    loadClientes()
     const interval = setInterval(() => loadPendientes(false), 60000)
     return () => clearInterval(interval)
   }, [authed, loadPendientes])
@@ -1361,7 +1359,7 @@ export default function Admin() {
     ))
   }
 
-  const clientesSummary = Object.entries(
+  const clientesSummaryTodos = Object.entries(
     pendientes.reduce<Record<string, Pendiente[]>>((acc, p) => {
       if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
       acc[p.cliente_nombre].push(p)
@@ -1371,8 +1369,12 @@ export default function Admin() {
     const activos = items.filter(p => p.estado !== 'respondido')
     const vencidos = activos.filter(p => new Date(p.fecha_limite) < new Date())
     const last = items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-    return { nombre, total: items.length, activos: activos.length, vencidos: vencidos.length, ultimaInteraccion: last.created_at }
+    const archivado = clientes.find(c => c.nombre === nombre)?.archivado ?? false
+    return { nombre, total: items.length, activos: activos.length, vencidos: vencidos.length, ultimaInteraccion: last.created_at, archivado }
   }).sort((a, b) => new Date(b.ultimaInteraccion).getTime() - new Date(a.ultimaInteraccion).getTime())
+
+  const clientesArchivadosCount = clientesSummaryTodos.filter(c => c.archivado).length
+  const clientesSummary = clientesSummaryTodos.filter(c => verArchivados ? c.archivado : !c.archivado)
 
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
 
@@ -1458,7 +1460,7 @@ export default function Admin() {
       </div>
 
       {/* Quick notes */}
-      <NotasRapidas />
+      <NotasRapidas autor="alexandra" />
 
       {/* Create form */}
       {showForm && (
@@ -1477,6 +1479,7 @@ export default function Admin() {
           ['activos', `Activos (${activos.length})`, 'var(--primary)'],
           ['respondidos_gustavo', `Gustavo (${respondidosGustavo.length})`, '#0284c7'],
           ['clientes', `Clientes (${clientesSummary.length})`, '#7c3aed'],
+          ['presupuestos', 'Presupuestos', '#059669'],
           ['obras', 'Obras', '#c1440e'],
           ['pagos', 'Pago semanal', '#e67e22'],
           ['resultados', 'Estado de resultados', '#14213D'],
@@ -1540,15 +1543,30 @@ export default function Admin() {
         )
       ) : tab === 'respondidos_gustavo' ? (
         renderRespondidos(respondidosGustavo)
+      ) : tab === 'presupuestos' ? (
+        <PanelPresupuestos />
       ) : tab === 'obras' ? (
         <PanelObras />
       ) : tab === 'pagos' ? (
         <PanelPagoSemanal />
       ) : tab === 'resultados' ? (
         <PanelEstadoResultados />
-      ) : clientesSummary.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>Sin clientes registrados aún.</p>
       ) : (
+        <div>
+          {clientesArchivadosCount > 0 && (
+            <button
+              onClick={() => setVerArchivados(v => !v)}
+              className="btn btn-secondary"
+              style={{ fontSize: 12, padding: '6px 12px', marginBottom: 12 }}
+            >
+              {verArchivados ? '← Ver clientes activos' : `Ver archivados (${clientesArchivadosCount})`}
+            </button>
+          )}
+          {clientesSummary.length === 0 ? (
+            <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
+              {verArchivados ? 'No hay clientes archivados.' : 'Sin clientes registrados aún.'}
+            </p>
+          ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {clientesSummary.map(c => (
             <div
@@ -1604,9 +1622,19 @@ export default function Admin() {
                 >
                   + Pendiente
                 </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => archivarCliente(c.nombre, !c.archivado)}
+                  style={{ fontSize: 12, padding: '6px 12px' }}
+                  title={c.archivado ? 'Volver a mostrar en la lista' : 'Sacar de la lista sin borrar el historial'}
+                >
+                  {c.archivado ? 'Desarchivar' : 'Archivar'}
+                </button>
               </div>
             </div>
           ))}
+        </div>
+          )}
         </div>
       )}
 

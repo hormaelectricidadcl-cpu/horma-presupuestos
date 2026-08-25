@@ -13,6 +13,8 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
   emitir_boleta: 'Emitir boleta',
   emitir_factura: 'Emitir factura',
   cobro: 'Cobro pendiente',
+  seguimiento: 'Seguimiento',
+  pedido_material: 'Pedido de material',
 }
 
 const TIPO_EMOJI: Record<TipoPendiente, string> = {
@@ -23,6 +25,8 @@ const TIPO_EMOJI: Record<TipoPendiente, string> = {
   emitir_boleta: '🧾',
   emitir_factura: '📄',
   cobro: '💰',
+  seguimiento: '🔁',
+  pedido_material: '📦',
 }
 
 function formatDeadlineShort(iso: string): { text: string; urgent: boolean } {
@@ -247,6 +251,8 @@ const TIPO_LABELS_SHORT: Record<TipoPendiente, string> = {
   emitir_boleta: 'Boleta',
   emitir_factura: 'Factura',
   cobro: 'Cobro',
+  seguimiento: 'Seguimiento',
+  pedido_material: 'Material',
 }
 
 /* ─── Panel de clientes (Irazú) ─────────────────────── */
@@ -359,7 +365,7 @@ function PanelClientesIrazu() {
                     {h.respuesta && (
                       <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
                         <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 3 }}>
-                          {esIrazu ? 'Irazú respondió:' : 'Gustavo respondió:'}
+                          {esIrazu ? 'Admin respondió:' : 'Gustavo respondió:'}
                         </p>
                         <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{h.respuesta}</p>
                       </div>
@@ -467,7 +473,7 @@ export default function Irazu({ token }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.5rem' }}>
           <div style={{ width: 44, height: 44, background: COLOR, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0 }}>I</div>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>Hola Irazú</h1>
+            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>Hola Admin</h1>
             {!loading && tab === 'pendientes' && (
               <p style={{ fontSize: 13, color: 'var(--muted)' }}>
                 {pendientes.length === 0 ? 'Sin pendientes' : `${pendientes.length} pendiente${pendientes.length !== 1 ? 's' : ''} para resolver`}

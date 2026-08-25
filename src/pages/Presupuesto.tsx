@@ -3,6 +3,7 @@ import { generatePDF } from '../utils/pdfGenerator';
 import { calculateTotals } from '../utils/calculationUtils';
 import type { Item } from '../utils/calculationUtils';
 import ItemForm from '../components/ItemForm';
+import { supabase } from '../lib/supabase';
 import '../App.css';
 
 interface Client {
@@ -12,7 +13,13 @@ interface Client {
   address: string;
 }
 
-const Presupuesto: React.FC = () => {
+const PRESUPUESTO_TOKEN = import.meta.env.VITE_PRESUPUESTO_TOKEN as string;
+
+interface Props {
+  token: string | null;
+}
+
+const Presupuesto: React.FC<Props> = ({ token }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [clientData, setClientData] = useState<Client>({ name: '', rut: '', email: '', address: '' });
   const [overheadPercentage, setOverheadPercentage] = useState(10);
@@ -36,11 +43,51 @@ const Presupuesto: React.FC = () => {
         alert('Agrega al menos un item antes de generar el PDF');
         return;
       }
-      generatePDF(clientData, items, overheadPercentage);
-      alert('PDF generado correctamente');
+      if (!clientData.name.trim() || !clientData.address.trim()) {
+        alert('Rellena los datos del cliente (nombre y dirección) antes de generar el PDF');
+        return;
+      }
+      const referencia = `HRM-${Date.now().toString(36).toUpperCase()}`;
+      generatePDF(clientData, items, overheadPercentage, referencia);
+      void guardarPresupuesto(referencia);
+      alert(`PDF generado correctamente — Ref: ${referencia}`);
     } catch (error) {
       console.error('Error in handleGeneratePDF:', error);
       alert('Error al generar el PDF');
+    }
+  };
+
+  const guardarPresupuesto = async (referencia: string) => {
+    try {
+      const clientePayload: { nombre: string; rut?: string; email?: string } = { nombre: clientData.name.trim() };
+      if (clientData.rut.trim()) clientePayload.rut = clientData.rut.trim();
+      if (clientData.email.trim()) clientePayload.email = clientData.email.trim();
+
+      const { data: cliente, error: clienteErr } = await supabase
+        .from('clientes')
+        .upsert(clientePayload, { onConflict: 'nombre' })
+        .select('id')
+        .single();
+      if (clienteErr) throw clienteErr;
+
+      const { error: presupuestoErr } = await supabase.from('presupuestos').insert({
+        cliente_id: cliente?.id ?? null,
+        cliente_nombre: clientData.name.trim(),
+        cliente_email: clientData.email.trim() || null,
+        cliente_direccion: clientData.address.trim(),
+        tipo: 'simple',
+        estado: 'enviado',
+        items,
+        referencia,
+        gg_pct: overheadPercentage,
+        gg_amount: gastosGenerales,
+        subtotal,
+        iva,
+        total,
+      });
+      if (presupuestoErr) throw presupuestoErr;
+    } catch (error) {
+      console.error('Error al guardar presupuesto en Supabase:', error);
     }
   };
 
@@ -48,6 +95,21 @@ const Presupuesto: React.FC = () => {
     const { name, value } = e.target;
     setClientData({ ...clientData, [name]: value });
   };
+
+  if (token !== PRESUPUESTO_TOKEN) {
+    return (
+      <div className="pendientes" style={{
+        minHeight: '100vh',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '2rem', textAlign: 'center',
+      }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+        <h2 style={{ fontWeight: 700, marginBottom: 8 }}>Link inválido</h2>
+        <p style={{ color: 'var(--muted)', fontSize: 15 }}>Pídele a Alexandra que te mande el link por WhatsApp.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="app">

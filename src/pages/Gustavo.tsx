@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos } from '../components/PanelesObra'
+import { NotasRapidas } from '../components/NotasRapidas'
 import type { Pendiente, TipoPendiente } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
@@ -15,6 +16,8 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
   emitir_boleta: 'Emitir boleta',
   emitir_factura: 'Emitir factura',
   cobro: 'Cobro pendiente',
+  seguimiento: 'Seguimiento',
+  pedido_material: 'Pedido de material',
 }
 
 const TIPO_EMOJI: Record<TipoPendiente, string> = {
@@ -25,6 +28,8 @@ const TIPO_EMOJI: Record<TipoPendiente, string> = {
   emitir_boleta: '',
   emitir_factura: '',
   cobro: '',
+  seguimiento: '',
+  pedido_material: '',
 }
 
 const PLACEHOLDER: Record<TipoPendiente, string> = {
@@ -35,6 +40,8 @@ const PLACEHOLDER: Record<TipoPendiente, string> = {
   emitir_boleta: 'Escribe aquí tu respuesta...',
   emitir_factura: 'Escribe aquí tu respuesta...',
   cobro: 'Escribe aquí tu respuesta...',
+  seguimiento: 'Escribe aquí tu respuesta...',
+  pedido_material: 'Ej: Faltan 20m de cable 2.5mm y 3 cajas octogonales para el jueves',
 }
 
 function formatDeadlineShort(iso: string): { text: string; urgent: boolean } {
@@ -61,6 +68,8 @@ const TIPO_LABELS_SHORT: Record<TipoPendiente, string> = {
   emitir_boleta: 'Boleta',
   emitir_factura: 'Factura',
   cobro: 'Cobro',
+  seguimiento: 'Seguimiento',
+  pedido_material: 'Material',
 }
 
 function fmtFecha(iso: string) {
@@ -142,7 +151,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
           {h.respuesta && (
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 3 }}>
-                {h.destinatario === 'irazu' ? 'Irazú respondió:' : 'Tu respuesta:'}
+                {h.destinatario === 'irazu' ? 'Admin respondió:' : 'Tu respuesta:'}
               </p>
               <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{h.respuesta}</p>
             </div>
@@ -151,7 +160,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
             <div style={{ marginTop: 6 }}>
               {h.destinatario === 'irazu' ? (
                 <>
-                  <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Archivo de Irazú</p>
+                  <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Archivo de Admin</p>
                   {/\.(jpe?g|png|gif|webp)(\?|$)/i.test(h.audio_url) && (
                     <img src={h.audio_url} alt="Archivo" style={{ width: '100%', borderRadius: 8, marginBottom: 6 }} />
                   )}
@@ -494,15 +503,17 @@ function PanelClientes() {
   const [loadingH, setLoadingH] = useState(false)
 
   useEffect(() => {
-    supabase
-      .from('pendientes')
-      .select('cliente_nombre')
-      .order('cliente_nombre')
-      .then(({ data }) => {
-        const unique = [...new Set((data || []).map((d: { cliente_nombre: string }) => d.cliente_nombre))].sort()
-        setClientes(unique)
-        setLoading(false)
-      })
+    Promise.all([
+      supabase.from('pendientes').select('cliente_nombre').order('cliente_nombre'),
+      supabase.from('clientes').select('nombre').eq('archivado', true),
+    ]).then(([{ data }, { data: archivadosData }]) => {
+      const archivados = new Set((archivadosData || []).map((c: { nombre: string }) => c.nombre))
+      const unique = [...new Set((data || []).map((d: { cliente_nombre: string }) => d.cliente_nombre))]
+        .filter(nombre => !archivados.has(nombre))
+        .sort()
+      setClientes(unique)
+      setLoading(false)
+    })
   }, [])
 
   async function verCliente(nombre: string) {
@@ -595,7 +606,7 @@ function PanelClientes() {
                     {h.respuesta && (
                       <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
                         <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 3 }}>
-                          {esIrazu ? 'Irazú respondió:' : 'Tu respuesta:'}
+                          {esIrazu ? 'Admin respondió:' : 'Tu respuesta:'}
                         </p>
                         <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{h.respuesta}</p>
                       </div>
@@ -669,7 +680,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'pendientes' | 'reporte' | 'clientes' | 'obras' | 'pagos' | 'resultados'>('pendientes')
+  const [tab, setTab] = useState<'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'pagos' | 'resultados'>('pendientes')
 
   const tokenValido = token === GUSTAVO_TOKEN
 
@@ -732,7 +743,7 @@ export default function Gustavo({ token }: Props) {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {([['pendientes', 'Mis tareas'], ['reporte', 'Reporte diario'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['pagos', 'Pago semanal'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
+          {([['pendientes', 'Mis tareas'], ['notas', 'Mis notas'], ['presupuestos', 'Mis presupuestos'], ['reporte', 'Reporte diario'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['pagos', 'Pago semanal'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -747,7 +758,11 @@ export default function Gustavo({ token }: Props) {
           ))}
         </div>
 
-        {tab === 'reporte' ? (
+        {tab === 'notas' ? (
+          <NotasRapidas autor="gustavo" />
+        ) : tab === 'presupuestos' ? (
+          <PanelPresupuestos />
+        ) : tab === 'reporte' ? (
           <Reporte token={REPORTE_TOKEN} embedded />
         ) : tab === 'clientes' ? (
           <PanelClientes />

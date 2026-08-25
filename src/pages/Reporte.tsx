@@ -4,6 +4,10 @@ import { supabase } from '../lib/supabase'
 const REPORTE_TOKEN = import.meta.env.VITE_REPORTE_TOKEN as string
 
 const TRABAJADORES = ['Alejandro', 'Fabriel', 'Henry', 'Manuel', 'Misael', 'Samuel']
+// Gustavo no tiene tarifa diaria (no está en la tabla `trabajadores`, cobra distinto por ser el
+// dueño) -- no puede sumarse a TRABAJADORES o aparecería en asistencia/pago semanal por error.
+// Se usa aparte solo donde tiene sentido que él sea la respuesta (ej: quién hizo un trabajo puntual).
+const QUIEN_LO_HIZO = [...TRABAJADORES, 'Gustavo']
 const OBRA_LIMACHE = 'Ohiggins 126 Limache'
 // Respaldo por si falla la carga desde Supabase (tabla `obras`, fuente real de la lista).
 const OBRAS_FALLBACK = [
@@ -62,6 +66,7 @@ interface TrabajoPuntualRow {
   descripcion: string
   direccion: string
   trabajador: string
+  monto: string
 }
 
 const DEFAULT_TRABAJADOR: TrabajadorState = {
@@ -151,8 +156,8 @@ export default function Reporte({ token, embedded = false }: Props) {
     setSubcontratos((subc || []).map((s: { id: string; obra: string | null; subcontrato: string; monto: number }) => ({
       id: s.id, obra: s.obra || '', subcontrato: s.subcontrato, monto: String(s.monto),
     })))
-    setTrabajosPuntuales((punt || []).map((p: { id: string; descripcion: string; direccion: string | null; trabajador: string | null }) => ({
-      id: p.id, descripcion: p.descripcion, direccion: p.direccion || '', trabajador: p.trabajador || '',
+    setTrabajosPuntuales((punt || []).map((p: { id: string; descripcion: string; direccion: string | null; trabajador: string | null; monto: number | null }) => ({
+      id: p.id, descripcion: p.descripcion, direccion: p.direccion || '', trabajador: p.trabajador || '', monto: p.monto != null ? String(p.monto) : '',
     })))
     setLoading(false)
   }, [])
@@ -218,7 +223,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
 
   function agregarTrabajoPuntual() {
-    setTrabajosPuntuales(prev => [...prev, { descripcion: '', direccion: '', trabajador: '' }])
+    setTrabajosPuntuales(prev => [...prev, { descripcion: '', direccion: '', trabajador: '', monto: '' }])
   }
   function actualizarTrabajoPuntual(idx: number, patch: Partial<TrabajoPuntualRow>) {
     setTrabajosPuntuales(prev => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
@@ -418,7 +423,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     await supabase.from('reportes_trabajos_puntuales').delete().eq('fecha', fecha)
     if (trabajosValidos.length) {
       const { error: e5 } = await supabase.from('reportes_trabajos_puntuales').insert(
-        trabajosValidos.map(p => ({ fecha, descripcion: p.descripcion.trim(), direccion: p.direccion.trim() || null, trabajador: p.trabajador || null }))
+        trabajosValidos.map(p => ({ fecha, descripcion: p.descripcion.trim(), direccion: p.direccion.trim() || null, trabajador: p.trabajador || null, monto: p.monto.trim() ? Number(p.monto) : null }))
       )
       if (e5) {
         setError('Error al guardar los trabajos puntuales. Intenta de nuevo.')
@@ -775,8 +780,17 @@ export default function Reporte({ token, embedded = false }: Props) {
                       <label>Quién lo hizo (opcional)</label>
                       <select value={p.trabajador} onChange={e => actualizarTrabajoPuntual(idx, { trabajador: e.target.value })}>
                         <option value="">Selecciona...</option>
-                        {TRABAJADORES.map(n => <option key={n} value={n}>{n}</option>)}
+                        {QUIEN_LO_HIZO.map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
+                    </div>
+                    <div className="field">
+                      <label>Monto cobrado (opcional)</label>
+                      <input
+                        type="number"
+                        placeholder="Ej: 30000"
+                        value={p.monto}
+                        onChange={e => actualizarTrabajoPuntual(idx, { monto: e.target.value })}
+                      />
                     </div>
                     <button type="button" className="btn btn-ghost" onClick={() => quitarTrabajoPuntual(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
                       ✕ Quitar

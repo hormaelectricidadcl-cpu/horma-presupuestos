@@ -263,12 +263,23 @@ export default function PresupuestoEtapas() {
 
     // Guardar en Supabase
     if (session?.user?.id) {
+      const clientePayload: { nombre: string; telefono?: string; email?: string } = { nombre: client.name.trim() }
+      if (client.telefono?.trim()) clientePayload.telefono = client.telefono.trim()
+      if (client.email?.trim()) clientePayload.email = client.email.trim()
+      const { data: cliente } = await supabase
+        .from('clientes')
+        .upsert(clientePayload, { onConflict: 'nombre' })
+        .select('id')
+        .single()
+
       const { error: dbErr } = await supabase.from('presupuestos').insert({
         user_id:          session.user.id,
+        cliente_id:       cliente?.id ?? null,
         cliente_nombre:   client.name,
         cliente_telefono: client.telefono,
         cliente_email:    client.email,
         cliente_direccion: client.address,
+        estado: 'enviado',
         etapas,
         gg_pct:    ggPct,
         gg_amount: ggAmount,
