@@ -718,7 +718,7 @@ export default function Gustavo({ token }: Props) {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {([['pendientes', 'Mis tareas'], ['notas', 'Mis notas'], ['presupuestos', 'Mis presupuestos'], ['reporte', 'Reporte diario'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['calendario', 'Calendario'], ['stock', 'Stock'], ['pagos', 'Pago semanal'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
+          {([['reporte', 'Reporte diario'], ['calendario', 'Calendario'], ['obras', 'Obras'], ['pagos', 'Pago semanal'], ['presupuestos', 'Mis presupuestos'], ['pendientes', 'Mis tareas'], ['notas', 'Mis notas'], ['clientes', 'Clientes'], ['stock', 'Stock'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
