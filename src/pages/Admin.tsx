@@ -1366,6 +1366,7 @@ export default function Admin() {
   const clientesSummary = clientesSummaryTodos.filter(c => verArchivados ? c.archivado : !c.archivado)
 
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
+  const presupuestoToken = import.meta.env.VITE_PRESUPUESTO_TOKEN as string
 
   return (
     <div className="pendientes" style={{ background: 'var(--bg)', minHeight: '100vh' }}>
@@ -1386,7 +1387,7 @@ export default function Admin() {
         {[
           { label: 'Admin', href: '/admin', active: true, color: 'var(--primary)' },
           { label: 'Gustavo', href: `/g?t=${gustavoToken}`, active: false, color: '#0284c7' },
-          { label: 'Presupuesto', href: '/', active: false, color: '#059669' },
+          { label: 'Presupuesto', href: `/?t=${presupuestoToken}`, active: false, color: '#059669' },
           { label: 'Itemizado', href: '/itemizado', active: false, color: '#e69a21' },
         ].map(item => (
           <a
