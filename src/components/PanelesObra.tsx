@@ -1708,6 +1708,17 @@ export function PanelPresupuestos() {
     setCargandoDetalle(false)
   }
 
+  async function eliminarPresupuesto(id: string, clienteNombre: string | null) {
+    if (!window.confirm(`¿Seguro que querés borrar el presupuesto de "${clienteNombre || 'sin nombre'}"? No se puede deshacer.`)) return
+    const { error } = await supabase.from('presupuestos').delete().eq('id', id)
+    if (error) {
+      alert('No se pudo borrar. Intenta de nuevo.')
+      return
+    }
+    setPresupuestos(prev => prev.filter(p => p.id !== id))
+    if (detalleId === id) { setDetalleId(null); setDetalle(null) }
+  }
+
   const filtrados = presupuestos.filter(p =>
     !busqueda.trim() || (p.cliente_nombre || '').toLowerCase().includes(busqueda.trim().toLowerCase())
   )
@@ -1752,6 +1763,9 @@ export function PanelPresupuestos() {
                 </select>
                 <button className="btn btn-secondary" onClick={() => abrirDetalle(p.id)} style={{ fontSize: 12, padding: '6px 12px' }}>
                   Detalle
+                </button>
+                <button className="btn btn-danger" onClick={() => eliminarPresupuesto(p.id, p.cliente_nombre)} style={{ fontSize: 12, padding: '6px 12px', marginLeft: 'auto' }}>
+                  Borrar
                 </button>
               </div>
             </div>
@@ -1839,7 +1853,7 @@ export function PanelPresupuestos() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}><span>Total</span><span>{fmtMoney(detalle.total || 0)}</span></div>
                 </div>
 
-                <div style={{ marginTop: 16 }}>
+                <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
                   <select
                     value={detalle.estado}
                     onChange={e => cambiarEstado(detalle.id, e.target.value as EstadoPresupuesto)}
@@ -1849,6 +1863,9 @@ export function PanelPresupuestos() {
                       <option key={k} value={k}>{label}</option>
                     ))}
                   </select>
+                  <button className="btn btn-danger" onClick={() => eliminarPresupuesto(detalle.id, detalle.cliente_nombre)} style={{ fontSize: 12, padding: '6px 12px', marginLeft: 'auto' }}>
+                    Borrar
+                  </button>
                 </div>
               </>
             )}
