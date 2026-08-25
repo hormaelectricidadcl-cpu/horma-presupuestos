@@ -26,13 +26,20 @@ Reglas obligatorias:
 
 {
   "descripcion": "resumen breve de los materiales comprados, separados por coma",
-  "monto": 10000
+  "monto": 10000,
+  "items": [
+    { "descripcion": "nombre del material o producto", "cantidad": 1, "precioUnitario": 5000 }
+  ]
 }
 
-- "monto" es el TOTAL final pagado en la boleta (con IVA incluido si corresponde), no un subtotal.
-- "monto" debe ser un número, sin puntos de miles ni símbolo de moneda.
+- "monto" es el TOTAL final pagado en la boleta (con IVA incluido si corresponde), no un subtotal. Debe ser un número, sin puntos de miles ni símbolo de moneda.
 - "descripcion" es un resumen corto y legible de los materiales principales (ej: "Cable 10mm, cajas octogonales, cinta aislante").
-- Si no se puede leer el monto con claridad en la imagen, usa null en "monto".`
+- "items" es la lista de cada línea/material que aparece en la boleta por separado. Cada ítem:
+  - "cantidad": el número de unidades compradas de ese material. Si no aparece explícito, usa 1.
+  - "precioUnitario": el precio de una sola unidad de ese material, sin puntos de miles.
+  - Si la boleta solo muestra un precio total por línea (no unitario) y la cantidad es 1, "precioUnitario" es ese mismo precio.
+- Si no se puede leer el monto con claridad en la imagen, usa null en "monto".
+- Si no se distinguen ítems individuales en la boleta (ej. una boleta genérica sin desglose), "items" puede ser un arreglo vacío [].`
 
   try {
     const response = await fetch('https://api.openai.com/v1/responses', {
@@ -69,9 +76,20 @@ Reglas obligatorias:
 
     const resultado = JSON.parse(textoLimpio)
 
+    const itemsNormalizados = Array.isArray(resultado.items)
+      ? resultado.items
+        .filter(it => String(it.descripcion || '').trim())
+        .map(it => ({
+          descripcion: String(it.descripcion || '').trim(),
+          cantidad: Number(it.cantidad) > 0 ? Number(it.cantidad) : 1,
+          precioUnitario: Number(it.precioUnitario) > 0 ? Number(it.precioUnitario) : 0,
+        }))
+      : []
+
     const normalizado = {
       descripcion: String(resultado.descripcion || '').trim(),
       monto: Number(resultado.monto) > 0 ? Number(resultado.monto) : null,
+      items: itemsNormalizados,
     }
 
     return new Response(JSON.stringify(normalizado), { headers: { 'Content-Type': 'application/json' } })

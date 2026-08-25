@@ -71,6 +71,16 @@ export interface ReporteCompraDia {
   destino?: 'stock' | 'trabajo_puntual' | null
   pagado_por?: string | null
   reembolsado?: boolean
+  foto_boleta_url?: string | null
+}
+
+export interface CompraItem {
+  id: string
+  created_at: string
+  compra_id: string
+  descripcion: string
+  cantidad: number
+  precio_unitario: number
 }
 
 export interface ReporteCobroDia {

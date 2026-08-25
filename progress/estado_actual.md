@@ -36,11 +36,13 @@
 - **Alexandra corrió `sql/20260825_compras_foto_boleta.sql` y probó con una boleta real en su celular, en producción — funciona.** La IA leyó el monto exacto ($33.840) y los materiales de una boleta real. Confirma que la función de Cloudflare y OpenAI andan bien — era la única pieza no probable en local, ya validada con caso real.
 - **Hallazgo real, esperado:** con varios materiales en una boleta, la descripción los junta en una sola línea de texto — no se ven cantidades ni precios por ítem. Confirma que **el paso 2 (desglose por ítem, tabla nueva `compra_items`) hay que priorizarlo pronto** en la próxima sesión — no era solo una posibilidad a futuro, ya se sintió la limitación en el primer uso real.
 
+- **Nivel 3, paso 2 construido (desglose por ítem de la boleta):** tabla nueva `compra_items`, `functions/api/parse-factura.js` ahora también devuelve la lista de materiales con cantidad y precio unitario, sección "Materiales de esta compra" nueva en Reporte Diario (se llena sola con la IA, editable a mano). Guardado inserta cada compra primero para tener su ID real y recién después vincula sus materiales. Probado lo que se pudo probar sin riesgo: la interacción de la UI funciona, la escritura a `compra_items` se simuló contra Supabase (falló como se esperaba, migración no corrida). **No se probó a través del formulario real de Reporte Diario a propósito** — hubiera tocado la asistencia real de hoy del equipo (el guardado del día borra y reinserta todo). Bloqueado en `sql/20260825_compra_items.sql`.
+
 ## Para la próxima sesión — empezar acá
 1. **Leer este archivo y `progress/propuesta_arquitectura_operativa.md` primero** (regla del arnés, `CLAUDE.md`).
 2. **Nivel 1, Nivel 2, y toda la "visión ampliada" (2.7-2.13) están construidos y verificados de punta a punta contra Supabase real** — no hay nada pendiente de esas tres secciones.
-3. **Nivel 3 arrancado:** paso 1 de 4 (IA lee foto de boleta) construido y verificado con una boleta real en producción. **Siguiente paso lógico: el paso 2 (desglose por ítem de la boleta)** — Alexandra ya sintió la falta al probarlo, no hace falta volver a preguntar si vale la pena.
-4. Ver la sección "Plan acordado para Nivel 3, en 4 pasos" en `propuesta_arquitectura_operativa.md` para el diseño completo de los pasos 2, 3 y 4.
+3. **Nivel 3 arrancado:** pasos 1 y 2 de 4 construidos (IA lee foto de boleta + desglose por ítem). Paso 1 verificado con una boleta real en producción; paso 2 todavía sin migración corrida ni prueba real completa. **Siguiente acción: confirmar que Alexandra corrió `sql/20260825_compra_items.sql`, y hacer una prueba real completa** (subir una boleta con varios materiales y guardar el reporte del día) antes de seguir con el paso 3 (stock real).
+4. Ver la sección "Plan acordado para Nivel 3, en 4 pasos" en `propuesta_arquitectura_operativa.md` para el diseño completo de los pasos 3 y 4.
 5. Repositorio limpio: todo lo de esta sesión está commiteado y pusheado a `main`, sin cambios sueltos sin subir.
 
 ## Sesión 25/08/2026 (continuación) — MCP arriba: 0.2 hecho, hallazgo extra (0.1 ya estaba hecho), 1.1 construido y probado

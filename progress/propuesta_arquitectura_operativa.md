@@ -208,16 +208,24 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 
 | # | Qué | Depende de |
 |---|---|---|
-| 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa descripción/monto | **✅ Paso 1 de 4 verificado con una boleta real en producción, 25/08/2026** — el monto se lee bien; falta el paso 2 (desglose por ítem) para que se vean cantidades y precios, no solo un resumen en texto |
+| 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa descripción/monto + desglose por ítem | **Pasos 1 y 2 de 4 construidos, 25/08/2026** — paso 1 verificado con boleta real; paso 2 (desglose) bloqueado en Alexandra corriendo `sql/20260825_compra_items.sql` |
 | 3.2 | Desglose por ítem (`obra_items`) + avance diario (`avances_diarios`) + barra de progreso semanal, junto a Pago Semanal | 2.2 |
 | 3.3 | Stock de materiales real: catálogo + movimientos (compra_obra / compra_stock / uso / sobrante_a_stock) — **2.14 ya deja la compra categorizada como `'stock'`, lista para que esto la consuma** | 3.1 en parte |
 | 3.4 | Alerta proactiva de material faltante (cruza `obra_items` contra stock, avisa antes de que frene el trabajo) | 3.2 + 3.3 |
 
 ### Plan acordado para Nivel 3, en 4 pasos (conversación 25/08/2026)
-1. **3.1 solo, sin itemizar** — la foto llena descripción+monto de una compra, como si Gustavo lo hubiera escrito a mano. *(este paso, construido ahora)*
-2. 3.1 + desglose — la IA además guarda el detalle de materiales de la boleta en una tabla nueva (`compra_items` o similar), sin tocar `reportes_compras` (que sigue siendo "una fila = una compra completa" para no afectar Estado de Resultados).
+1. **3.1 solo, sin itemizar** — la foto llena descripción+monto de una compra, como si Gustavo lo hubiera escrito a mano. *(hecho y verificado con una boleta real)*
+2. **3.1 + desglose por ítem** — la IA además guarda el detalle de materiales de la boleta en una tabla nueva (`compra_items`), sin tocar `reportes_compras` (que sigue siendo "una fila = una compra completa" para no afectar Estado de Resultados). *(este paso, construido ahora)*
 3. 3.3 — catálogo de stock (`materiales` + `movimientos_stock`) + una acción nueva para que Gustavo registre "usé tanto de este material en esta obra".
 4. 3.4 — queda bloqueada hasta que exista 2.2/3.2 (el desglose por ítem de cada obra), porque sin eso no hay con qué comparar el stock.
+
+### Detalle del paso 2 (sesión 25/08/2026)
+- **Motivado por un hallazgo real:** Alexandra probó el paso 1 con una boleta real en producción — la IA leyó bien el monto, pero la descripción juntaba todos los materiales en una sola línea de texto, sin cantidades ni precios por ítem. Confirmó que hacía falta este paso ya, no como idea a futuro.
+- `sql/20260825_compra_items.sql`: tabla nueva `compra_items` (`compra_id` FK con `on delete cascade`, `descripcion`, `cantidad`, `precio_unitario`). `reportes_compras` no se tocó — sigue siendo el total real de la compra. **Falta que Alexandra lo corra.**
+- `functions/api/parse-factura.js` actualizada: el prompt ahora también le pide a la IA la lista de materiales con cantidad y precio unitario de cada uno (`items: [...]`), además de la descripción-resumen y el monto total que ya devolvía.
+- En "Agregar compra" (Reporte Diario) se agregó una sección "Materiales de esta compra" — se llena sola cuando la IA lee la foto, y Gustavo puede agregar, editar o quitar filas a mano antes de guardar. Al guardar, cada compra se inserta primero (para tener su ID real) y recién después sus materiales, vinculados a esa compra — así nunca queda un ítem vinculado a la compra equivocada.
+- Probado: la interacción de la UI (agregar/editar/quitar filas de materiales) funciona en navegador sin errores. La escritura real en `compra_items` se simuló contra Supabase con el mismo flujo exacto que usa el código — falló como se esperaba porque la migración todavía no estaba corrida (confirma que el resto de la cadena, incluida `reportes_compras`, sigue funcionando bien). **No se probó el guardado completo a través del formulario real de Reporte Diario** — hacerlo hubiera tocado los datos reales de asistencia del equipo de hoy (el guardado del día completo borra y reinserta), así que se evitó ese riesgo a propósito.
+- `tsc --noEmit` limpio, `init.sh` en verde. **Falta correr la migración y hacer una prueba real completa** (subir una boleta con varios materiales y guardar el reporte del día) para confirmar el flujo de punta a punta.
 
 ### Detalle del paso 1 (sesión 25/08/2026)
 - `sql/20260825_compras_foto_boleta.sql`: agrega `foto_boleta_url` (nullable) a `reportes_compras` — de paso, la compra queda con su respaldo fotográfico real, mismo principio que el comprobante de pago de los abonos (2.12). **Falta que Alexandra lo corra.**

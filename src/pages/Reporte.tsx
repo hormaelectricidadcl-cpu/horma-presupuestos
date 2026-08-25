@@ -32,6 +32,13 @@ interface TrabajadorState {
   tipoPago: 'adelanto' | 'pago_semanal'
 }
 
+interface CompraItemRow {
+  id?: string
+  descripcion: string
+  cantidad: string
+  precioUnitario: string
+}
+
 interface CompraRow {
   id?: string
   descripcion: string
@@ -44,6 +51,9 @@ interface CompraRow {
   pagadoPor: string
   reembolsado: boolean
   fotoBoletaUrl: string
+  // Desglose por ítem de la boleta (paso 2 del plan de IA) -- se guarda aparte en
+  // `compra_items`, esta fila de `reportes_compras` sigue siendo el total de la compra.
+  items: CompraItemRow[]
 }
 
 interface CobroRow {
@@ -145,8 +155,20 @@ export default function Reporte({ token, embedded = false }: Props) {
       }
     }
     setTrabajadores(base)
-    setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null; destino: 'stock' | 'trabajo_puntual' | null; pagado_por: string | null; reembolsado: boolean | null; foto_boleta_url: string | null }) => ({
+
+    const comprasDia = (compr || []) as { id: string; descripcion: string; monto: number; obra: string | null; destino: 'stock' | 'trabajo_puntual' | null; pagado_por: string | null; reembolsado: boolean | null; foto_boleta_url: string | null }[]
+    let itemsPorCompra: Record<string, CompraItemRow[]> = {}
+    if (comprasDia.length) {
+      const { data: itemsData } = await supabase.from('compra_items').select('*').in('compra_id', comprasDia.map(c => c.id))
+      itemsPorCompra = (itemsData || []).reduce((acc: Record<string, CompraItemRow[]>, it: { id: string; compra_id: string; descripcion: string; cantidad: number; precio_unitario: number }) => {
+        if (!acc[it.compra_id]) acc[it.compra_id] = []
+        acc[it.compra_id].push({ id: it.id, descripcion: it.descripcion, cantidad: String(it.cantidad), precioUnitario: String(it.precio_unitario) })
+        return acc
+      }, {})
+    }
+    setCompras(comprasDia.map(c => ({
       id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', destino: c.destino || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false, fotoBoletaUrl: c.foto_boleta_url || '',
+      items: itemsPorCompra[c.id] || [],
     })))
     const cobrosLegado = (cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
       id: c.id, origen: 'reportes_cobros' as const, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
@@ -196,7 +218,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
 
   function agregarCompra() {
-    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '', destino: '', pagadoPor: '', reembolsado: false, fotoBoletaUrl: '' }])
+    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '', destino: '', pagadoPor: '', reembolsado: false, fotoBoletaUrl: '', items: [] }])
   }
 
   async function subirFotoBoleta(idx: number, archivo: File) {
@@ -220,9 +242,17 @@ export default function Reporte({ token, embedded = false }: Props) {
         })
         const resultado = await res.json()
         if (!res.ok) throw new Error(resultado.error || 'error desconocido')
+        const itemsIA: CompraItemRow[] = Array.isArray(resultado.items)
+          ? resultado.items.map((it: { descripcion: string; cantidad: number; precioUnitario: number }) => ({
+            descripcion: it.descripcion,
+            cantidad: String(it.cantidad),
+            precioUnitario: String(it.precioUnitario),
+          }))
+          : []
         actualizarCompra(idx, {
           descripcion: resultado.descripcion || '',
           monto: resultado.monto != null ? String(resultado.monto) : '',
+          items: itemsIA,
         })
       } catch (err) {
         alert('La foto se guardó, pero la IA no pudo leerla (' + String(err) + '). Completa descripción y monto a mano.')
@@ -237,6 +267,18 @@ export default function Reporte({ token, embedded = false }: Props) {
   function quitarCompra(idx: number) {
     if (!window.confirm('¿Seguro que quieres quitar esta compra?')) return
     setCompras(prev => prev.filter((_, i) => i !== idx))
+  }
+  function agregarCompraItem(compraIdx: number) {
+    setCompras(prev => prev.map((c, i) => i === compraIdx ? { ...c, items: [...c.items, { descripcion: '', cantidad: '1', precioUnitario: '' }] } : c))
+  }
+  function actualizarCompraItem(compraIdx: number, itemIdx: number, patch: Partial<CompraItemRow>) {
+    setCompras(prev => prev.map((c, i) => i === compraIdx
+      ? { ...c, items: c.items.map((it, j) => j === itemIdx ? { ...it, ...patch } : it) }
+      : c
+    ))
+  }
+  function quitarCompraItem(compraIdx: number, itemIdx: number) {
+    setCompras(prev => prev.map((c, i) => i === compraIdx ? { ...c, items: c.items.filter((_, j) => j !== itemIdx) } : c))
   }
 
   function agregarCobro() {
@@ -348,15 +390,32 @@ export default function Reporte({ token, embedded = false }: Props) {
       return
     }
 
+    // Borra las compras viejas del día -- el `on delete cascade` de `compra_items` limpia solo
+    // el desglose de esas compras, no hace falta borrarlo aparte.
     await supabase.from('reportes_compras').delete().eq('fecha', fecha)
     if (comprasValidas.length) {
-      const { error: e2 } = await supabase.from('reportes_compras').insert(
-        comprasValidas.map(c => ({ fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, destino: c.obra ? null : (c.destino || null), pagado_por: c.pagadoPor || null, reembolsado: c.reembolsado, foto_boleta_url: c.fotoBoletaUrl || null }))
-      )
-      if (e2) {
-        setError('Error al guardar las compras. Intenta de nuevo.')
-        setSaving(false)
-        return
+      // Se inserta una por una (no en bloque) para poder vincular el desglose de ítems al ID
+      // real de cada compra -- un insert en bloque no garantiza el orden de vuelta.
+      for (const c of comprasValidas) {
+        const { data: compraInsertada, error: e2 } = await supabase.from('reportes_compras').insert({
+          fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, destino: c.obra ? null : (c.destino || null), pagado_por: c.pagadoPor || null, reembolsado: c.reembolsado, foto_boleta_url: c.fotoBoletaUrl || null,
+        }).select('id').single()
+        if (e2 || !compraInsertada) {
+          setError('Error al guardar las compras. Intenta de nuevo.')
+          setSaving(false)
+          return
+        }
+        const itemsValidos = c.items.filter(it => it.descripcion.trim() && Number(it.precioUnitario) > 0)
+        if (itemsValidos.length) {
+          await supabase.from('compra_items').insert(
+            itemsValidos.map(it => ({
+              compra_id: compraInsertada.id,
+              descripcion: it.descripcion.trim(),
+              cantidad: Number(it.cantidad) > 0 ? Number(it.cantidad) : 1,
+              precio_unitario: Number(it.precioUnitario),
+            }))
+          )
+        }
       }
     }
 
@@ -707,6 +766,48 @@ export default function Reporte({ token, embedded = false }: Props) {
                         </select>
                       </div>
                     </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <label style={{ margin: 0 }}>Materiales de esta compra (opcional)</label>
+                        <button type="button" className="btn btn-ghost" onClick={() => agregarCompraItem(idx)} style={{ fontSize: 12 }}>
+                          + Agregar material
+                        </button>
+                      </div>
+                      {c.items.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {c.items.map((it, itemIdx) => (
+                            <div key={itemIdx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input
+                                type="text"
+                                placeholder="Material"
+                                value={it.descripcion}
+                                onChange={e => actualizarCompraItem(idx, itemIdx, { descripcion: e.target.value })}
+                                style={{ flex: 3 }}
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="Cant."
+                                value={it.cantidad}
+                                onChange={e => actualizarCompraItem(idx, itemIdx, { cantidad: e.target.value })}
+                                style={{ flex: 1 }}
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="P. unit."
+                                value={it.precioUnitario}
+                                onChange={e => actualizarCompraItem(idx, itemIdx, { precioUnitario: e.target.value })}
+                                style={{ flex: 1 }}
+                              />
+                              <button type="button" className="btn btn-ghost" onClick={() => quitarCompraItem(idx, itemIdx)} style={{ fontSize: 13, padding: '4px 8px', flexShrink: 0 }}>✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="field">
                       <label>¿Quién pagó?</label>
                       <select value={c.pagadoPor} onChange={e => actualizarCompra(idx, { pagadoPor: e.target.value })}>
