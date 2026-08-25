@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -2228,6 +2228,82 @@ export function PanelCalendario() {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Stock de materiales ────────────────────────────── */
+export function PanelStock() {
+  const [materiales, setMateriales] = useState<Material[]>([])
+  const [movimientos, setMovimientos] = useState<MovimientoStock[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busqueda, setBusqueda] = useState('')
+
+  const cargar = useCallback(async () => {
+    const [{ data: mats }, { data: movs }] = await Promise.all([
+      supabase.from('materiales').select('*').order('nombre'),
+      supabase.from('movimientos_stock').select('*').order('created_at', { ascending: false }).limit(30),
+    ])
+    setMateriales((mats as Material[]) || [])
+    setMovimientos((movs as MovimientoStock[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const materialesFiltrados = materiales.filter(m =>
+    !busqueda.trim() || m.nombre.toLowerCase().includes(busqueda.trim().toLowerCase())
+  )
+  const materialPorId = new Map(materiales.map(m => [m.id, m]))
+
+  if (loading) return <div className="spinner" />
+
+  return (
+    <div>
+      <div className="field" style={{ maxWidth: 320, marginBottom: 18 }}>
+        <label>Buscar material</label>
+        <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Nombre del material..." />
+      </div>
+
+      {materiales.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>
+          Todavía no hay materiales en stock — entran solos cuando se marca una compra como "Stock" en el Reporte Diario.
+        </p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
+            {materialesFiltrados.map(m => (
+              <StatTile
+                key={m.id}
+                label={m.nombre}
+                valor={`${m.stock_actual}${m.unidad ? ' ' + m.unidad : ''}`}
+                tono={m.stock_actual <= 0 ? 'negativo' : 'neutral'}
+              />
+            ))}
+          </div>
+
+          <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+            Últimos movimientos
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {movimientos.map(mov => {
+              const material = materialPorId.get(mov.material_id)
+              return (
+                <div key={mov.id} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{mov.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ flex: 1 }}>
+                    <strong>{material?.nombre || 'Material eliminado'}</strong>
+                    {mov.tipo === 'entrada' ? ' — entró al stock' : mov.obra ? ` — usado en ${mov.obra}` : ' — salió del stock'}
+                  </span>
+                  <span style={{ fontWeight: 700, color: mov.tipo === 'entrada' ? 'var(--success)' : 'var(--warning)' }}>
+                    {mov.tipo === 'entrada' ? '+' : '-'}{mov.cantidad}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </>
       )}
     </div>
   )

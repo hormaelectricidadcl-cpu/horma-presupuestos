@@ -210,14 +210,24 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 |---|---|---|
 | 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa descripción/monto + desglose por ítem | **Pasos 1 y 2 de 4 construidos, 25/08/2026** — paso 1 verificado con boleta real; paso 2 (desglose) bloqueado en Alexandra corriendo `sql/20260825_compra_items.sql` |
 | 3.2 | Desglose por ítem (`obra_items`) + avance diario (`avances_diarios`) + barra de progreso semanal, junto a Pago Semanal | 2.2 |
-| 3.3 | Stock de materiales real: catálogo + movimientos (compra_obra / compra_stock / uso / sobrante_a_stock) — **2.14 ya deja la compra categorizada como `'stock'`, lista para que esto la consuma** | 3.1 en parte |
+| 3.3 | Stock de materiales real: catálogo + movimientos (compra_obra / compra_stock / uso / sobrante_a_stock) — **2.14 ya deja la compra categorizada como `'stock'`, lista para que esto la consuma** | **Código listo 25/08/2026, paso 3 de 4 (ver detalle)** — 3.1 en parte |
 | 3.4 | Alerta proactiva de material faltante (cruza `obra_items` contra stock, avisa antes de que frene el trabajo) | 3.2 + 3.3 |
 
 ### Plan acordado para Nivel 3, en 4 pasos (conversación 25/08/2026)
 1. **3.1 solo, sin itemizar** — la foto llena descripción+monto de una compra, como si Gustavo lo hubiera escrito a mano. *(hecho y verificado con una boleta real)*
-2. **3.1 + desglose por ítem** — la IA además guarda el detalle de materiales de la boleta en una tabla nueva (`compra_items`), sin tocar `reportes_compras` (que sigue siendo "una fila = una compra completa" para no afectar Estado de Resultados). *(este paso, construido ahora)*
-3. 3.3 — catálogo de stock (`materiales` + `movimientos_stock`) + una acción nueva para que Gustavo registre "usé tanto de este material en esta obra".
+2. **3.1 + desglose por ítem** — la IA además guarda el detalle de materiales de la boleta en una tabla nueva (`compra_items`), sin tocar `reportes_compras` (que sigue siendo "una fila = una compra completa" para no afectar Estado de Resultados). *(construido, falta la prueba real completa)*
+3. **3.3 — catálogo de stock + acción de uso** *(este paso, construido ahora)*
 4. 3.4 — queda bloqueada hasta que exista 2.2/3.2 (el desglose por ítem de cada obra), porque sin eso no hay con qué comparar el stock.
+
+### Detalle del paso 3 (sesión 25/08/2026)
+- `sql/20260825_stock_materiales.sql`: dos tablas nuevas, `materiales` (catálogo: nombre, unidad, `stock_actual`) y `movimientos_stock` (`material_id`, `tipo` 'entrada'|'salida', `cantidad`, `fecha`, `obra` opcional para salidas, `compra_id` opcional para entradas). **Falta que Alexandra lo corra.**
+- **Decisión de diseño importante:** `stock_actual` no se actualiza a mano desde el código de la app — dos triggers de Postgres lo recalculan solos cada vez que se inserta o se borra un movimiento (mismo principio que la columna generada `obras.activa` de 2.4: que la base de datos garantice que el número nunca se desincroniza, en vez de confiar en que el código siempre lo actualice bien).
+- **Ojo con el reenvío del mismo día:** el Reporte Diario borra y vuelve a crear las compras de una fecha cada vez que se reenvía (para poder editarlo). Si el movimiento de stock de una compra no se borrara junto con ella, reenviar el mismo día dos veces duplicaría la entrada al stock. Se resolvió con `compra_id` en `movimientos_stock` usando `on delete cascade` — al borrarse la compra vieja, su movimiento se borra con ella (el trigger revierte el stock), y el nuevo insert genera un movimiento limpio. Reenviar el mismo día es seguro.
+- **Entrada automática:** al guardar una compra marcada "Stock" con materiales cargados, cada material se crea o reusa en el catálogo (upsert por nombre, igual que `clientes`) y genera un movimiento de entrada.
+- **Salida manual:** sección nueva "Uso de stock hoy" en Reporte Diario (solo aparece si ya hay algún material en el catálogo) — Gustavo elige material, cantidad y obra; guarda como movimiento de salida, mismo patrón de borrar-y-recrear por fecha que el resto del reporte del día.
+- Componente nuevo compartido `PanelStock`: catálogo con la cantidad actual de cada material (en rojo si llegó a cero), más los últimos 30 movimientos con fecha, para qué obra y si fue entrada o salida. Pestaña "Stock" nueva en Gustavo y Admin.
+- Probado en navegador antes de correr la migración: la pestaña "Stock" y la sección "Uso de stock hoy" se degradan bien (sin errores que rompan la pantalla, la sección de uso queda oculta hasta que haya materiales). **No se probó el flujo completo de entrada/salida a través del formulario real** — igual que con el paso 2, hubiera significado reenviar el reporte del día y tocar la asistencia real de hoy.
+- `tsc --noEmit` limpio, `init.sh` en verde. **Falta correr la migración y hacer una prueba real completa**: guardar una compra de Stock con materiales, confirmar que entran al catálogo, y registrar un uso para ver que se descuenta bien.
 
 ### Detalle del paso 2 (sesión 25/08/2026)
 - **Motivado por un hallazgo real:** Alexandra probó el paso 1 con una boleta real en producción — la IA leyó bien el monto, pero la descripción juntaba todos los materiales en una sola línea de texto, sin cantidades ni precios por ítem. Confirmó que hacía falta este paso ya, no como idea a futuro.

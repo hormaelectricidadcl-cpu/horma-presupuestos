@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
@@ -1220,7 +1220,7 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'calendario' | 'pagos' | 'resultados'>('activos')
+  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados'>('activos')
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [verArchivados, setVerArchivados] = useState(false)
@@ -1471,6 +1471,7 @@ export default function Admin() {
           ['presupuestos', 'Presupuestos', '#059669'],
           ['obras', 'Obras', '#c1440e'],
           ['calendario', 'Calendario', '#7c3aed'],
+          ['stock', 'Stock', '#0891b2'],
           ['pagos', 'Pago semanal', '#e67e22'],
           ['resultados', 'Estado de resultados', '#14213D'],
         ] as const).map(([k, label, color]) => (
@@ -1539,6 +1540,8 @@ export default function Admin() {
         <PanelObras />
       ) : tab === 'calendario' ? (
         <PanelCalendario />
+      ) : tab === 'stock' ? (
+        <PanelStock />
       ) : tab === 'pagos' ? (
         <PanelPagoSemanal />
       ) : tab === 'resultados' ? (

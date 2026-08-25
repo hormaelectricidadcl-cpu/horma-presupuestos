@@ -84,6 +84,13 @@ interface TrabajoPuntualRow {
   monto: string
 }
 
+interface UsoStockRow {
+  id?: string
+  materialId: string
+  cantidad: string
+  obra: string
+}
+
 const DEFAULT_TRABAJADOR: TrabajadorState = {
   presente: true,
   obra: '',
@@ -126,11 +133,13 @@ export default function Reporte({ token, embedded = false }: Props) {
   const [cobros, setCobros] = useState<CobroRow[]>([])
   const [subcontratos, setSubcontratos] = useState<SubcontratoRow[]>([])
   const [trabajosPuntuales, setTrabajosPuntuales] = useState<TrabajoPuntualRow[]>([])
+  const [materiales, setMateriales] = useState<{ id: string; nombre: string; stock_actual: number }[]>([])
+  const [usosStock, setUsosStock] = useState<UsoStockRow[]>([])
 
   const cargarDia = useCallback(async (f: string) => {
     setLoading(true)
     setError(null)
-    const [{ data: dia }, { data: compr }, { data: cobr }, { data: subc }, { data: punt }, { data: aboAquiDia }] = await Promise.all([
+    const [{ data: dia }, { data: compr }, { data: cobr }, { data: subc }, { data: punt }, { data: aboAquiDia }, { data: salidasDia }] = await Promise.all([
       supabase.from('reportes_diarios').select('*').eq('fecha', f),
       supabase.from('reportes_compras').select('*').eq('fecha', f).order('created_at'),
       supabase.from('reportes_cobros').select('*').eq('fecha', f).order('created_at'),
@@ -139,6 +148,7 @@ export default function Reporte({ token, embedded = false }: Props) {
       // Cobros de ese dia que ya viven en una cuenta por cobrar (obra con cuenta
       // unica) en vez de reportes_cobros — para que se sigan viendo/editando acá.
       supabase.from('abonos_cuenta').select('id, fecha, monto, cuentas_por_cobrar(obra, pagador)').eq('fecha', f),
+      supabase.from('movimientos_stock').select('*').eq('fecha', f).eq('tipo', 'salida').order('created_at'),
     ])
 
     const base = defaultTrabajadores()
@@ -170,6 +180,9 @@ export default function Reporte({ token, embedded = false }: Props) {
       id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', destino: c.destino || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false, fotoBoletaUrl: c.foto_boleta_url || '',
       items: itemsPorCompra[c.id] || [],
     })))
+    setUsosStock((salidasDia || []).map((s: { id: string; material_id: string; cantidad: number; obra: string | null }) => ({
+      id: s.id, materialId: s.material_id, cantidad: String(s.cantidad), obra: s.obra || '',
+    })))
     const cobrosLegado = (cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
       id: c.id, origen: 'reportes_cobros' as const, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
     }))
@@ -199,6 +212,9 @@ export default function Reporte({ token, embedded = false }: Props) {
     if (!tokenValido) return
     supabase.from('obras').select('nombre').eq('activa', true).order('nombre').then(({ data }) => {
       if (data && data.length) setObras(data.map((o: { nombre: string }) => o.nombre))
+    })
+    supabase.from('materiales').select('id, nombre, stock_actual').order('nombre').then(({ data }) => {
+      setMateriales(data || [])
     })
   }, [tokenValido])
 
@@ -279,6 +295,16 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
   function quitarCompraItem(compraIdx: number, itemIdx: number) {
     setCompras(prev => prev.map((c, i) => i === compraIdx ? { ...c, items: c.items.filter((_, j) => j !== itemIdx) } : c))
+  }
+
+  function agregarUsoStock() {
+    setUsosStock(prev => [...prev, { materialId: '', cantidad: '', obra: '' }])
+  }
+  function actualizarUsoStock(idx: number, patch: Partial<UsoStockRow>) {
+    setUsosStock(prev => prev.map((u, i) => i === idx ? { ...u, ...patch } : u))
+  }
+  function quitarUsoStock(idx: number) {
+    setUsosStock(prev => prev.filter((_, i) => i !== idx))
   }
 
   function agregarCobro() {
@@ -379,6 +405,16 @@ export default function Reporte({ token, embedded = false }: Props) {
       return
     }
 
+    const usosStockValidos = usosStock.filter(u => u.materialId || u.cantidad.trim())
+    if (usosStockValidos.some(u => !u.materialId || !u.cantidad.trim() || !u.obra)) {
+      alert('Cada uso de stock necesita material, cantidad y obra.')
+      return
+    }
+    if (usosStockValidos.some(u => montoInvalido(u.cantidad))) {
+      alert('La cantidad de algún uso de stock no es válida.')
+      return
+    }
+
     setSaving(true)
 
     const { error: e1 } = await supabase
@@ -415,7 +451,50 @@ export default function Reporte({ token, embedded = false }: Props) {
               precio_unitario: Number(it.precioUnitario),
             }))
           )
+
+          // Si la compra es para Stock, cada material entra al catálogo automáticamente --
+          // el trigger de la base de datos ajusta `stock_actual`, acá solo se crea el
+          // movimiento. Se crea/reusa el material por nombre (upsert), nunca se duplica.
+          if (c.destino === 'stock') {
+            for (const it of itemsValidos) {
+              const { data: material } = await supabase
+                .from('materiales')
+                .upsert({ nombre: it.descripcion.trim() }, { onConflict: 'nombre', ignoreDuplicates: false })
+                .select('id')
+                .single()
+              if (material) {
+                await supabase.from('movimientos_stock').insert({
+                  material_id: material.id,
+                  tipo: 'entrada',
+                  cantidad: Number(it.cantidad) > 0 ? Number(it.cantidad) : 1,
+                  fecha,
+                  compra_id: compraInsertada.id,
+                })
+              }
+            }
+          }
         }
+      }
+    }
+
+    // Uso de stock del día -- borra y vuelve a crear las salidas de esa fecha, mismo patrón
+    // que el resto del reporte diario. El trigger de la base de datos revierte/aplica el
+    // stock solo al borrar/crear cada movimiento.
+    await supabase.from('movimientos_stock').delete().eq('fecha', fecha).eq('tipo', 'salida')
+    if (usosStockValidos.length) {
+      const { error: eStock } = await supabase.from('movimientos_stock').insert(
+        usosStockValidos.map(u => ({
+          material_id: u.materialId,
+          tipo: 'salida',
+          cantidad: Number(u.cantidad),
+          fecha,
+          obra: u.obra,
+        }))
+      )
+      if (eStock) {
+        setError('Error al guardar el uso de stock. Intenta de nuevo.')
+        setSaving(false)
+        return
       }
     }
 
@@ -825,6 +904,57 @@ export default function Reporte({ token, embedded = false }: Props) {
             <button type="button" className="btn btn-secondary" onClick={agregarCompra} style={{ width: '100%', marginBottom: 24 }}>
               + Agregar compra
             </button>
+
+            {/* Uso de stock del día */}
+            {materiales.length > 0 && (
+              <>
+                <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Uso de stock hoy</h2>
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: -6, marginBottom: 10 }}>
+                  Si usaste material que ya estaba guardado (de una compra anterior), regístralo acá para que se descuente del stock.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                  {usosStock.map((u, idx) => (
+                    <div key={idx} className="card" style={{ padding: 14 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div className="field">
+                          <label>Material</label>
+                          <select value={u.materialId} onChange={e => actualizarUsoStock(idx, { materialId: e.target.value })}>
+                            <option value="">Selecciona...</option>
+                            {materiales.map(m => (
+                              <option key={m.id} value={m.id}>{m.nombre} (quedan {m.stock_actual})</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                          <div className="field" style={{ flex: 1 }}>
+                            <label>Cantidad usada</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={u.cantidad}
+                              onChange={e => actualizarUsoStock(idx, { cantidad: e.target.value })}
+                            />
+                          </div>
+                          <div className="field" style={{ flex: 1 }}>
+                            <label>Obra</label>
+                            <select value={u.obra} onChange={e => actualizarUsoStock(idx, { obra: e.target.value })}>
+                              <option value="">Selecciona...</option>
+                              {obras.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <button type="button" className="btn btn-ghost" onClick={() => quitarUsoStock(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
+                          ✕ Quitar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" className="btn btn-secondary" onClick={agregarUsoStock} style={{ width: '100%', marginBottom: 24 }}>
+                  + Agregar uso de stock
+                </button>
+              </>
+            )}
 
             {/* Cobros del día */}
             <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Cobros del día</h2>

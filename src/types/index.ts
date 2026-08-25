@@ -83,6 +83,26 @@ export interface CompraItem {
   precio_unitario: number
 }
 
+export interface Material {
+  id: string
+  created_at: string
+  nombre: string
+  unidad: string | null
+  stock_actual: number
+}
+
+export interface MovimientoStock {
+  id: string
+  created_at: string
+  material_id: string
+  tipo: 'entrada' | 'salida'
+  cantidad: number
+  fecha: string
+  obra: string | null
+  compra_id: string | null
+  nota: string | null
+}
+
 export interface ReporteCobroDia {
   id: string
   fecha: string
