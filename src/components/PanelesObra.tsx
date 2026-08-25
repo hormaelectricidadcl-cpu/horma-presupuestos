@@ -1578,9 +1578,9 @@ function GaleriaObra({ obraId }: { obraId: string }) {
                 {m.tipo === 'foto' ? (
                   <img src={m.url} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
                 ) : m.tipo === 'video' ? (
-                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 28 }}>🎬</div>
+                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Video</div>
                 ) : (
-                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 28 }}>📄</div>
+                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Archivo</div>
                 )}
               </a>
               <button
@@ -1884,9 +1884,9 @@ export function PanelPresupuestos() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, color: 'var(--muted)', marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
-                  {detalle.cliente_telefono && <span>📞 {detalle.cliente_telefono}</span>}
-                  {detalle.cliente_email && <span>✉️ {detalle.cliente_email}</span>}
-                  {detalle.cliente_direccion && <span>📍 {detalle.cliente_direccion}</span>}
+                  {detalle.cliente_telefono && <span>Tel: {detalle.cliente_telefono}</span>}
+                  {detalle.cliente_email && <span>Email: {detalle.cliente_email}</span>}
+                  {detalle.cliente_direccion && <span>Dirección: {detalle.cliente_direccion}</span>}
                 </div>
 
                 {detalle.tipo === 'simple' ? (

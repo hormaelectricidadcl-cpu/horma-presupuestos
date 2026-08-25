@@ -643,8 +643,8 @@ export default function Reporte({ token, embedded = false }: Props) {
                         >
                           <option value="">Selecciona...</option>
                           {obras.map(o => <option key={o} value={o}>{o}</option>)}
-                          <option value="__stock__">📦 Stock (sin obra todavía)</option>
-                          <option value="__trabajo_puntual__">🔧 Trabajo puntual (sin obra)</option>
+                          <option value="__stock__">Stock (sin obra todavía)</option>
+                          <option value="__trabajo_puntual__">Trabajo puntual (sin obra)</option>
                         </select>
                       </div>
                     </div>
