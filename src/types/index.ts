@@ -150,6 +150,16 @@ export interface PresupuestoDetalle extends PresupuestoGuardado {
   etapas: PresupuestoEtapa[] | null
 }
 
+export interface ObraMedia {
+  id: string
+  created_at: string
+  obra_id: string
+  url: string
+  tipo: 'foto' | 'video' | 'documento'
+  descripcion: string | null
+  subido_por: string | null
+}
+
 export type EstadoObra = 'en_curso' | 'terminada_terreno' | 'facturada' | 'en_garantia' | 'cerrada'
 
 export interface Obra {

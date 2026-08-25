@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -655,6 +655,7 @@ export function PanelObras() {
       {historialObra && (
         <HistorialObraModal
           obra={historialObra}
+          obraId={obrasMaestro.find(o => o.nombre === historialObra)?.id}
           diarios={diarios}
           compras={compras}
           cobros={cobros}
@@ -1513,8 +1514,89 @@ function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEli
   )
 }
 
+/* ─── Galería de fotos/videos por obra ──────────────── */
+function GaleriaObra({ obraId }: { obraId: string }) {
+  const [media, setMedia] = useState<ObraMedia[]>([])
+  const [loading, setLoading] = useState(true)
+  const [subiendo, setSubiendo] = useState(false)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('obra_media').select('*').eq('obra_id', obraId).order('created_at', { ascending: false })
+    setMedia((data as ObraMedia[]) || [])
+    setLoading(false)
+  }, [obraId])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function subirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0]
+    e.target.value = ''
+    if (!archivo) return
+    setSubiendo(true)
+    const ext = archivo.name.split('.').pop() || 'bin'
+    const filename = `obra-${obraId}-${Date.now()}.${ext}`
+    const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+    if (error) {
+      alert('Error al subir el archivo: ' + error.message)
+      setSubiendo(false)
+      return
+    }
+    const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
+    const tipo: ObraMedia['tipo'] = archivo.type.startsWith('image/') ? 'foto' : archivo.type.startsWith('video/') ? 'video' : 'documento'
+    await supabase.from('obra_media').insert({ obra_id: obraId, url: urlData.publicUrl, tipo })
+    setSubiendo(false)
+    cargar()
+  }
+
+  async function eliminar(id: string) {
+    if (!window.confirm('¿Seguro que querés borrar este archivo?')) return
+    await supabase.from('obra_media').delete().eq('id', id)
+    setMedia(prev => prev.filter(m => m.id !== id))
+  }
+
+  return (
+    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '35vh', overflowY: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Fotos y videos
+        </p>
+        <label className="btn btn-ghost" style={{ fontSize: 12, cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
+          {subiendo ? 'Subiendo...' : '+ Subir'}
+          <input type="file" accept="image/*,video/*,.pdf" onChange={subirArchivo} disabled={subiendo} style={{ display: 'none' }} />
+        </label>
+      </div>
+      {loading ? (
+        <div className="spinner" />
+      ) : media.length === 0 ? (
+        <p style={{ fontSize: 12, color: 'var(--muted)' }}>Sin fotos ni videos todavía.</p>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8 }}>
+          {media.map(m => (
+            <div key={m.id} style={{ position: 'relative' }}>
+              <a href={m.url} target="_blank" rel="noreferrer">
+                {m.tipo === 'foto' ? (
+                  <img src={m.url} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                ) : m.tipo === 'video' ? (
+                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 28 }}>🎬</div>
+                ) : (
+                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 28 }}>📄</div>
+                )}
+              </a>
+              <button
+                onClick={() => eliminar(m.id)}
+                style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, fontSize: 12, cursor: 'pointer', lineHeight: 1 }}
+              >✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function HistorialObraModal({
   obra,
+  obraId,
   diarios,
   compras,
   cobros,
@@ -1530,6 +1612,7 @@ export function HistorialObraModal({
   onCrearCuentaObra,
 }: {
   obra: string
+  obraId?: string
   diarios: ReporteTrabajadorDia[]
   compras: ReporteCompraDia[]
   cobros: ReporteCobroDia[]
@@ -1578,6 +1661,8 @@ export function HistorialObraModal({
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
         </div>
+
+        {obraId && <GaleriaObra obraId={obraId} />}
 
         {onAgregarAbono && onEliminarAbono && onEliminarCuenta && (
           <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '40vh', overflowY: 'auto' }}>
