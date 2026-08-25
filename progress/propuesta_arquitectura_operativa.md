@@ -208,9 +208,9 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 
 | # | Qué | Depende de |
 |---|---|---|
-| 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa descripción/monto + desglose por ítem | **Pasos 1 y 2 de 4 construidos, 25/08/2026** — paso 1 verificado con boleta real; paso 2 (desglose) bloqueado en Alexandra corriendo `sql/20260825_compra_items.sql` |
+| 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa descripción/monto + desglose por ítem | **✅ Pasos 1 y 2 de 4 verificados, 25/08/2026** — paso 1 con boleta real en producción, paso 2 con una simulación completa contra Supabase real |
 | 3.2 | Desglose por ítem (`obra_items`) + avance diario (`avances_diarios`) + barra de progreso semanal, junto a Pago Semanal | 2.2 |
-| 3.3 | Stock de materiales real: catálogo + movimientos (compra_obra / compra_stock / uso / sobrante_a_stock) — **2.14 ya deja la compra categorizada como `'stock'`, lista para que esto la consuma** | **Código listo 25/08/2026, paso 3 de 4 (ver detalle)** — 3.1 en parte |
+| 3.3 | Stock de materiales real: catálogo + movimientos (compra_obra / compra_stock / uso / sobrante_a_stock) — **2.14 ya deja la compra categorizada como `'stock'`, lista para que esto la consuma** | **✅ Paso 3 de 4 verificado, 25/08/2026** — 3.1 en parte |
 | 3.4 | Alerta proactiva de material faltante (cruza `obra_items` contra stock, avisa antes de que frene el trabajo) | 3.2 + 3.3 |
 
 ### Plan acordado para Nivel 3, en 4 pasos (conversación 25/08/2026)
@@ -227,7 +227,8 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 - **Salida manual:** sección nueva "Uso de stock hoy" en Reporte Diario (solo aparece si ya hay algún material en el catálogo) — Gustavo elige material, cantidad y obra; guarda como movimiento de salida, mismo patrón de borrar-y-recrear por fecha que el resto del reporte del día.
 - Componente nuevo compartido `PanelStock`: catálogo con la cantidad actual de cada material (en rojo si llegó a cero), más los últimos 30 movimientos con fecha, para qué obra y si fue entrada o salida. Pestaña "Stock" nueva en Gustavo y Admin.
 - Probado en navegador antes de correr la migración: la pestaña "Stock" y la sección "Uso de stock hoy" se degradan bien (sin errores que rompan la pantalla, la sección de uso queda oculta hasta que haya materiales). **No se probó el flujo completo de entrada/salida a través del formulario real** — igual que con el paso 2, hubiera significado reenviar el reporte del día y tocar la asistencia real de hoy.
-- `tsc --noEmit` limpio, `init.sh` en verde. **Falta correr la migración y hacer una prueba real completa**: guardar una compra de Stock con materiales, confirmar que entran al catálogo, y registrar un uso para ver que se descuenta bien.
+- `tsc --noEmit` limpio, `init.sh` en verde.
+- **Alexandra corrió las tres migraciones pendientes (`compra_items`, `stock_materiales`). Verificado con una simulación completa contra Supabase real 25/08/2026** (datos de prueba, borrados después): compra marcada Stock con un material → entrada de 10 al catálogo (confirmado); salida de 4 usados en una obra → stock bajó a 6 (confirmado); **el caso más delicado — borrar la compra y volver a crearla (simula reenviar el mismo día) — el stock volvió a 6, no se duplicó a 16.** Los dos triggers de Postgres funcionan exactamente como se diseñaron. **Pasos 2 y 3 cerrados del todo.**
 
 ### Detalle del paso 2 (sesión 25/08/2026)
 - **Motivado por un hallazgo real:** Alexandra probó el paso 1 con una boleta real en producción — la IA leyó bien el monto, pero la descripción juntaba todos los materiales en una sola línea de texto, sin cantidades ni precios por ítem. Confirmó que hacía falta este paso ya, no como idea a futuro.
