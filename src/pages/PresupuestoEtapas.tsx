@@ -257,7 +257,7 @@ export default function PresupuestoEtapas() {
   }
 
   async function generarPDF() {
-    if (!client.name.trim()) { alert('Ingresá el nombre del cliente antes de generar el PDF.'); return }
+    if (!client.name.trim()) { alert('Ingresa el nombre del cliente antes de generar el PDF.'); return }
     if (ggBase === 0) { alert('Procesá el texto con IA antes de generar el PDF.'); return }
     await generatePDFEtapas(client, etapas, { pct: ggPct, amount: ggAmount })
 

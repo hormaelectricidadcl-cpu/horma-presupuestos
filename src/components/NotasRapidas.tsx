@@ -49,7 +49,7 @@ export function NotasRapidas({ autor }: { autor: 'alexandra' | 'gustavo' }) {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && agregar()}
-          placeholder="Escribí una nota y presioná Enter..."
+          placeholder="Escribe una nota y presiona Enter..."
           style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14, background: 'var(--white)' }}
         />
         <button className="btn btn-primary" onClick={agregar} style={{ padding: '9px 18px', fontSize: 15, fontWeight: 700 }}>+</button>

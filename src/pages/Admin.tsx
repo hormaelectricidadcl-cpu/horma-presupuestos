@@ -636,7 +636,7 @@ function CrearForm({
             <input type="file" accept="image/*,.pdf" onChange={subirArchivo} disabled={subiendo} style={{ display: 'none' }} />
           </label>
           <details style={{ marginTop: 6 }}>
-            <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>¿Ya tenés un link (Drive, etc.)? Pegalo acá</summary>
+            <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>¿Ya tienes un link (Drive, etc.)? Pégalo aquí</summary>
             <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
               <input value={linkManual} onChange={e => setLinkManual(e.target.value)} placeholder="https://..." style={{ flex: 1 }} />
               <button
@@ -779,7 +779,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
           <input type="file" accept="image/*,.pdf" onChange={subirArchivo} disabled={subiendo} style={{ display: 'none' }} />
         </label>
         <details style={{ marginTop: 6 }}>
-          <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>¿Ya tenés un link (Drive, etc.)? Pegalo acá</summary>
+          <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>¿Ya tienes un link (Drive, etc.)? Pégalo aquí</summary>
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
             <input value={linkManual} onChange={e => setLinkManual(e.target.value)} placeholder="https://..." style={{ flex: 1 }} />
             <button

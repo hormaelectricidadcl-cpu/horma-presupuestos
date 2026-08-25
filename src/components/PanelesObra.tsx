@@ -211,12 +211,12 @@ export function PanelObras() {
       // aceptado, así el cliente y el monto no se vuelven a escribir a mano y quedan
       // vinculados de verdad -- ver decisiones.md 2026-08-25.
       if (!nuevaObra.presupuesto_id) {
-        alert('Elegí el presupuesto aceptado del que nace esta obra.')
+        alert('Elige el presupuesto aceptado del que nace esta obra.')
         return
       }
       const presupuesto = presupuestosAceptados.find(p => p.id === nuevaObra.presupuesto_id)
       if (!presupuesto) {
-        alert('Ese presupuesto ya no está disponible (puede que otra obra ya lo haya usado). Recargá la lista.')
+        alert('Ese presupuesto ya no está disponible (puede que otra obra ya lo haya usado). Recarga la lista.')
         return
       }
       const { error } = await supabase.from('obras').insert({
@@ -242,7 +242,7 @@ export function PanelObras() {
           return
         }
       }
-      if (!window.confirm('¿Seguro que querés crear esta obra SIN vincularla a un presupuesto? Es la excepción -- lo normal es elegir uno de la lista.')) return
+      if (!window.confirm('¿Confirmas que deseas crear esta obra sin vincularla a un presupuesto? Es la excepción -- lo normal es elegir uno de la lista.')) return
       const { error } = await supabase.from('obras').insert({
         nombre: nuevaObra.nombre.trim(),
         cliente: nuevaObra.cliente.trim() || null,
@@ -391,7 +391,7 @@ export function PanelObras() {
               <label>Presupuesto aceptado</label>
               {presupuestosDisponibles.length === 0 ? (
                 <p style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  No hay presupuestos marcados "Aceptado" todavía sin usar — marcá uno en "Mis presupuestos", o usá la excepción de abajo.
+                  No hay presupuestos marcados "Aceptado" todavía sin usar — marca uno en "Mis presupuestos", o usa la excepción de abajo.
                 </p>
               ) : (
                 <select
@@ -1059,7 +1059,7 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Adelantos', texto: 'Plata adelantada a un trabajador a cuenta de lo que se le debe. No es su pago completo de la semana.' },
   { titulo: 'Pagos semana', texto: 'La liquidación semanal completa que ya se le pagó a un trabajador.' },
   { titulo: 'Cobrado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual.' },
-  { titulo: 'Falta por cobrar', texto: 'Cuánto le queda debiendo el cliente por esta obra, en total — suma todo lo pendiente de sus cuentas por cobrar (podés ver el detalle de cada una en "Detalle").' },
+  { titulo: 'Falta por cobrar', texto: 'Cuánto le queda debiendo el cliente por esta obra, en total — suma todo lo pendiente de sus cuentas por cobrar (puedes ver el detalle de cada una en "Detalle").' },
   { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). Es la plata en caja de la obra hoy, no cuánto falta que pague el cliente — para eso mira "Falta por cobrar".' },
   { titulo: 'Facturado', texto: 'El total que ya se le facturó formalmente al cliente por esta obra, sume o no coincida con lo cobrado (a veces se cobra antes de facturar, o se factura antes de cobrar).' },
   { titulo: 'Por facturar', texto: 'Presupuesto total menos lo facturado — cuánto le queda al cliente por facturarle en total. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto total cargado.' },
@@ -1549,7 +1549,7 @@ function GaleriaObra({ obraId }: { obraId: string }) {
   }
 
   async function eliminar(id: string) {
-    if (!window.confirm('¿Seguro que querés borrar este archivo?')) return
+    if (!window.confirm('¿Seguro que quieres borrar este archivo?')) return
     await supabase.from('obra_media').delete().eq('id', id)
     setMedia(prev => prev.filter(m => m.id !== id))
   }
@@ -1794,7 +1794,7 @@ export function PanelPresupuestos() {
   }
 
   async function eliminarPresupuesto(id: string, clienteNombre: string | null) {
-    if (!window.confirm(`¿Seguro que querés borrar el presupuesto de "${clienteNombre || 'sin nombre'}"? No se puede deshacer.`)) return
+    if (!window.confirm(`¿Seguro que quieres borrar el presupuesto de "${clienteNombre || 'sin nombre'}"? No se puede deshacer.`)) return
     const { error } = await supabase.from('presupuestos').delete().eq('id', id)
     if (error) {
       alert('No se pudo borrar. Intenta de nuevo.')
