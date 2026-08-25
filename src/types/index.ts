@@ -164,6 +164,14 @@ export interface EventoCalendario {
   notas: string | null
 }
 
+export interface PendienteMensaje {
+  id: string
+  created_at: string
+  pendiente_id: string
+  autor: 'gustavo' | 'irazu'
+  texto: string
+}
+
 export interface ObraMedia {
   id: string
   created_at: string

@@ -4,6 +4,7 @@ import { generatePDF } from '../utils/pdfGenerator'
 import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
+import { HiloPendiente } from '../components/HiloPendiente'
 import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, Cliente } from '../types'
 
 
@@ -1029,6 +1030,13 @@ function PendienteCard({
 
               <div style={{ marginTop: 12 }}>
                 <GaleriaArchivos urls={p.drive_links} />
+              </div>
+
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                  Hilo de conversación
+                </p>
+                <HiloPendiente pendienteId={p.id} autor="irazu" respuestaLegado={p.respuesta} />
               </div>
 
               {/* Respondido section */}

@@ -4,6 +4,7 @@ import Reporte from './Reporte'
 import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
+import { HiloPendiente } from '../components/HiloPendiente'
 import type { Pendiente, TipoPendiente } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
@@ -180,7 +181,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
 
 /* ─── Pendiente card ────────────────────────────────── */
 function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido: () => void }) {
-  const [cardTab, setCardTab] = useState<'responder' | 'historial' | 'archivos'>('responder')
+  const [cardTab, setCardTab] = useState<'responder' | 'hilo' | 'historial' | 'archivos'>('responder')
   const [respuesta, setRespuesta] = useState('')
   const [nota, setNota] = useState('')
   const [saving, setSaving] = useState(false)
@@ -298,6 +299,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
 
   const CARD_TABS = [
     { key: 'responder' as const, label: '✓ Responder' },
+    { key: 'hilo' as const, label: 'Hilo' },
     { key: 'historial' as const, label: 'Historial' },
     { key: 'archivos' as const, label: `Archivos${p.drive_links?.length ? ` (${p.drive_links.length})` : ''}` },
   ]
@@ -449,6 +451,11 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
               {saving ? 'Enviando...' : '✓ Enviar respuesta'}
             </button>
           </div>
+        )}
+
+        {/* Hilo tab */}
+        {cardTab === 'hilo' && (
+          <HiloPendiente pendienteId={p.id} autor="gustavo" respuestaLegado={p.respuesta} />
         )}
 
         {/* Historial tab */}
