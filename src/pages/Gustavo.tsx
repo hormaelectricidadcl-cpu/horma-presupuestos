@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import type { Pendiente, TipoPendiente } from '../types'
@@ -644,7 +644,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'pagos' | 'resultados'>('pendientes')
+  const [tab, setTab] = useState<'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'calendario' | 'pagos' | 'resultados'>('pendientes')
 
   const tokenValido = token === GUSTAVO_TOKEN
 
@@ -707,7 +707,7 @@ export default function Gustavo({ token }: Props) {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {([['pendientes', 'Mis tareas'], ['notas', 'Mis notas'], ['presupuestos', 'Mis presupuestos'], ['reporte', 'Reporte diario'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['pagos', 'Pago semanal'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
+          {([['pendientes', 'Mis tareas'], ['notas', 'Mis notas'], ['presupuestos', 'Mis presupuestos'], ['reporte', 'Reporte diario'], ['clientes', 'Clientes'], ['obras', 'Obras'], ['calendario', 'Calendario'], ['pagos', 'Pago semanal'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -732,6 +732,8 @@ export default function Gustavo({ token }: Props) {
           <PanelClientes />
         ) : tab === 'obras' ? (
           <PanelObras />
+        ) : tab === 'calendario' ? (
+          <PanelCalendario />
         ) : tab === 'pagos' ? (
           <PanelPagoSemanal />
         ) : tab === 'resultados' ? (

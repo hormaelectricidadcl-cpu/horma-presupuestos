@@ -150,6 +150,19 @@ export interface PresupuestoDetalle extends PresupuestoGuardado {
   etapas: PresupuestoEtapa[] | null
 }
 
+export interface EventoCalendario {
+  id: string
+  created_at: string
+  fecha: string
+  hora_inicio: string
+  hora_fin: string
+  persona: string
+  titulo: string
+  cliente_nombre: string | null
+  direccion: string | null
+  notas: string | null
+}
+
 export interface ObraMedia {
   id: string
   created_at: string

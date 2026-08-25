@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia } from '../types'
+import { TRABAJADORES } from '../pages/Reporte'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -1955,6 +1956,186 @@ export function PanelPresupuestos() {
               </>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Calendario compartido de disponibilidad ────────── */
+const PERSONAS_CALENDARIO = ['Gustavo', 'Alexandra', ...TRABAJADORES]
+
+function emptyEvento() {
+  const hoy = new Date().toISOString().slice(0, 10)
+  return { fecha: hoy, hora_inicio: '09:00', hora_fin: '10:00', persona: 'Gustavo', titulo: '', cliente_nombre: '', direccion: '', notas: '' }
+}
+
+function fmtFechaLarga(fecha: string) {
+  const d = new Date(fecha + 'T00:00:00')
+  return d.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Santiago' })
+}
+
+export function PanelCalendario() {
+  const [eventos, setEventos] = useState<EventoCalendario[]>([])
+  const [loading, setLoading] = useState(true)
+  const [mostrarForm, setMostrarForm] = useState(false)
+  const [form, setForm] = useState(emptyEvento())
+  const [guardando, setGuardando] = useState(false)
+
+  const cargar = useCallback(async () => {
+    const hoy = new Date().toISOString().slice(0, 10)
+    const { data } = await supabase
+      .from('eventos_calendario')
+      .select('*')
+      .gte('fecha', hoy)
+      .order('fecha', { ascending: true })
+      .order('hora_inicio', { ascending: true })
+    setEventos((data as EventoCalendario[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function crear() {
+    if (!form.titulo.trim()) { alert('Completa un título (ej. "Visita técnica - Juan Pérez").'); return }
+    if (form.hora_fin <= form.hora_inicio) { alert('La hora de fin tiene que ser después de la hora de inicio.'); return }
+
+    setGuardando(true)
+
+    const { data: existentes } = await supabase
+      .from('eventos_calendario')
+      .select('hora_inicio, hora_fin, titulo')
+      .eq('fecha', form.fecha)
+      .eq('persona', form.persona)
+
+    const conflictos = (existentes || []).filter(e => form.hora_inicio < e.hora_fin && form.hora_fin > e.hora_inicio)
+    if (conflictos.length > 0) {
+      const detalle = conflictos.map(c => `${c.hora_inicio.slice(0, 5)}–${c.hora_fin.slice(0, 5)} (${c.titulo})`).join(', ')
+      if (!window.confirm(`${form.persona} ya tiene algo agendado ese día a esa hora: ${detalle}.\n\n¿Confirmas que quieres agendar igual?`)) {
+        setGuardando(false)
+        return
+      }
+    }
+
+    const { error } = await supabase.from('eventos_calendario').insert({
+      fecha: form.fecha,
+      hora_inicio: form.hora_inicio,
+      hora_fin: form.hora_fin,
+      persona: form.persona,
+      titulo: form.titulo.trim(),
+      cliente_nombre: form.cliente_nombre.trim() || null,
+      direccion: form.direccion.trim() || null,
+      notas: form.notas.trim() || null,
+    })
+    setGuardando(false)
+    if (error) {
+      alert('No se pudo guardar. Intenta de nuevo.')
+      return
+    }
+    setForm(emptyEvento())
+    setMostrarForm(false)
+    cargar()
+  }
+
+  async function eliminar(id: string) {
+    if (!window.confirm('¿Seguro que quieres quitar este evento del calendario?')) return
+    await supabase.from('eventos_calendario').delete().eq('id', id)
+    setEventos(prev => prev.filter(e => e.id !== id))
+  }
+
+  if (loading) return <div className="spinner" />
+
+  const porDia = eventos.reduce<Record<string, EventoCalendario[]>>((acc, e) => {
+    if (!acc[e.fecha]) acc[e.fecha] = []
+    acc[e.fecha].push(e)
+    return acc
+  }, {})
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: 'var(--muted)' }}>Próximos eventos agendados, de todas las personas.</p>
+        <button className="btn btn-secondary" onClick={() => setMostrarForm(x => !x)} style={{ fontSize: 13 }}>
+          {mostrarForm ? 'Cancelar' : '+ Agendar'}
+        </button>
+      </div>
+
+      {mostrarForm && (
+        <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <div className="field">
+                <label>Fecha</label>
+                <input type="date" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
+              </div>
+              <div className="field">
+                <label>Hora inicio</label>
+                <input type="time" value={form.hora_inicio} onChange={e => setForm(f => ({ ...f, hora_inicio: e.target.value }))} />
+              </div>
+              <div className="field">
+                <label>Hora fin</label>
+                <input type="time" value={form.hora_fin} onChange={e => setForm(f => ({ ...f, hora_fin: e.target.value }))} />
+              </div>
+            </div>
+            <div className="field">
+              <label>Ocupa la hora de</label>
+              <select value={form.persona} onChange={e => setForm(f => ({ ...f, persona: e.target.value }))}>
+                {PERSONAS_CALENDARIO.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Título</label>
+              <input type="text" placeholder="Ej: Visita técnica - Juan Pérez" value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="field">
+                <label>Cliente (opcional)</label>
+                <input type="text" value={form.cliente_nombre} onChange={e => setForm(f => ({ ...f, cliente_nombre: e.target.value }))} />
+              </div>
+              <div className="field">
+                <label>Dirección (opcional)</label>
+                <input type="text" value={form.direccion} onChange={e => setForm(f => ({ ...f, direccion: e.target.value }))} />
+              </div>
+            </div>
+            <div className="field">
+              <label>Notas (opcional)</label>
+              <textarea value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} rows={2} />
+            </div>
+            <button className="btn btn-primary" onClick={crear} disabled={guardando}>
+              {guardando ? 'Guardando...' : '✓ Agendar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {Object.keys(porDia).length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Sin eventos agendados todavía.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {Object.entries(porDia).map(([fecha, evs]) => (
+            <div key={fecha}>
+              <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                {fmtFechaLarga(fecha)}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {evs.map(ev => (
+                  <div key={ev.id} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{ minWidth: 90, fontSize: 13, fontWeight: 700, color: 'var(--primary)', flexShrink: 0 }}>
+                      {ev.hora_inicio.slice(0, 5)}–{ev.hora_fin.slice(0, 5)}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 14, fontWeight: 600 }}>{ev.titulo}</p>
+                      <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        {ev.persona}{ev.cliente_nombre ? ` · ${ev.cliente_nombre}` : ''}{ev.direccion ? ` · ${ev.direccion}` : ''}
+                      </p>
+                      {ev.notas && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{ev.notas}</p>}
+                    </div>
+                    <button className="btn btn-ghost" onClick={() => eliminar(ev.id)} style={{ fontSize: 12, padding: '4px 8px', flexShrink: 0 }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

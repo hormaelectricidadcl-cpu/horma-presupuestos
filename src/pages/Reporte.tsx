@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 
 const REPORTE_TOKEN = import.meta.env.VITE_REPORTE_TOKEN as string
 
-const TRABAJADORES = ['Alejandro', 'Fabriel', 'Henry', 'Manuel', 'Misael', 'Samuel']
+export const TRABAJADORES = ['Alejandro', 'Fabriel', 'Henry', 'Manuel', 'Misael', 'Samuel']
 // Gustavo no tiene tarifa diaria (no está en la tabla `trabajadores`, cobra distinto por ser el
 // dueño) -- no puede sumarse a TRABAJADORES o aparecería en asistencia/pago semanal por error.
 // Se usa aparte solo donde tiene sentido que él sea la respuesta (ej: quién hizo un trabajo puntual).
