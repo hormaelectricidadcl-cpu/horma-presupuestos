@@ -26,7 +26,8 @@
 - **Corrección de emojis:** Alexandra marcó que agregué emojis nuevos sin que se pidieran (📦🔧 en compras, 🎬📄 en las galerías, 📞✉️📍 en detalle de presupuesto) — corregidos a texto plano, memoria guardada para no repetirlo. Los emojis preexistentes del proyecto no se tocaron.
 - **2.9 construida** (referencia en presupuestos por etapas): mismo formato `HRM-XXXXX` que ya usaba el presupuesto simple, impresa en el PDF y guardada en Supabase. Sin migración (columna ya existía). **No se pudo probar en navegador** — `/itemizado` exige login real de Supabase Auth sin credenciales disponibles acá; falta que Gustavo o Alexandra lo prueben una vez real.
 - **2.11 construida y verificada de punta a punta** (botón "Convertir en obra" en la tarjeta y en el detalle de un presupuesto "Aceptado"): formulario chico inline, solo pide el nombre de la obra (precompletado con la dirección del cliente). Sin migración — reusa lo de 2.3. Probado con presupuesto de prueba, borrado después.
-- Con esto, quedan pendientes: 2.10, 2.12, 2.13 de la visión ampliada, más Nivel 3 (3.1-3.4) cuando se retome.
+- **2.13 construida** (tipo de pendiente "Solicitud de garantía"): esta vez el constraint de la DB se actualiza en la misma migración que el código, justo para no repetir el bug real de la última vez. Bloqueada en `sql/20260825_pendientes_solicitud_garantia.sql`. `tsc`/`init.sh` en verde.
+- Con esto, quedan pendientes: 2.10, 2.12 de la visión ampliada, más Nivel 3 (3.1-3.4) cuando se retome.
 
 ## Sesión 25/08/2026 (continuación) — MCP arriba: 0.2 hecho, hallazgo extra (0.1 ya estaba hecho), 1.1 construido y probado
 

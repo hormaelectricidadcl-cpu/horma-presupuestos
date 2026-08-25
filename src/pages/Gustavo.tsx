@@ -19,6 +19,7 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
   cobro: 'Cobro pendiente',
   seguimiento: 'Seguimiento',
   pedido_material: 'Pedido de material',
+  solicitud_garantia: 'Solicitud de garantía',
 }
 
 const TIPO_EMOJI: Record<TipoPendiente, string> = {
@@ -31,6 +32,7 @@ const TIPO_EMOJI: Record<TipoPendiente, string> = {
   cobro: '',
   seguimiento: '',
   pedido_material: '',
+  solicitud_garantia: '',
 }
 
 const PLACEHOLDER: Record<TipoPendiente, string> = {
@@ -43,6 +45,7 @@ const PLACEHOLDER: Record<TipoPendiente, string> = {
   cobro: 'Escribe aquí tu respuesta...',
   seguimiento: 'Escribe aquí tu respuesta...',
   pedido_material: 'Ej: Faltan 20m de cable 2.5mm y 3 cajas octogonales para el jueves',
+  solicitud_garantia: 'Ej: Se revisó el tablero, era un breaker suelto, ya quedó solucionado',
 }
 
 function formatDeadlineShort(iso: string): { text: string; urgent: boolean } {
@@ -71,6 +74,7 @@ const TIPO_LABELS_SHORT: Record<TipoPendiente, string> = {
   cobro: 'Cobro',
   seguimiento: 'Seguimiento',
   pedido_material: 'Material',
+  solicitud_garantia: 'Garantía',
 }
 
 function fmtFecha(iso: string) {

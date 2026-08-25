@@ -17,9 +17,10 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
   cobro: 'Cobro pendiente',
   seguimiento: 'Seguimiento',
   pedido_material: 'Pedido de material',
+  solicitud_garantia: 'Solicitud de garantía',
 }
 
-const TIPOS_GUSTAVO: TipoPendiente[] = ['confirmar_visita', 'revisar_fotos', 'presupuesto', 'pedido_material', 'seguimiento', 'otro']
+const TIPOS_GUSTAVO: TipoPendiente[] = ['confirmar_visita', 'revisar_fotos', 'presupuesto', 'pedido_material', 'seguimiento', 'solicitud_garantia', 'otro']
 const TIPOS_IRAZU: TipoPendiente[] = ['emitir_boleta', 'emitir_factura', 'cobro', 'seguimiento', 'otro']
 
 const ACCION_LABELS: Record<string, string> = {

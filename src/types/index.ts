@@ -1,4 +1,4 @@
-export type TipoPendiente = 'confirmar_visita' | 'revisar_fotos' | 'presupuesto' | 'otro' | 'emitir_boleta' | 'emitir_factura' | 'cobro' | 'seguimiento' | 'pedido_material'
+export type TipoPendiente = 'confirmar_visita' | 'revisar_fotos' | 'presupuesto' | 'otro' | 'emitir_boleta' | 'emitir_factura' | 'cobro' | 'seguimiento' | 'pedido_material' | 'solicitud_garantia'
 export type EstadoPendiente = 'pendiente' | 'recordatorio_enviado' | 'respondido'
 export type Destinatario = 'gustavo' | 'irazu'
 

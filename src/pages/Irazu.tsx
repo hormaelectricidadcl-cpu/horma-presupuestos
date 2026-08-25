@@ -15,6 +15,7 @@ const TIPO_LABELS: Record<TipoPendiente, string> = {
   cobro: 'Cobro pendiente',
   seguimiento: 'Seguimiento',
   pedido_material: 'Pedido de material',
+  solicitud_garantia: 'Solicitud de garantía',
 }
 
 const TIPO_EMOJI: Record<TipoPendiente, string> = {
@@ -27,6 +28,7 @@ const TIPO_EMOJI: Record<TipoPendiente, string> = {
   cobro: '💰',
   seguimiento: '🔁',
   pedido_material: '📦',
+  solicitud_garantia: '',
 }
 
 function formatDeadlineShort(iso: string): { text: string; urgent: boolean } {
@@ -253,6 +255,7 @@ const TIPO_LABELS_SHORT: Record<TipoPendiente, string> = {
   cobro: 'Cobro',
   seguimiento: 'Seguimiento',
   pedido_material: 'Material',
+  solicitud_garantia: 'Garantía',
 }
 
 /* ─── Panel de clientes (Irazú) ─────────────────────── */
