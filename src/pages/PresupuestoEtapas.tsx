@@ -151,7 +151,7 @@ export default function PresupuestoEtapas() {
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState('')
   const [ggPct, setGgPct]           = useState(0)
-  const [guardado, setGuardado]     = useState(false)
+  const [guardado, setGuardado]     = useState<string | null>(null)
 
   const grandMO  = etapas.reduce((s, e) => s + e.totalMO,  0)
   const grandMAT = etapas.reduce((s, e) => s + e.totalMAT, 0)
@@ -199,7 +199,7 @@ export default function PresupuestoEtapas() {
       setEtapas(data.etapas)
       setTotalNeto(data.totalNeto ?? null)
       setProcesado(true)
-      setGuardado(false)
+      setGuardado(null)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -240,7 +240,7 @@ export default function PresupuestoEtapas() {
       setEtapas(data.etapas)
       setTotalNeto(data.totalNeto ?? null)
       setProcesado(true)
-      setGuardado(false)
+      setGuardado(null)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -253,13 +253,14 @@ export default function PresupuestoEtapas() {
     setProcesado(false)
     setTotalNeto(null)
     setGgPct(0)
-    setGuardado(false)
+    setGuardado(null)
   }
 
   async function generarPDF() {
     if (!client.name.trim()) { alert('Ingresa el nombre del cliente antes de generar el PDF.'); return }
-    if (ggBase === 0) { alert('Procesá el texto con IA antes de generar el PDF.'); return }
-    await generatePDFEtapas(client, etapas, { pct: ggPct, amount: ggAmount })
+    if (ggBase === 0) { alert('Procesa el texto con IA antes de generar el PDF.'); return }
+    const referencia = `HRM-${Date.now().toString(36).toUpperCase()}`
+    await generatePDFEtapas(client, etapas, { pct: ggPct, amount: ggAmount }, referencia)
 
     // Guardar en Supabase
     if (session?.user?.id) {
@@ -280,6 +281,7 @@ export default function PresupuestoEtapas() {
         cliente_email:    client.email,
         cliente_direccion: client.address,
         estado: 'enviado',
+        referencia,
         etapas,
         gg_pct:    ggPct,
         gg_amount: ggAmount,
@@ -287,7 +289,7 @@ export default function PresupuestoEtapas() {
         iva,
         total,
       })
-      if (!dbErr) setGuardado(true)
+      if (!dbErr) setGuardado(referencia)
     }
   }
 
@@ -666,7 +668,7 @@ export default function PresupuestoEtapas() {
           </button>
           {guardado && (
             <p style={{ textAlign: 'center', fontSize: 12, color: '#15803d', marginTop: 8, fontWeight: 600 }}>
-              ✓ Guardado en el historial
+              ✓ Guardado en el historial — Ref: {guardado}
             </p>
           )}
         </div>

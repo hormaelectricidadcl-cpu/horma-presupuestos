@@ -42,7 +42,8 @@ const SUBTOT_BG:    [number, number, number] = [232, 233, 234]   // phase subtot
 export const generatePDFEtapas = async (
   client: Client,
   etapas: Etapa[],
-  gg: { pct: number; amount: number } = { pct: 0, amount: 0 }
+  gg: { pct: number; amount: number } = { pct: 0, amount: 0 },
+  referencia?: string
 ) => {
   const doc       = new jsPDF('p', 'mm', 'a4')
   const pageWidth = doc.internal.pageSize.getWidth()  // 210mm
@@ -99,6 +100,13 @@ export const generatePDFEtapas = async (
   doc.setFontSize(8)
   const rightLabel = `Fecha: ${currentDate}   Válido hasta: ${validDate}`
   doc.text(rightLabel, pageWidth - margin - doc.getTextWidth(rightLabel), y + 5.5)
+
+  if (referencia) {
+    const refText = `Ref: ${referencia}`
+    doc.setTextColor(120, 120, 120)
+    doc.text(refText, pageWidth - margin - doc.getTextWidth(refText), y + 10.5)
+    doc.setTextColor(...BLACK)
+  }
 
   y += 18
 
