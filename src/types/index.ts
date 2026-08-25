@@ -210,6 +210,7 @@ export interface AbonoCuenta {
   cuenta_id: string
   fecha: string
   monto: number
+  comprobante_url?: string | null
 }
 
 export interface SubcontratoMaster {

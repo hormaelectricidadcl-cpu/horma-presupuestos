@@ -142,7 +142,7 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 | 2.9 | **`referencia` (ID) en presupuestos por etapas** | **Código listo 25/08/2026, sin migración (la columna ya existía desde 1.1)** — El presupuesto simple ya genera un ID `HRM-XXXXX` (desde antes de esta sesión) y lo guarda (1.1); el presupuesto por etapas (`PresupuestoEtapas.tsx`) nunca lo tuvo — sus filas en "Mis presupuestos" no mostraban referencia. |
 | 2.10 | **Varias interacciones por pendiente, no pregunta→respuesta única** | El modelo actual de `pendientes` tiene un solo campo `respuesta` (texto). En la práctica hay ida y vuelta entre Gustavo y Alexandra antes de que quede claro qué acción tomar — hace falta poder agregar una respuesta nueva sin cerrar el pendiente, y ver el hilo completo. Cambio de modelo de datos más grande que el resto de esta lista (probablemente una tabla `pendiente_interacciones` aparte, no un campo de texto). |
 | 2.11 | **Botón "Convertir en obra" desde la tarjeta del presupuesto** | **✅ Hecho y verificado 25/08/2026** — El flujo ya existía (2.3: "Nueva obra" deja elegir un presupuesto aceptado); esto agrega el atajo directo desde la propia tarjeta del presupuesto. |
-| 2.12 | **Comprobante de pago adjunto a cada abono** | Hoy un abono (`abonos_cuenta`) es solo fecha + monto. Agregar un campo opcional para subir la captura del depósito (mismo patrón de Storage que ya se usa en todos lados) — para el primer 50%, el segundo 50%, o como se vaya pagando. Junto con la factura, cierra el círculo de "toda la plata de un cliente, con su comprobante, en un solo lugar". |
+| 2.12 | **Comprobante de pago adjunto a cada abono** | **Código listo 25/08/2026, bloqueado en Alexandra corriendo `sql/20260825_abonos_comprobante.sql`** — cierra el círculo de "toda la plata de un cliente, con su comprobante, en un solo lugar". |
 | 2.13 | **Nuevo tipo de pendiente "Solicitud de garantía"** | **Código listo 25/08/2026, bloqueado en Alexandra corriendo `sql/20260825_pendientes_solicitud_garantia.sql`** — se conecta con `estado_obra='en_garantia'` (2.4). |
 | 2.14 | **"Agregar compra" solo ofrece obras reales — falta "Stock" y "Trabajo puntual"** (pedido de Alexandra, 25/08, al usar Reporte Diario) | El desplegable "Obra" de una compra solo lista obras activas — una compra de material para tener a mano (stock) o para un trabajo chico sin obra formal no tiene dónde ir hoy. Alexandra ya anticipó correctamente que el catálogo de stock real y que la IA lea la foto de la boleta son Nivel 3 (3.1/3.3) — este ítem es solo la categorización mínima, para que la compra quede etiquetada bien mientras tanto. |
 
@@ -170,6 +170,12 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 - Agregado al desplegable de tipo cuando el destinatario es Gustavo (`TIPOS_GUSTAVO` en `Admin.tsx`) — Alexandra registra el reclamo del cliente, Gustavo es quien va a revisar qué se dañó.
 - `Irazu.tsx` (código deshabilitado, ruta `/i` no está en uso) también se actualizó — no por necesidad funcional, sino porque comparte el tipo `TipoPendiente` y dejaba de compilar si no se completaba.
 - `tsc --noEmit` limpio, `init.sh` en verde. **Falta correr la migración y confirmar con un insert real** (mismo tipo de verificación que se hizo la última vez con `pedido_material`, para no repetir el error de darlo por bueno sin probarlo).
+
+### Detalle de 2.12 (sesión 25/08/2026)
+- `sql/20260825_abonos_comprobante.sql`: agrega `comprobante_url` (nullable) a `abonos_cuenta`. **Falta que Alexandra lo corra.**
+- Formulario de "Agregar abono" (`CuentaMiniCard` en `PanelesObra.tsx`, usado tanto en Obras como en el Detalle de cada obra) suma un botón "+ Comprobante" — sube la imagen/PDF al mismo bucket de Storage que ya usa el resto de la app, antes de guardar el abono. Cada abono ya cargado muestra un link "Ver comprobante" cuando tiene uno.
+- Probado en navegador con una cuenta de prueba (borrada después): la subida del archivo funcionó de inmediato (no depende de la migración, es solo Storage); guardar el abono falló con el aviso esperado ("No se pudo guardar el abono") porque `comprobante_url` no existe todavía — comportamiento correcto, sin romper la pantalla.
+- `tsc --noEmit` limpio, `init.sh` en verde.
 
 ---
 

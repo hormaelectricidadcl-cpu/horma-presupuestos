@@ -27,7 +27,8 @@
 - **2.9 construida** (referencia en presupuestos por etapas): mismo formato `HRM-XXXXX` que ya usaba el presupuesto simple, impresa en el PDF y guardada en Supabase. Sin migración (columna ya existía). **No se pudo probar en navegador** — `/itemizado` exige login real de Supabase Auth sin credenciales disponibles acá; falta que Gustavo o Alexandra lo prueben una vez real.
 - **2.11 construida y verificada de punta a punta** (botón "Convertir en obra" en la tarjeta y en el detalle de un presupuesto "Aceptado"): formulario chico inline, solo pide el nombre de la obra (precompletado con la dirección del cliente). Sin migración — reusa lo de 2.3. Probado con presupuesto de prueba, borrado después.
 - **2.13 construida** (tipo de pendiente "Solicitud de garantía"): esta vez el constraint de la DB se actualiza en la misma migración que el código, justo para no repetir el bug real de la última vez. Bloqueada en `sql/20260825_pendientes_solicitud_garantia.sql`. `tsc`/`init.sh` en verde.
-- Con esto, quedan pendientes: 2.10, 2.12 de la visión ampliada, más Nivel 3 (3.1-3.4) cuando se retome.
+- **2.12 construida** (comprobante de pago en abonos): botón "+ Comprobante" en el formulario de agregar abono, sube al mismo bucket de siempre, cada abono muestra "Ver comprobante" si tiene uno. Probado con cuenta de prueba: la subida funciona sola (no depende de la migración), guardar el abono falla con el aviso correcto hasta que se corra `sql/20260825_abonos_comprobante.sql`. Bloqueada en esa migración.
+- Con esto, queda pendiente solo 2.10 de la visión ampliada (varias interacciones por pendiente — la más grande, cambio de modelo de datos), más Nivel 3 (3.1-3.4) cuando se retome.
 
 ## Sesión 25/08/2026 (continuación) — MCP arriba: 0.2 hecho, hallazgo extra (0.1 ya estaba hecho), 1.1 construido y probado
 

@@ -280,8 +280,8 @@ export function PanelObras() {
     cargar()
   }
 
-  async function agregarAbono(cuentaId: string, fecha: string, monto: number) {
-    const { error } = await supabase.from('abonos_cuenta').insert({ cuenta_id: cuentaId, fecha, monto })
+  async function agregarAbono(cuentaId: string, fecha: string, monto: number, comprobanteUrl?: string | null) {
+    const { error } = await supabase.from('abonos_cuenta').insert({ cuenta_id: cuentaId, fecha, monto, comprobante_url: comprobanteUrl || null })
     if (error) {
       alert('No se pudo guardar el abono. Intenta de nuevo.')
       return
@@ -1456,12 +1456,14 @@ function PeriodoRow({ periodo, tarifas, onMarcarReembolsado }: { periodo: Period
 function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEliminarCuenta }: {
   cuenta: CuentaPorCobrar
   abonos: AbonoCuenta[]
-  onAgregarAbono: (cuentaId: string, fecha: string, monto: number) => void
+  onAgregarAbono: (cuentaId: string, fecha: string, monto: number, comprobanteUrl?: string | null) => void
   onEliminarAbono: (id: string) => void
   onEliminarCuenta: (id: string) => void
 }) {
   const [fecha, setFecha] = useState('')
   const [monto, setMonto] = useState('')
+  const [comprobanteUrl, setComprobanteUrl] = useState<string | null>(null)
+  const [subiendoComprobante, setSubiendoComprobante] = useState(false)
   const abonosCuenta = abonos.filter(a => a.cuenta_id === cuenta.id).sort((a, b) => b.fecha.localeCompare(a.fecha))
   const totalAbonado = abonosCuenta.reduce((s, a) => s + a.monto, 0)
   const restante = cuenta.total_presupuesto - totalAbonado
@@ -1486,6 +1488,11 @@ function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEli
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
               <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{a.fecha.split('-').reverse().join('/')}</span>
               <span style={{ flex: 1, fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(a.monto)}</span>
+              {a.comprobante_url && (
+                <a href={a.comprobante_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
+                  Ver comprobante
+                </a>
+              )}
               <button onClick={() => onEliminarAbono(a.id)} className="btn btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }}>Quitar</button>
             </div>
           ))}
@@ -1500,13 +1507,39 @@ function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEli
           <label>Monto del abono</label>
           <input type="number" min="0" placeholder="Monto en pesos" value={monto} onChange={e => setMonto(e.target.value)} />
         </div>
+        <label className="btn btn-secondary" style={{ flexShrink: 0, cursor: subiendoComprobante ? 'default' : 'pointer', opacity: subiendoComprobante ? 0.6 : 1 }}>
+          {subiendoComprobante ? 'Subiendo...' : comprobanteUrl ? 'Comprobante ✓' : '+ Comprobante'}
+          <input
+            type="file"
+            accept="image/*,.pdf"
+            disabled={subiendoComprobante}
+            style={{ display: 'none' }}
+            onChange={async e => {
+              const archivo = e.target.files?.[0]
+              e.target.value = ''
+              if (!archivo) return
+              setSubiendoComprobante(true)
+              const ext = archivo.name.split('.').pop() || 'bin'
+              const filename = `comprobante-${cuenta.id}-${Date.now()}.${ext}`
+              const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+              if (error) {
+                alert('Error al subir el comprobante: ' + error.message)
+                setSubiendoComprobante(false)
+                return
+              }
+              const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
+              setComprobanteUrl(urlData.publicUrl)
+              setSubiendoComprobante(false)
+            }}
+          />
+        </label>
         <button
           className="btn btn-secondary"
           onClick={() => {
             const m = Number(monto)
             if (!fecha || !Number.isFinite(m) || m <= 0) { alert('Completa fecha y un monto válido.'); return }
-            onAgregarAbono(cuenta.id, fecha, m)
-            setFecha(''); setMonto('')
+            onAgregarAbono(cuenta.id, fecha, m, comprobanteUrl)
+            setFecha(''); setMonto(''); setComprobanteUrl(null)
           }}
           style={{ flexShrink: 0 }}
         >+ Agregar abono</button>
@@ -1625,7 +1658,7 @@ export function HistorialObraModal({
   // una — ej. "presupuesto original" + "adicional a evaluar").
   cuentasObra?: CuentaPorCobrar[]
   abonos?: AbonoCuenta[]
-  onAgregarAbono?: (cuentaId: string, fecha: string, monto: number) => void
+  onAgregarAbono?: (cuentaId: string, fecha: string, monto: number, comprobanteUrl?: string | null) => void
   onEliminarAbono?: (id: string) => void
   onEliminarCuenta?: (id: string) => void
   onCrearCuentaObra?: (pagador: string, concepto: string, monto: number) => void
