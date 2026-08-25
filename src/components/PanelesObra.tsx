@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, EstadoPresupuesto, EstadoObra } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -1675,6 +1675,9 @@ export function PanelPresupuestos() {
   const [presupuestos, setPresupuestos] = useState<PresupuestoGuardado[]>([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
+  const [detalleId, setDetalleId] = useState<string | null>(null)
+  const [detalle, setDetalle] = useState<PresupuestoDetalle | null>(null)
+  const [cargandoDetalle, setCargandoDetalle] = useState(false)
 
   const cargar = useCallback(async () => {
     const { data } = await supabase
@@ -1689,11 +1692,20 @@ export function PanelPresupuestos() {
 
   async function cambiarEstado(id: string, estado: EstadoPresupuesto) {
     setPresupuestos(prev => prev.map(p => p.id === id ? { ...p, estado } : p))
+    if (detalle?.id === id) setDetalle(prev => prev ? { ...prev, estado } : prev)
     const { error } = await supabase.from('presupuestos').update({ estado }).eq('id', id)
     if (error) {
       alert('No se pudo actualizar el estado. Intenta de nuevo.')
       cargar()
     }
+  }
+
+  async function abrirDetalle(id: string) {
+    setDetalleId(id)
+    setCargandoDetalle(true)
+    const { data } = await supabase.from('presupuestos').select('*').eq('id', id).single()
+    setDetalle(data as PresupuestoDetalle)
+    setCargandoDetalle(false)
   }
 
   const filtrados = presupuestos.filter(p =>
@@ -1728,7 +1740,7 @@ export function PanelPresupuestos() {
                 </div>
                 <p style={{ fontWeight: 700, fontSize: 15 }}>{fmtMoney(p.total || 0)}</p>
               </div>
-              <div style={{ marginTop: 10 }}>
+              <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <select
                   value={p.estado}
                   onChange={e => cambiarEstado(p.id, e.target.value as EstadoPresupuesto)}
@@ -1738,9 +1750,109 @@ export function PanelPresupuestos() {
                     <option key={k} value={k}>{label}</option>
                   ))}
                 </select>
+                <button className="btn btn-secondary" onClick={() => abrirDetalle(p.id)} style={{ fontSize: 12, padding: '6px 12px' }}>
+                  Detalle
+                </button>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {detalleId && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 100 }}
+          onClick={() => { setDetalleId(null); setDetalle(null) }}
+        >
+          <div
+            style={{ background: 'var(--white)', borderRadius: 'var(--radius)', maxWidth: 640, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: '1.5rem' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {cargandoDetalle || !detalle ? (
+              <div className="spinner" />
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ fontSize: 18, fontWeight: 700 }}>{detalle.cliente_nombre || 'Sin nombre'}</h3>
+                    <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {detalle.referencia ? `${detalle.referencia} · ` : ''}
+                      {new Date(detalle.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}
+                    </p>
+                  </div>
+                  <button onClick={() => { setDetalleId(null); setDetalle(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--muted)' }}>✕</button>
+                </div>
+
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, color: 'var(--muted)', marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
+                  {detalle.cliente_telefono && <span>📞 {detalle.cliente_telefono}</span>}
+                  {detalle.cliente_email && <span>✉️ {detalle.cliente_email}</span>}
+                  {detalle.cliente_direccion && <span>📍 {detalle.cliente_direccion}</span>}
+                </div>
+
+                {detalle.tipo === 'simple' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                    {(detalle.items || []).map((item, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                        <span style={{ flex: 1 }}>
+                          <span style={{ color: 'var(--muted)', fontSize: 11 }}>{item.categoria}</span><br />
+                          {item.description} × {item.quantity}
+                        </span>
+                        <span style={{ fontWeight: 600, flexShrink: 0 }}>{fmtMoney(item.total)}</span>
+                      </div>
+                    ))}
+                    {(!detalle.items || detalle.items.length === 0) && (
+                      <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin ítems cargados.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
+                    {(detalle.etapas || []).map((etapa, i) => (
+                      <div key={i}>
+                        <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{etapa.numero} — {etapa.nombre}</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {etapa.items.map((item, j) => (
+                            <div key={j} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, padding: '4px 0' }}>
+                              <span style={{ flex: 1, color: 'var(--muted)' }}>
+                                [{item.tipo}] {item.descripcion} × {item.cantidad}
+                              </span>
+                              <span style={{ flexShrink: 0 }}>{fmtMoney(item.total)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 12, fontWeight: 700, marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
+                          Subtotal etapa: {fmtMoney(etapa.total)}
+                        </div>
+                      </div>
+                    ))}
+                    {(!detalle.etapas || detalle.etapas.length === 0) && (
+                      <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin etapas cargadas.</p>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span>{fmtMoney(detalle.subtotal || 0)}</span></div>
+                  {detalle.gg_amount != null && detalle.gg_amount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gastos generales ({detalle.gg_pct}%)</span><span>{fmtMoney(detalle.gg_amount)}</span></div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>IVA</span><span>{fmtMoney(detalle.iva || 0)}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}><span>Total</span><span>{fmtMoney(detalle.total || 0)}</span></div>
+                </div>
+
+                <div style={{ marginTop: 16 }}>
+                  <select
+                    value={detalle.estado}
+                    onChange={e => cambiarEstado(detalle.id, e.target.value as EstadoPresupuesto)}
+                    style={{ fontSize: 13, padding: '5px 10px', width: 'auto' }}
+                  >
+                    {(Object.entries(ESTADO_PRESUPUESTO_LABELS) as [EstadoPresupuesto, string][]).map(([k, label]) => (
+                      <option key={k} value={k}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

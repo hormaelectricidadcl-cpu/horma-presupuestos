@@ -115,6 +115,41 @@ export interface PresupuestoGuardado {
   total: number | null
 }
 
+export interface PresupuestoItemSimple {
+  id: number
+  categoria: string
+  description: string
+  price: number
+  quantity: number
+  total: number
+  servicio_sku?: string
+}
+
+export interface PresupuestoEtapaItem {
+  subNumero: string
+  descripcion: string
+  cantidad: number
+  precioUnitario: number
+  tipo: 'MO' | 'MAT'
+  total: number
+}
+
+export interface PresupuestoEtapa {
+  numero: string
+  nombre: string
+  items: PresupuestoEtapaItem[]
+  totalMO: number
+  totalMAT: number
+  total: number
+}
+
+export interface PresupuestoDetalle extends PresupuestoGuardado {
+  gg_pct: number | null
+  gg_amount: number | null
+  items: PresupuestoItemSimple[] | null
+  etapas: PresupuestoEtapa[] | null
+}
+
 export type EstadoObra = 'en_curso' | 'terminada_terreno' | 'facturada' | 'en_garantia' | 'cerrada'
 
 export interface Obra {
