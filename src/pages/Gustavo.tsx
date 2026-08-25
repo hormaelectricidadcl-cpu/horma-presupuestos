@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
 import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
+import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import type { Pendiente, TipoPendiente } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
@@ -138,16 +139,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
               {h.direccion}
             </a>
           )}
-          {h.drive_links && h.drive_links.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
-              {h.drive_links.map((link, i) => (
-                <a key={i} href={link} target="_blank" rel="noreferrer"
-                  style={{ fontSize: 12, color: '#1565c0', fontWeight: 600 }}>
-                  Archivo {h.drive_links.length > 1 ? i + 1 : ''}
-                </a>
-              ))}
-            </div>
-          )}
+          <GaleriaArchivos urls={h.drive_links} />
           {h.respuesta && (
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 3 }}>
@@ -463,26 +455,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
         {/* Archivos tab */}
         {cardTab === 'archivos' && (
           p.drive_links?.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {p.drive_links.map((link, i) => (
-                <a
-                  key={i}
-                  href={link}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '14px 16px', background: '#e3f2fd',
-                    borderRadius: 10, color: '#1565c0',
-                    fontWeight: 600, fontSize: 15, textDecoration: 'none',
-                  }}
-                >
-                  <span style={{ fontSize: 22 }}></span>
-                  Ver archivo {p.drive_links.length > 1 ? i + 1 : ''}
-                  <span style={{ marginLeft: 'auto', fontSize: 13, opacity: 0.7 }}>Abrir →</span>
-                </a>
-              ))}
-            </div>
+            <GaleriaArchivos urls={p.drive_links} />
           ) : (
             <p style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', padding: '1.5rem 0' }}>
               Sin archivos adjuntos en este pendiente.
@@ -592,16 +565,7 @@ function PanelClientes() {
                         {h.direccion}
                       </a>
                     )}
-                    {h.drive_links && h.drive_links.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                        {h.drive_links.map((link, i) => (
-                          <a key={i} href={link} target="_blank" rel="noreferrer"
-                            style={{ fontSize: 12, color: '#1565c0', fontWeight: 600, padding: '3px 8px', background: '#e3f2fd', borderRadius: 6, textDecoration: 'none' }}>
-                            Archivo {h.drive_links.length > 1 ? i + 1 : ''}
-                          </a>
-                        ))}
-                      </div>
-                    )}
+                    <GaleriaArchivos urls={h.drive_links} />
 
                     {h.respuesta && (
                       <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
 import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
+import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, Cliente } from '../types'
 
 
@@ -323,22 +324,7 @@ function HistorialModal({
                         </a>
                       )}
 
-                      {p.drive_links?.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                          {p.drive_links.map((link, i) => (
-                            <a
-                              key={i}
-                              href={link}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="btn btn-secondary"
-                              style={{ fontSize: 12, padding: '4px 10px' }}
-                            >
-                              Archivo {p.drive_links.length > 1 ? i + 1 : ''}
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                      <GaleriaArchivos urls={p.drive_links} />
 
                       {/* response */}
                       {p.estado === 'respondido' && p.respuesta && (
@@ -1040,15 +1026,9 @@ function PendienteCard({
                 </div>
               )}
 
-              {p.drive_links?.length > 0 && (
-                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {p.drive_links.map((link, i) => (
-                    <a key={i} href={link} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ fontSize: 13, padding: '6px 12px' }}>
-                      Archivo {i + 1}
-                    </a>
-                  ))}
-                </div>
-              )}
+              <div style={{ marginTop: 12 }}>
+                <GaleriaArchivos urls={p.drive_links} />
+              </div>
 
               {/* Respondido section */}
               {respondido && (
