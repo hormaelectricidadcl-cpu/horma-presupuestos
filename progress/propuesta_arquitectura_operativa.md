@@ -144,6 +144,7 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 | 2.11 | **Botón "Convertir en obra" desde la tarjeta del presupuesto** | El flujo ya existe (2.3: "Nueva obra" deja elegir un presupuesto aceptado) — falta el atajo directo: un botón en la tarjeta de un presupuesto con estado "Aceptado" (en "Mis presupuestos") que lleve directo a crear la obra con ese presupuesto ya seleccionado, sin tener que ir a la pestaña Obras y buscarlo en el desplegable. |
 | 2.12 | **Comprobante de pago adjunto a cada abono** | Hoy un abono (`abonos_cuenta`) es solo fecha + monto. Agregar un campo opcional para subir la captura del depósito (mismo patrón de Storage que ya se usa en todos lados) — para el primer 50%, el segundo 50%, o como se vaya pagando. Junto con la factura, cierra el círculo de "toda la plata de un cliente, con su comprobante, en un solo lugar". |
 | 2.13 | **Nuevo tipo de pendiente "Solicitud de garantía"** | Hoy no hay forma de marcar que un pendiente es sobre algo que se dañó en una obra ya entregada (distinto de "seguimiento" genérico) — se conecta con `estado_obra='en_garantia'` (2.4). Mismo patrón que agregar `seguimiento`/`pedido_material` — ojo con actualizar el constraint de la base de datos a la vez que el tipo en el código (ver el bug real que pasó con esto el 25/08, `decisiones.md`). |
+| 2.14 | **"Agregar compra" solo ofrece obras reales — falta "Stock" y "Trabajo puntual"** (pedido de Alexandra, 25/08, al usar Reporte Diario) | El desplegable "Obra" de una compra solo lista obras activas — una compra de material para tener a mano (stock) o para un trabajo chico sin obra formal no tiene dónde ir hoy. Alexandra ya anticipó correctamente que el catálogo de stock real y que la IA lea la foto de la boleta son Nivel 3 (3.1/3.3) — este ítem es solo la categorización mínima, para que la compra quede etiquetada bien mientras tanto. |
 
 **Alexandra eligió empezar por 2.7+2.8 juntas (25/08/2026) — construidas.**
 
@@ -164,13 +165,20 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 - **Alexandra corrió `sql/20260825_presupuestos_estado.sql`. Verificado 25/08/2026:** columna `estado` confirmada vía MCP; probado en navegador (Gustavo → "Mis presupuestos") — aparecen los presupuestos reales ya guardados (Gustavo Castillo, Patricio Zamora, etc.) con cliente, fecha, tipo, monto y el selector de estado, todos en `'borrador'` (correcto: son filas viejas, no se les forzó `'enviado'` retroactivo). Sin errores en consola. No se tocó ningún dato real durante la prueba.
 - `tsc --noEmit` limpio, `init.sh` en verde. **2.1 cerrado del todo.**
 
+### Detalle de 2.14 (sesión 25/08/2026)
+- `sql/20260825_compras_destino.sql`: agrega `destino` (nullable, `'stock'|'trabajo_puntual'`) a `reportes_compras`. **Falta que Alexandra lo corra.**
+- **`obra` no se tocó** — sigue significando exactamente lo mismo que siempre (una obra real o nada), así ningún cálculo que agrupa/filtra compras por obra se ve afectado. `destino` solo se llena cuando `obra` queda vacío a propósito, para explicar por qué.
+- El desplegable "Obra" del formulario de compras (`Reporte.tsx`) ahora suma dos opciones al final de la lista de obras reales: "📦 Stock (sin obra todavía)" y "🔧 Trabajo puntual (sin obra)". Elegir una limpia `obra` y guarda el `destino` correspondiente.
+- **Alcance deliberadamente chico** — esto es solo la categorización. El catálogo de stock real (cantidades, movimientos de entrada/salida) y que la IA lea la foto de la boleta son Nivel 3 (3.1/3.3 abajo), Alexandra ya lo anticipó correctamente en la conversación — no se adelantó nada de eso acá.
+- `tsc --noEmit` limpio, `init.sh` en verde. Probado en navegador antes de correr la migración: las dos opciones nuevas aparecen en el desplegable, sin errores en consola.
+
 ## Nivel 3 — la parte más transformadora
 
 | # | Qué | Depende de |
 |---|---|---|
 | 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa material/cantidad/monto | Subida de archivos (ya existe) |
 | 3.2 | Desglose por ítem (`obra_items`) + avance diario (`avances_diarios`) + barra de progreso semanal, junto a Pago Semanal | 2.2 |
-| 3.3 | Stock de materiales real: catálogo + movimientos (compra_obra / compra_stock / uso / sobrante_a_stock) | 3.1 en parte |
+| 3.3 | Stock de materiales real: catálogo + movimientos (compra_obra / compra_stock / uso / sobrante_a_stock) — **2.14 ya deja la compra categorizada como `'stock'`, lista para que esto la consuma** | 3.1 en parte |
 | 3.4 | Alerta proactiva de material faltante (cruza `obra_items` contra stock, avisa antes de que frene el trabajo) | 3.2 + 3.3 |
 
 ---

@@ -68,6 +68,7 @@ export interface ReporteCompraDia {
   descripcion: string
   monto: number
   obra: string | null
+  destino?: 'stock' | 'trabajo_puntual' | null
   pagado_por?: string | null
   reembolsado?: boolean
 }

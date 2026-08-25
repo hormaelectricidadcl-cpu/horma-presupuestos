@@ -37,6 +37,10 @@ interface CompraRow {
   descripcion: string
   monto: string
   obra: string
+  // Cuando la compra no es para ninguna obra, explica a propósito por qué -- 'stock'
+  // (material para tener a mano) o 'trabajo_puntual' (algo chico sin obra formal) -- en vez
+  // de dejarla sin etiqueta. No se guarda nada acá si `obra` sí tiene una obra real.
+  destino: '' | 'stock' | 'trabajo_puntual'
   pagadoPor: string
   reembolsado: boolean
 }
@@ -139,8 +143,8 @@ export default function Reporte({ token, embedded = false }: Props) {
       }
     }
     setTrabajadores(base)
-    setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null; pagado_por: string | null; reembolsado: boolean | null }) => ({
-      id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false,
+    setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null; destino: 'stock' | 'trabajo_puntual' | null; pagado_por: string | null; reembolsado: boolean | null }) => ({
+      id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', destino: c.destino || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false,
     })))
     const cobrosLegado = (cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
       id: c.id, origen: 'reportes_cobros' as const, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
@@ -190,7 +194,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
 
   function agregarCompra() {
-    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '', pagadoPor: '', reembolsado: false }])
+    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '', destino: '', pagadoPor: '', reembolsado: false }])
   }
   function actualizarCompra(idx: number, patch: Partial<CompraRow>) {
     setCompras(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
@@ -312,7 +316,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     await supabase.from('reportes_compras').delete().eq('fecha', fecha)
     if (comprasValidas.length) {
       const { error: e2 } = await supabase.from('reportes_compras').insert(
-        comprasValidas.map(c => ({ fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, pagado_por: c.pagadoPor || null, reembolsado: c.reembolsado }))
+        comprasValidas.map(c => ({ fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, destino: c.obra ? null : (c.destino || null), pagado_por: c.pagadoPor || null, reembolsado: c.reembolsado }))
       )
       if (e2) {
         setError('Error al guardar las compras. Intenta de nuevo.')
@@ -626,9 +630,21 @@ export default function Reporte({ token, embedded = false }: Props) {
                       </div>
                       <div className="field" style={{ flex: 1 }}>
                         <label>Obra</label>
-                        <select value={c.obra} onChange={e => actualizarCompra(idx, { obra: e.target.value })}>
+                        <select
+                          value={c.obra || (c.destino ? `__${c.destino}__` : '')}
+                          onChange={e => {
+                            const v = e.target.value
+                            if (v === '__stock__' || v === '__trabajo_puntual__') {
+                              actualizarCompra(idx, { obra: '', destino: v.replace(/^__|__$/g, '') as 'stock' | 'trabajo_puntual' })
+                            } else {
+                              actualizarCompra(idx, { obra: v, destino: '' })
+                            }
+                          }}
+                        >
                           <option value="">Selecciona...</option>
                           {obras.map(o => <option key={o} value={o}>{o}</option>)}
+                          <option value="__stock__">📦 Stock (sin obra todavía)</option>
+                          <option value="__trabajo_puntual__">🔧 Trabajo puntual (sin obra)</option>
                         </select>
                       </div>
                     </div>
