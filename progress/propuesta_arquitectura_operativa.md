@@ -208,10 +208,23 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 
 | # | Qué | Depende de |
 |---|---|---|
-| 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa material/cantidad/monto | Subida de archivos (ya existe) |
+| 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa descripción/monto | **Código listo 25/08/2026, paso 1 de un plan en 4 etapas acordado con Alexandra (ver detalle)** — Subida de archivos (ya existe) |
 | 3.2 | Desglose por ítem (`obra_items`) + avance diario (`avances_diarios`) + barra de progreso semanal, junto a Pago Semanal | 2.2 |
 | 3.3 | Stock de materiales real: catálogo + movimientos (compra_obra / compra_stock / uso / sobrante_a_stock) — **2.14 ya deja la compra categorizada como `'stock'`, lista para que esto la consuma** | 3.1 en parte |
 | 3.4 | Alerta proactiva de material faltante (cruza `obra_items` contra stock, avisa antes de que frene el trabajo) | 3.2 + 3.3 |
+
+### Plan acordado para Nivel 3, en 4 pasos (conversación 25/08/2026)
+1. **3.1 solo, sin itemizar** — la foto llena descripción+monto de una compra, como si Gustavo lo hubiera escrito a mano. *(este paso, construido ahora)*
+2. 3.1 + desglose — la IA además guarda el detalle de materiales de la boleta en una tabla nueva (`compra_items` o similar), sin tocar `reportes_compras` (que sigue siendo "una fila = una compra completa" para no afectar Estado de Resultados).
+3. 3.3 — catálogo de stock (`materiales` + `movimientos_stock`) + una acción nueva para que Gustavo registre "usé tanto de este material en esta obra".
+4. 3.4 — queda bloqueada hasta que exista 2.2/3.2 (el desglose por ítem de cada obra), porque sin eso no hay con qué comparar el stock.
+
+### Detalle del paso 1 (sesión 25/08/2026)
+- `sql/20260825_compras_foto_boleta.sql`: agrega `foto_boleta_url` (nullable) a `reportes_compras` — de paso, la compra queda con su respaldo fotográfico real, mismo principio que el comprobante de pago de los abonos (2.12). **Falta que Alexandra lo corra.**
+- `functions/api/parse-factura.js` nueva: mismo patrón que `parse.js` (modelo `gpt-4.1-mini`, API de OpenAI), pero recibe la URL de una foto en vez de texto y le pide a la IA un resumen de los materiales + el monto total de la boleta.
+- En "Agregar compra" (Reporte Diario) se agregó "+ Subir foto de la boleta" — sube la foto al bucket de Storage de siempre, guarda su URL en la compra, y llama a la función nueva para completar descripción y monto automáticamente. Gustavo revisa/edita antes de guardar, nunca se guarda solo.
+- **No se pudo probar la función en sí** (`functions/api/*.js` no corren en local, límite ya documentado del proyecto) — pero sí se probó que el resto no se rompe: la subida de la foto a Storage funciona independiente de la función (confirmado en Supabase), y si la función falla (como pasa en local, donde ni siquiera existe), el error se atrapa y avisa con claridad en vez de romper la pantalla — Gustavo puede seguir completando a mano.
+- `tsc --noEmit` limpio, `init.sh` en verde. **Falta correr la migración y probar con una foto real de una boleta en producción** para confirmar que la IA lee bien montos y descripciones reales.
 
 ---
 

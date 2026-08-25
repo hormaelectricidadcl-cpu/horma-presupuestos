@@ -43,6 +43,7 @@ interface CompraRow {
   destino: '' | 'stock' | 'trabajo_puntual'
   pagadoPor: string
   reembolsado: boolean
+  fotoBoletaUrl: string
 }
 
 interface CobroRow {
@@ -111,6 +112,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   const [obras, setObras] = useState<string[]>(OBRAS_FALLBACK)
   const [obraGeneral, setObraGeneral] = useState('')
   const [compras, setCompras] = useState<CompraRow[]>([])
+  const [subiendoBoletaIdx, setSubiendoBoletaIdx] = useState<number | null>(null)
   const [cobros, setCobros] = useState<CobroRow[]>([])
   const [subcontratos, setSubcontratos] = useState<SubcontratoRow[]>([])
   const [trabajosPuntuales, setTrabajosPuntuales] = useState<TrabajoPuntualRow[]>([])
@@ -143,8 +145,8 @@ export default function Reporte({ token, embedded = false }: Props) {
       }
     }
     setTrabajadores(base)
-    setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null; destino: 'stock' | 'trabajo_puntual' | null; pagado_por: string | null; reembolsado: boolean | null }) => ({
-      id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', destino: c.destino || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false,
+    setCompras((compr || []).map((c: { id: string; descripcion: string; monto: number; obra: string | null; destino: 'stock' | 'trabajo_puntual' | null; pagado_por: string | null; reembolsado: boolean | null; foto_boleta_url: string | null }) => ({
+      id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', destino: c.destino || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false, fotoBoletaUrl: c.foto_boleta_url || '',
     })))
     const cobrosLegado = (cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
       id: c.id, origen: 'reportes_cobros' as const, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
@@ -194,7 +196,40 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
 
   function agregarCompra() {
-    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '', destino: '', pagadoPor: '', reembolsado: false }])
+    setCompras(prev => [...prev, { descripcion: '', monto: '', obra: '', destino: '', pagadoPor: '', reembolsado: false, fotoBoletaUrl: '' }])
+  }
+
+  async function subirFotoBoleta(idx: number, archivo: File) {
+    setSubiendoBoletaIdx(idx)
+    try {
+      const ext = archivo.name.split('.').pop() || 'jpg'
+      const filename = `boleta-${Date.now()}.${ext}`
+      const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+      if (error) {
+        alert('Error al subir la foto: ' + error.message)
+        return
+      }
+      const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
+      actualizarCompra(idx, { fotoBoletaUrl: urlData.publicUrl })
+
+      try {
+        const res = await fetch('/api/parse-factura', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlData.publicUrl }),
+        })
+        const resultado = await res.json()
+        if (!res.ok) throw new Error(resultado.error || 'error desconocido')
+        actualizarCompra(idx, {
+          descripcion: resultado.descripcion || '',
+          monto: resultado.monto != null ? String(resultado.monto) : '',
+        })
+      } catch (err) {
+        alert('La foto se guardó, pero la IA no pudo leerla (' + String(err) + '). Completa descripción y monto a mano.')
+      }
+    } finally {
+      setSubiendoBoletaIdx(null)
+    }
   }
   function actualizarCompra(idx: number, patch: Partial<CompraRow>) {
     setCompras(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
@@ -316,7 +351,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     await supabase.from('reportes_compras').delete().eq('fecha', fecha)
     if (comprasValidas.length) {
       const { error: e2 } = await supabase.from('reportes_compras').insert(
-        comprasValidas.map(c => ({ fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, destino: c.obra ? null : (c.destino || null), pagado_por: c.pagadoPor || null, reembolsado: c.reembolsado }))
+        comprasValidas.map(c => ({ fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, destino: c.obra ? null : (c.destino || null), pagado_por: c.pagadoPor || null, reembolsado: c.reembolsado, foto_boleta_url: c.fotoBoletaUrl || null }))
       )
       if (e2) {
         setError('Error al guardar las compras. Intenta de nuevo.')
@@ -608,6 +643,30 @@ export default function Reporte({ token, embedded = false }: Props) {
               {compras.map((c, idx) => (
                 <div key={idx} className="card" style={{ padding: 14 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div>
+                      <label className="btn btn-secondary" style={{ display: 'inline-block', fontSize: 13, cursor: subiendoBoletaIdx === idx ? 'default' : 'pointer', opacity: subiendoBoletaIdx === idx ? 0.6 : 1 }}>
+                        {subiendoBoletaIdx === idx ? 'Leyendo la boleta...' : c.fotoBoletaUrl ? 'Cambiar foto de la boleta' : '+ Subir foto de la boleta'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={subiendoBoletaIdx === idx}
+                          style={{ display: 'none' }}
+                          onChange={e => {
+                            const archivo = e.target.files?.[0]
+                            e.target.value = ''
+                            if (archivo) subirFotoBoleta(idx, archivo)
+                          }}
+                        />
+                      </label>
+                      {c.fotoBoletaUrl && (
+                        <a href={c.fotoBoletaUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 10, fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
+                          Ver foto
+                        </a>
+                      )}
+                      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                        Sube la foto y la IA completa descripción y monto — revísalos antes de guardar.
+                      </p>
+                    </div>
                     <div className="field">
                       <label>Descripción</label>
                       <input
