@@ -208,7 +208,7 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 
 | # | Qué | Depende de |
 |---|---|---|
-| 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa descripción/monto | **Código listo 25/08/2026, paso 1 de un plan en 4 etapas acordado con Alexandra (ver detalle)** — Subida de archivos (ya existe) |
+| 3.1 | Material con foto + IA: nueva función `/api/parse-factura.js` (mismo patrón que `parse.js`, pero lee una imagen en vez de texto) — Gustavo sube la foto de la boleta desde "Compras del día" (Reporte Diario) y se auto-completa descripción/monto | **✅ Paso 1 de 4 verificado con una boleta real en producción, 25/08/2026** — el monto se lee bien; falta el paso 2 (desglose por ítem) para que se vean cantidades y precios, no solo un resumen en texto |
 | 3.2 | Desglose por ítem (`obra_items`) + avance diario (`avances_diarios`) + barra de progreso semanal, junto a Pago Semanal | 2.2 |
 | 3.3 | Stock de materiales real: catálogo + movimientos (compra_obra / compra_stock / uso / sobrante_a_stock) — **2.14 ya deja la compra categorizada como `'stock'`, lista para que esto la consuma** | 3.1 en parte |
 | 3.4 | Alerta proactiva de material faltante (cruza `obra_items` contra stock, avisa antes de que frene el trabajo) | 3.2 + 3.3 |
@@ -224,7 +224,9 @@ Todavía sin construir, escrito acá para no perder el hilo (viene de una sola c
 - `functions/api/parse-factura.js` nueva: mismo patrón que `parse.js` (modelo `gpt-4.1-mini`, API de OpenAI), pero recibe la URL de una foto en vez de texto y le pide a la IA un resumen de los materiales + el monto total de la boleta.
 - En "Agregar compra" (Reporte Diario) se agregó "+ Subir foto de la boleta" — sube la foto al bucket de Storage de siempre, guarda su URL en la compra, y llama a la función nueva para completar descripción y monto automáticamente. Gustavo revisa/edita antes de guardar, nunca se guarda solo.
 - **No se pudo probar la función en sí** (`functions/api/*.js` no corren en local, límite ya documentado del proyecto) — pero sí se probó que el resto no se rompe: la subida de la foto a Storage funciona independiente de la función (confirmado en Supabase), y si la función falla (como pasa en local, donde ni siquiera existe), el error se atrapa y avisa con claridad en vez de romper la pantalla — Gustavo puede seguir completando a mano.
-- `tsc --noEmit` limpio, `init.sh` en verde. **Falta correr la migración y probar con una foto real de una boleta en producción** para confirmar que la IA lee bien montos y descripciones reales.
+- `tsc --noEmit` limpio, `init.sh` en verde.
+- **Alexandra corrió la migración y probó con una boleta real en producción (celular, `horma-presupuestos.pages.dev`) — funciona.** La IA leyó el monto exacto ($33.840) y detectó los materiales de la boleta real (varios ítems tipo "Moledor..."). **Confirma que la función de Cloudflare y la llamada a OpenAI andan bien en producción** — la única pieza que no se podía probar en local ya quedó validada con un caso real.
+- **Hallazgo real de Alexandra, esperable:** cuando la boleta tiene varios materiales, la "descripción" los mete todos en una sola línea de texto corrida — no se ven cantidades ni precios por ítem, solo el resumen. Es exactamente la limitación que ya se había anticipado al diseñar el plan en 4 pasos ("paso 1 solo, sin itemizar") — confirma en la práctica que **el paso 2 (desglose por ítem) hace falta pronto**, no es opcional a futuro. Subir de prioridad el paso 2 en la próxima sesión.
 
 ---
 

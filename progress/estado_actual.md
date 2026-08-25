@@ -32,7 +32,16 @@
 - **2.13 y 2.12 verificados de punta a punta 25/08/2026** (Alexandra corrió las migraciones, confirmado contra Supabase real): pendiente con `tipo='solicitud_garantia'` insertado sin error; abono con `comprobante_url` real guardado sin error. Datos de prueba borrados. **2.13 y 2.12 cerrados del todo.**
 - **2.10 verificado de punta a punta 25/08/2026** (después de reenviar `sql/20260825_pendiente_mensajes.sql`, que no se había corrido la primera vez pese a que Alexandra dijo que sí): mensaje real enviado desde la pestaña "Hilo", confirmado en Supabase, borrado en cascada al borrar el pendiente de prueba. **2.10 cerrado del todo.**
 - **Con esto, toda la "visión ampliada" (2.7-2.13) queda construida y verificada de punta a punta contra Supabase real.**
-- **Arrancado Nivel 3, paso 1 de 4 (plan acordado con Alexandra):** IA lee la foto de la boleta y completa descripción+monto de una compra (sin itemizar todavía — eso es el paso 2). Función nueva `functions/api/parse-factura.js` (mismo patrón que `parse.js`, no se puede probar en local); botón "+ Subir foto de la boleta" en Reporte Diario. Probado lo que sí se puede probar en local: la subida a Storage funciona, y si la función de IA falla (como en local, donde no existe), el error se atrapa con un aviso claro en vez de romper la pantalla. Bloqueado en `sql/20260825_compras_foto_boleta.sql` — y una vez corrida, falta la prueba real con una foto de boleta de verdad en producción (eso sí lo tiene que hacer Alexandra o Gustavo, no se puede simular).
+- **Arrancado Nivel 3, paso 1 de 4 (plan acordado con Alexandra):** IA lee la foto de la boleta y completa descripción+monto de una compra (sin itemizar todavía — eso es el paso 2). Función nueva `functions/api/parse-factura.js` (mismo patrón que `parse.js`).
+- **Alexandra corrió `sql/20260825_compras_foto_boleta.sql` y probó con una boleta real en su celular, en producción — funciona.** La IA leyó el monto exacto ($33.840) y los materiales de una boleta real. Confirma que la función de Cloudflare y OpenAI andan bien — era la única pieza no probable en local, ya validada con caso real.
+- **Hallazgo real, esperado:** con varios materiales en una boleta, la descripción los junta en una sola línea de texto — no se ven cantidades ni precios por ítem. Confirma que **el paso 2 (desglose por ítem, tabla nueva `compra_items`) hay que priorizarlo pronto** en la próxima sesión — no era solo una posibilidad a futuro, ya se sintió la limitación en el primer uso real.
+
+## Para la próxima sesión — empezar acá
+1. **Leer este archivo y `progress/propuesta_arquitectura_operativa.md` primero** (regla del arnés, `CLAUDE.md`).
+2. **Nivel 1, Nivel 2, y toda la "visión ampliada" (2.7-2.13) están construidos y verificados de punta a punta contra Supabase real** — no hay nada pendiente de esas tres secciones.
+3. **Nivel 3 arrancado:** paso 1 de 4 (IA lee foto de boleta) construido y verificado con una boleta real en producción. **Siguiente paso lógico: el paso 2 (desglose por ítem de la boleta)** — Alexandra ya sintió la falta al probarlo, no hace falta volver a preguntar si vale la pena.
+4. Ver la sección "Plan acordado para Nivel 3, en 4 pasos" en `propuesta_arquitectura_operativa.md` para el diseño completo de los pasos 2, 3 y 4.
+5. Repositorio limpio: todo lo de esta sesión está commiteado y pusheado a `main`, sin cambios sueltos sin subir.
 
 ## Sesión 25/08/2026 (continuación) — MCP arriba: 0.2 hecho, hallazgo extra (0.1 ya estaba hecho), 1.1 construido y probado
 
