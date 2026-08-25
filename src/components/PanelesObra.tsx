@@ -2055,10 +2055,10 @@ export function PanelPresupuestos() {
 
 /* ─── Calendario compartido de disponibilidad ────────── */
 const PERSONAS_CALENDARIO = ['Gustavo', 'Alexandra', ...TRABAJADORES]
+const DIAS_SEMANA_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
-function emptyEvento() {
-  const hoy = new Date().toISOString().slice(0, 10)
-  return { fecha: hoy, hora_inicio: '09:00', hora_fin: '10:00', persona: 'Gustavo', titulo: '', cliente_nombre: '', direccion: '', notas: '' }
+function emptyEvento(fecha: string) {
+  return { fecha, hora_inicio: '09:00', hora_fin: '10:00', persona: 'Gustavo', titulo: '', cliente_nombre: '', direccion: '', notas: '' }
 }
 
 function fmtFechaLarga(fecha: string) {
@@ -2066,26 +2066,81 @@ function fmtFechaLarga(fecha: string) {
   return d.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Santiago' })
 }
 
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10)
+}
+function sumarDias(fecha: string, n: number) {
+  const d = new Date(fecha + 'T00:00:00')
+  d.setDate(d.getDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+function sumarMeses(fecha: string, n: number) {
+  const d = new Date(fecha + 'T00:00:00')
+  d.setMonth(d.getMonth() + n)
+  return d.toISOString().slice(0, 10)
+}
+// Lunes de la semana que contiene `fecha` -- semana Lunes a Domingo.
+function inicioDeSemana(fecha: string) {
+  const d = new Date(fecha + 'T00:00:00')
+  const dia = d.getDay() // 0=domingo..6=sábado
+  const diff = dia === 0 ? -6 : 1 - dia
+  return sumarDias(fecha, diff)
+}
+// 42 días (6 semanas) para la grilla del mes, empezando el lunes de la semana del día 1.
+function gridDelMes(fechaAncla: string) {
+  const d = new Date(fechaAncla + 'T00:00:00')
+  const primerDiaMes = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
+  const inicioGrid = inicioDeSemana(primerDiaMes)
+  return Array.from({ length: 42 }, (_, i) => sumarDias(inicioGrid, i))
+}
+
+function LinksDireccion({ direccion }: { direccion: string }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 8 }}>
+      <a
+        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}`}
+        target="_blank" rel="noreferrer"
+        style={{ color: 'var(--primary)', fontWeight: 600 }}
+      >Maps</a>
+      <a
+        href={`https://waze.com/ul?q=${encodeURIComponent(direccion)}&navigate=yes`}
+        target="_blank" rel="noreferrer"
+        style={{ color: 'var(--primary)', fontWeight: 600 }}
+      >Waze</a>
+    </span>
+  )
+}
+
 export function PanelCalendario() {
   const [eventos, setEventos] = useState<EventoCalendario[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
-  const [form, setForm] = useState(emptyEvento())
+  const [vista, setVista] = useState<'dia' | 'semana' | 'mes'>('semana')
+  const [fechaAncla, setFechaAncla] = useState(hoyISO())
+  const [form, setForm] = useState(emptyEvento(hoyISO()))
   const [guardando, setGuardando] = useState(false)
 
-  const cargar = useCallback(async () => {
-    const hoy = new Date().toISOString().slice(0, 10)
+  const rango = (() => {
+    if (vista === 'dia') return { desde: fechaAncla, hasta: fechaAncla }
+    if (vista === 'semana') { const ini = inicioDeSemana(fechaAncla); return { desde: ini, hasta: sumarDias(ini, 6) } }
+    const grid = gridDelMes(fechaAncla)
+    return { desde: grid[0], hasta: grid[grid.length - 1] }
+  })()
+
+  const cargar = useCallback(async (desde: string, hasta: string) => {
+    setLoading(true)
     const { data } = await supabase
       .from('eventos_calendario')
       .select('*')
-      .gte('fecha', hoy)
+      .gte('fecha', desde)
+      .lte('fecha', hasta)
       .order('fecha', { ascending: true })
       .order('hora_inicio', { ascending: true })
     setEventos((data as EventoCalendario[]) || [])
     setLoading(false)
   }, [])
 
-  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => { cargar(rango.desde, rango.hasta) }, [cargar, rango.desde, rango.hasta])
 
   async function crear() {
     if (!form.titulo.trim()) { alert('Completa un título (ej. "Visita técnica - Juan Pérez").'); return }
@@ -2123,9 +2178,9 @@ export function PanelCalendario() {
       alert('No se pudo guardar. Intenta de nuevo.')
       return
     }
-    setForm(emptyEvento())
+    setForm(emptyEvento(fechaAncla))
     setMostrarForm(false)
-    cargar()
+    cargar(rango.desde, rango.hasta)
   }
 
   async function eliminar(id: string) {
@@ -2134,21 +2189,82 @@ export function PanelCalendario() {
     setEventos(prev => prev.filter(e => e.id !== id))
   }
 
-  if (loading) return <div className="spinner" />
-
   const porDia = eventos.reduce<Record<string, EventoCalendario[]>>((acc, e) => {
     if (!acc[e.fecha]) acc[e.fecha] = []
     acc[e.fecha].push(e)
     return acc
   }, {})
 
+  const irA = (fecha: string, v?: 'dia' | 'semana' | 'mes') => {
+    setFechaAncla(fecha)
+    if (v) setVista(v)
+  }
+  const anterior = () => irA(vista === 'dia' ? sumarDias(fechaAncla, -1) : vista === 'semana' ? sumarDias(fechaAncla, -7) : sumarMeses(fechaAncla, -1))
+  const siguiente = () => irA(vista === 'dia' ? sumarDias(fechaAncla, 1) : vista === 'semana' ? sumarDias(fechaAncla, 7) : sumarMeses(fechaAncla, 1))
+
+  const tituloRango = (() => {
+    if (vista === 'dia') return fmtFechaLarga(fechaAncla)
+    if (vista === 'semana') {
+      const ini = new Date(rango.desde + 'T00:00:00')
+      const fin = new Date(rango.hasta + 'T00:00:00')
+      const mismoMes = ini.getMonth() === fin.getMonth()
+      const finTxt = fin.toLocaleDateString('es-CL', { day: 'numeric', month: mismoMes ? undefined : 'long', timeZone: 'America/Santiago' })
+      const iniTxt = ini.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' })
+      return `${iniTxt} – ${finTxt}`
+    }
+    return new Date(fechaAncla + 'T00:00:00').toLocaleDateString('es-CL', { month: 'long', year: 'numeric', timeZone: 'America/Santiago' })
+  })()
+
+  const renderEvento = (ev: EventoCalendario, compacto = false) => (
+    <div key={ev.id} className="card" style={{ padding: compacto ? '8px 10px' : '10px 14px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+      <div style={{ minWidth: compacto ? 68 : 90, fontSize: compacto ? 12 : 13, fontWeight: 700, color: 'var(--primary)', flexShrink: 0 }}>
+        {ev.hora_inicio.slice(0, 5)}–{ev.hora_fin.slice(0, 5)}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: compacto ? 13 : 14, fontWeight: 600 }}>{ev.titulo}</p>
+        <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+          {ev.persona}{ev.cliente_nombre ? ` · ${ev.cliente_nombre}` : ''}
+        </p>
+        {ev.direccion && (
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+            {ev.direccion} · <LinksDireccion direccion={ev.direccion} />
+          </p>
+        )}
+        {ev.notas && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{ev.notas}</p>}
+      </div>
+      <button className="btn btn-ghost" onClick={() => eliminar(ev.id)} style={{ fontSize: 12, padding: '4px 8px', flexShrink: 0 }}>✕</button>
+    </div>
+  )
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <p style={{ fontSize: 13, color: 'var(--muted)' }}>Próximos eventos agendados, de todas las personas.</p>
-        <button className="btn btn-secondary" onClick={() => setMostrarForm(x => !x)} style={{ fontSize: 13 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['dia', 'semana', 'mes'] as const).map(v => (
+            <button
+              key={v}
+              onClick={() => setVista(v)}
+              style={{
+                padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
+                border: `1.5px solid ${vista === v ? 'var(--primary)' : 'var(--border)'}`,
+                background: vista === v ? 'var(--primary)' : 'var(--white)',
+                color: vista === v ? '#fff' : 'var(--muted)', textTransform: 'capitalize',
+              }}
+            >{v}</button>
+          ))}
+        </div>
+        <button className="btn btn-secondary" onClick={() => { setForm(emptyEvento(fechaAncla)); setMostrarForm(x => !x) }} style={{ fontSize: 13 }}>
           {mostrarForm ? 'Cancelar' : '+ Agendar'}
         </button>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button className="btn btn-ghost" onClick={anterior} style={{ fontSize: 16, padding: '4px 10px' }}>‹</button>
+          <p style={{ fontSize: 15, fontWeight: 700, textTransform: 'capitalize' }}>{tituloRango}</p>
+          <button className="btn btn-ghost" onClick={siguiente} style={{ fontSize: 16, padding: '4px 10px' }}>›</button>
+        </div>
+        <button className="btn btn-ghost" onClick={() => irA(hoyISO())} style={{ fontSize: 12 }}>Hoy</button>
       </div>
 
       {mostrarForm && (
@@ -2199,35 +2315,72 @@ export function PanelCalendario() {
         </div>
       )}
 
-      {Object.keys(porDia).length === 0 ? (
-        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Sin eventos agendados todavía.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {Object.entries(porDia).map(([fecha, evs]) => (
-            <div key={fecha}>
-              <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
-                {fmtFechaLarga(fecha)}
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {evs.map(ev => (
-                  <div key={ev.id} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                    <div style={{ minWidth: 90, fontSize: 13, fontWeight: 700, color: 'var(--primary)', flexShrink: 0 }}>
-                      {ev.hora_inicio.slice(0, 5)}–{ev.hora_fin.slice(0, 5)}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 14, fontWeight: 600 }}>{ev.titulo}</p>
-                      <p style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        {ev.persona}{ev.cliente_nombre ? ` · ${ev.cliente_nombre}` : ''}{ev.direccion ? ` · ${ev.direccion}` : ''}
-                      </p>
-                      {ev.notas && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{ev.notas}</p>}
-                    </div>
-                    <button className="btn btn-ghost" onClick={() => eliminar(ev.id)} style={{ fontSize: 12, padding: '4px 8px', flexShrink: 0 }}>✕</button>
-                  </div>
-                ))}
-              </div>
-            </div>
+      {loading ? (
+        <div className="spinner" />
+      ) : vista === 'mes' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+          {DIAS_SEMANA_CORTOS.map(d => (
+            <div key={d} style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textAlign: 'center', paddingBottom: 4 }}>{d}</div>
           ))}
+          {gridDelMes(fechaAncla).map(fecha => {
+            const enMes = new Date(fecha + 'T00:00:00').getMonth() === new Date(fechaAncla + 'T00:00:00').getMonth()
+            const evs = (porDia[fecha] || []).sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
+            const esHoy = fecha === hoyISO()
+            return (
+              <button
+                key={fecha}
+                onClick={() => irA(fecha, 'dia')}
+                style={{
+                  minHeight: 68, padding: '4px 5px', textAlign: 'left', cursor: 'pointer',
+                  background: esHoy ? '#fff7ed' : 'var(--white)', opacity: enMes ? 1 : 0.4,
+                  border: `1px solid ${esHoy ? 'var(--primary)' : 'var(--border)'}`, borderRadius: 6,
+                  display: 'flex', flexDirection: 'column', gap: 2,
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: esHoy ? 800 : 600, color: esHoy ? 'var(--primary)' : 'var(--text)' }}>
+                  {Number(fecha.slice(8, 10))}
+                </span>
+                {evs.slice(0, 2).map(ev => (
+                  <span key={ev.id} style={{ fontSize: 9.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                    {ev.hora_inicio.slice(0, 5)} {ev.titulo}
+                  </span>
+                ))}
+                {evs.length > 2 && (
+                  <span style={{ fontSize: 9.5, color: 'var(--primary)', fontWeight: 700 }}>+{evs.length - 2} más</span>
+                )}
+              </button>
+            )
+          })}
         </div>
+      ) : vista === 'semana' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {Array.from({ length: 7 }, (_, i) => sumarDias(rango.desde, i)).map(fecha => {
+            const evs = porDia[fecha] || []
+            return (
+              <div key={fecha}>
+                <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: fecha === hoyISO() ? 'var(--primary)' : 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                  {fmtFechaLarga(fecha)}
+                </p>
+                {evs.length === 0 ? (
+                  <p style={{ fontSize: 12, color: 'var(--muted)', paddingLeft: 2 }}>Sin eventos.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {evs.map(ev => renderEvento(ev, true))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        // vista === 'dia'
+        (porDia[fechaAncla] || []).length === 0 ? (
+          <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Sin eventos agendados este día.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(porDia[fechaAncla] || []).map(ev => renderEvento(ev))}
+          </div>
+        )
       )}
     </div>
   )

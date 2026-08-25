@@ -131,6 +131,14 @@ Protegida con el mismo patrón token-en-URL que `/g`/`/reporte` (`VITE_PRESUPUES
 - **Alexandra corrió `sql/20260825_eventos_calendario.sql`. Verificado de punta a punta 25/08/2026** (con eventos de prueba, borrados después, sin dejar rastro): se agendó un evento para Gustavo 09:00–10:00, y al intentar agendar otro superpuesto (09:30–10:30) para la misma persona, apareció el aviso exacto con el detalle del choque ("Gustavo ya tiene algo agendado ese día a esa hora: 09:00–10:00 (...)"); al confirmar igual, el segundo evento se guardó también. Ambos visibles en la lista, agrupados por día, con horario/título/persona.
 - `tsc --noEmit` limpio, `init.sh` en verde. **2.6 cerrado del todo. Nivel 2 completo.**
 
+### Mejora a 2.6: vistas Día/Semana/Mes + Maps/Waze (misma sesión 25/08/2026)
+- Pedido de Alexandra: vistas tipo Google Calendar (día/semana/mes) y que la dirección sea clickable para abrir en Maps o Waze sin copiarla.
+- **Sin migración nueva** — es un cambio de frontend/rango de consulta sobre `eventos_calendario`, que ya existía completa.
+- `PanelCalendario` reescrito: switcher de vista (Día/Semana/Mes), navegación anterior/siguiente/Hoy sobre una `fechaAncla`, tres layouts (día = lista simple, semana = agenda de 7 días, mes = grilla de 6 semanas con celdas clickeables que saltan a la vista día de ese día). La consulta ahora trae solo el rango visible (`.gte/.lte` sobre `fecha`) en vez de "todo lo próximo".
+- Dirección de cada evento ahora muestra dos links, `Maps` y `Waze`, que abren `https://www.google.com/maps/search/?api=1&query=...` y `https://waze.com/ul?q=...&navigate=yes` con la dirección codificada — el usuario elige cuál abrir, sin copiar nada.
+- **Verificado con Playwright contra Vite local 25/08/2026:** evento de prueba con dirección real, confirmado que aparece en vista semana y en vista día; vista mes carga sin error y muestra los encabezados de días; los `href` de los links Maps/Waze se generaron con la dirección correctamente codificada; navegación (‹, ›, Hoy) no tira errores de página. Evento de prueba borrado al final del test, sin dejar rastro.
+- `tsc --noEmit` limpio, `init.sh` en verde.
+
 ### Visión ampliada de Alexandra, 25/08/2026 — al ver la app en producción
 
 Todavía sin construir, escrito acá para no perder el hilo (viene de una sola conversación larga, se agrupa por tema). Idea general que los une: **"un cliente debe vivir organizado toda su vida dentro de su creación"** — presupuesto → pago → factura → obra → garantía, todo cruzado y consultable desde un solo lugar, en vez de que Gustavo tenga que salir de la app a buscar algo en Drive o en su teléfono.
