@@ -1,7 +1,43 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 26/08/2026 (continuación 3)
+## Última actualización: 26/08/2026 (continuación 4)
+
+## Sesión 26/08/2026 (continuación 4) — Ajustes manuales, adelantos con comprobante, Historial de pagos, Archivar en Gustavo — siguiendo el plan aprobado (`steady-purring-spring.md`)
+
+Implementado en el orden del plan, `tsc --noEmit` (desde `src/`, comando del arnés) limpio después de cada paso y al final. Sin `git push` (no se pidió). Resuelve los dos casos reales que trajo Alexandra: Fabriel trabajando un sábado (comprobante $100.000 vs. calculado $50.000) y Henry/Alejandro cobrando de menos por una corrección de semana anterior.
+
+1. **Ajustes manuales por fila — construido, bloqueado en una migración pendiente.** `sql/20260826_ajustes_pago_semanal.sql` (tabla `ajustes_pago_semanal`, mismo patrón anon-full-access de siempre). **Confirmado contra Supabase real (MCP, solo lectura) antes de escribir código que la tabla no existía.** En `PanelPagoSemanal` cada fila tiene un botón "▾ Ajustar/Adelanto" que expande una fila de detalle con "± Ajustar" (monto +/-, motivo) → insert con `semana_key` de la semana mostrada. El Neto de la fila ahora es `Calculado + Ajustes` (antes de restar adelantos), con los motivos listados en el detalle expandible.
+
+2. **Adelantos con comprobante — construido, bloqueado en la misma migración pendiente.** `sql/20260826_adelantos_trabajador.sql` (tabla `adelantos_trabajador`). Botón "+ Adelanto" en la misma fila de detalle (monto, fecha default hoy, nota, subir comprobante — mismo patrón que `ComprobanteCelda`/`subirFotoBoleta`, bucket `audio-notas`) → insert. **Cómo resta, verificado en el código y en el navegador:** para trabajadores semanales (`sueldoFijo=false`, todos salvo Fabriel), sus adelantos de esa semana (por rango de fecha lunes-domingo, función `semanaRango`) restan del Neto: `Neto = Calculado + Ajustes − Adelantos`. Para Fabriel (`sueldoFijo=true`), sus adelantos NO restan de la fila semanal — la UI muestra la nota "Sus adelantos no restan acá (sueldo fijo)" y se acumulan aparte para el historial mensual (punto 3). `ComprobanteCelda` ahora compara el comprobante subido contra el **Neto** (antes comparaba contra `f.total` bruto) — se le pasa `montoCalculado={f.neto}` en vez de `f.total`.
+   - Cálculo factorizado en una función compartida nueva, exportada para reuso: `calcularFilaPagoSemanal()` + `semanaRango()`, ambas en `PanelesObra.tsx` — la usan tanto `PanelPagoSemanal` (semana en curso, con formularios) como `PanelHistorialPagos` (semanas pasadas, solo lectura), para que el Neto nunca se calcule distinto en los dos lugares.
+
+3. **"Historial de pagos" — componente nuevo `PanelHistorialPagos`, card separada de "Pago semanal" en Admin y Gustavo, construido y verificado.** Selector de trabajador (tabla `trabajadores`).
+   - **Sueldo fijo (Fabriel):** agrupa por mes calendario (mes de cada semana según el lunes). Trae `gastos_fijos` con `concepto` conteniendo el nombre del trabajador (case-insensitive) y `activo=true` = Sueldo del mes; trae `adelantos_trabajador` de ese trabajador agrupados por mes = Adelantado; `Resta pagar = Sueldo − Adelantado`; debajo, detalle semanal de viático/ajustes/comprobante de ese mes (reusa `calcularFilaPagoSemanal` con adelantos vacíos, ya que para sueldo fijo no restan de la semana).
+   - **Semanal (resto):** agrupa por semana, reusando `calcularFilaPagoSemanal` — por semana: Calculado, Ajustes (con motivo), Adelantos (con comprobante), Neto, Comprobante final (mismo `ComprobanteCelda`, permite subir/reemplazar también desde el historial).
+   - Card "Historial de pagos" agregada en `Gustavo.tsx` y `Admin.tsx` (mismo criterio que "Pago semanal").
+
+4. **Archivar clientes también en Gustavo — hecho y verificado.** En `PanelClientes` (`PanelesObra.tsx`) se sacó el `modoAdmin &&` que tapaba el botón Archivar/Desarchivar y el toggle "Ver archivados" — ahora aparecen en los dos paneles. "+ Pendiente" se dejó intacto, sigue dependiendo solo de que `onNuevoPendiente` esté definido (Gustavo no lo pasa, así que no aparece ahí — verificado).
+
+**Verificación hecha, con qué se comparó:**
+- `tsc --noEmit` limpio después de cada paso y al final (sin errores).
+- **Contra Supabase real (MCP `supabase-horma`, solo lectura), antes de escribir las migraciones:** confirmado que ni `ajustes_pago_semanal` ni `adelantos_trabajador` existían; confirmado `trabajadores` (Fabriel `tarifa_diaria=0`, el resto con tarifa); confirmado `gastos_fijos` de Fabriel = "Sueldo fijo Fabriel" $700.000 + "Bono encargado de obra - Fabriel" $300.000 = **$1.000.000/mes exacto**.
+- **Simulación de insert con la anon key (mismo canal que el frontend, vía `curl`) contra las dos tablas nuevas:** ambas fallan con `PGRST205 — Could not find the table`, el error exacto esperado — confirma que el código de guardado está listo y solo falta que Alexandra corra las 2 migraciones. Repetido al final de la sesión, mismo resultado (nada quedó insertado por error).
+- **Probado en navegador real (Vite local + Playwright, cargado desde el npx cache ante la falta de instalación local):** `PanelPagoSemanal` en Gustavo muestra la semana en curso (24-30 ago) con Total neto **$480.000**, exactamente el mismo consolidado ya verificado en una sesión anterior contra Supabase (Fabriel/Henry/Manuel/Misael/Samuel) — confirma que la refactorización a `calcularFilaPagoSemanal` no cambió ningún número existente. Fila de Fabriel expandida: muestra "Ajustar/Adelanto", formulario "± Ajustar" abre con Monto/Motivo, formulario "+ Adelanto" abre con Monto/Fecha/Nota/Comprobante; ambos guardados fallan con el error de tabla esperado (ver arriba), sin romper la pantalla.
+   - **Hallazgo real, no fabricado: `PanelHistorialPagos` para Fabriel ya muestra en vivo, con datos reales, el caso exacto que motivó esta tarea** — la semana 17-23 ago aparece con "⚠ No coincide: comprobante $100.000 · calculado $50.000" (el comprobante real que ya había subido Gustavo esa semana). En cuanto Alexandra corra la migración y cargue el ajuste de +$50.000 "trabajó sábado" para esa semana, el calculado pasará a $100.000 y va a coincidir solo — sin tocar nada más.
+   - `PanelHistorialPagos` para Henry (semanal) muestra 4 semanas con Calculado/Neto idénticos a los ya verificados antes (semana en curso $120.000, etc.) — coincide con el consolidado ya confirmado contra Supabase.
+   - `PanelClientes` en Gustavo: confirmado en pantalla que "Ver archivados" aparece en la lista y "Archivar" aparece en el detalle de un cliente real (Alfonso Vadell), y que "+ Pendiente" **no** aparece (correcto, sigue siendo exclusivo de Admin).
+- **Sin datos de prueba insertados en ningún lado** — todos los intentos de guardar (ajuste, adelanto) fallaron por la migración pendiente, así que no hay nada que limpiar en Supabase ni en Storage (no se llegó a probar la subida de comprobante de un adelanto porque el insert final de todas formas iba a fallar).
+- **Admin.tsx no se pudo probar en vivo** (login vía Cloudflare Function, límite conocido) — confirmado que la pantalla de login sigue cargando sin errores de consola tras el cambio; el resto se verificó por lectura de código y `tsc` limpio, apoyado en que reusa exactamente los mismos componentes (`PanelPagoSemanal`, `PanelHistorialPagos`, `PanelClientes`) ya verificados del lado de Gustavo.
+
+**Pendiente para Alexandra — 2 migraciones nuevas a correr (no dependen una de la otra, cualquier orden):**
+1. `sql/20260826_ajustes_pago_semanal.sql`
+2. `sql/20260826_adelantos_trabajador.sql`
+
+**Después de correr las 2 migraciones, repetir esta verificación (no se pudo hacer hoy porque dependía de ellas):**
+- Cargar un ajuste real de prueba (+$50.000, motivo "trabajó sábado") sobre la fila de Fabriel semana 17-23 ago y confirmar en pantalla que el Neto sube a $100.000 y el badge pasa de "No coincide" a "✓ Coincide" — sería la primera vez que se ve el flujo completo funcionando con el caso real que lo motivó.
+- Cargar un adelanto de prueba con comprobante a un trabajador semanal y confirmar que resta del Neto de esa semana; cargar uno a Fabriel y confirmar que NO resta de su fila semanal pero sí aparece en su "Historial de pagos" contra el sueldo mensual.
+- Borrar cualquier dato de prueba real que se cargue en el camino, sin dejar rastro (mismo criterio de siempre).
 
 ## Sesión 26/08/2026 (continuación 3) — Banco de contenido + Ideas de contenido, siguiendo el plan aprobado (`steady-purring-spring.md`)
 

@@ -328,3 +328,22 @@ export interface PagoSemanalComprobante {
   monto_leido: number | null
   monto_calculado: number | null
 }
+
+export interface AjustePagoSemanal {
+  id: string
+  created_at: string
+  trabajador: string
+  semana_key: string
+  monto: number
+  motivo: string
+}
+
+export interface AdelantoTrabajador {
+  id: string
+  created_at: string
+  trabajador: string
+  fecha: string
+  monto: number
+  comprobante_url: string | null
+  nota: string | null
+}

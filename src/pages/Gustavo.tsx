@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
 import Presupuesto from './Presupuesto'
 import PresupuestoEtapas from './PresupuestoEtapas'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelClientes, PanelIdeasContenido } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelClientes, PanelIdeasContenido } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
@@ -489,7 +489,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados' | 'boletas' | 'presupuestador' | 'ideas'
+  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'resultados' | 'boletas' | 'presupuestador' | 'ideas'
   const [seccion, setSeccion] = useState<SeccionGustavo | null>(null)
   const [modoPresupuestador, setModoPresupuestador] = useState<'simple' | 'etapas'>('simple')
 
@@ -500,6 +500,7 @@ export default function Gustavo({ token }: Props) {
     { key: 'calendario', label: 'Calendario', color: '#7c3aed' },
     { key: 'obras', label: 'Obras', color: '#c1440e' },
     { key: 'pagos', label: 'Pago semanal', color: '#e67e22' },
+    { key: 'historial_pagos', label: 'Historial de pagos', color: '#b45309' },
     { key: 'boletas', label: 'Boletas', color: '#0ea5e9' },
     { key: 'presupuestos', label: 'Mis presupuestos', color: '#059669' },
     { key: 'presupuestador', label: 'Hacer presupuesto', color: '#e69a21' },
@@ -650,6 +651,8 @@ export default function Gustavo({ token }: Props) {
               <PanelStock />
             ) : seccion === 'pagos' ? (
               <PanelPagoSemanal />
+            ) : seccion === 'historial_pagos' ? (
+              <PanelHistorialPagos />
             ) : seccion === 'resultados' ? (
               <PanelEstadoResultados />
             ) : seccion === 'ideas' ? (

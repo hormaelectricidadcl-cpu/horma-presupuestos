@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -1152,6 +1152,59 @@ function agruparPorPeriodo(
   return Array.from(mapa.values()).sort((a, b) => b.key.localeCompare(a.key))
 }
 
+/* ─── Cálculo compartido de una fila de pago semanal ──── */
+// Usado por PanelPagoSemanal (semana en curso, con formularios para cargar) y por
+// PanelHistorialPagos (semanas pasadas, solo lectura) -- una sola fuente de verdad
+// para que "cuánto se le debe a alguien esta semana" nunca se calcule distinto en
+// los dos lugares donde se muestra.
+export interface FilaPagoSemanal {
+  trabajador: string
+  sueldoFijo: boolean
+  dias: number
+  ganado: number
+  viatico: number
+  calculado: number // ganado + viático, sin ajustes ni adelantos
+  ajustes: AjustePagoSemanal[]
+  totalAjustes: number
+  // Adelantos que efectivamente restan del Neto de esta fila -- vacío si es sueldo
+  // fijo, porque su adelanto se descuenta de su sueldo MENSUAL, no de esta semana.
+  adelantosQueRestan: AdelantoTrabajador[]
+  totalAdelantosQueRestan: number
+  neto: number
+}
+
+// Rango lunes-domingo (mismas fechas 'YYYY-MM-DD' que usa `getPeriodo`) de una
+// semana a partir de su key (el lunes).
+export function semanaRango(semanaKey: string): { inicio: string; fin: string } {
+  const [y, m, d] = semanaKey.split('-').map(Number)
+  const monday = new Date(y, m - 1, d)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  const fin = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')}`
+  return { inicio: semanaKey, fin }
+}
+
+export function calcularFilaPagoSemanal(
+  t: Trabajador,
+  diariosPresentes: ReporteTrabajadorDia[],
+  ajustesDeLaSemana: AjustePagoSemanal[],
+  adelantosDeLaSemana: AdelantoTrabajador[],
+): FilaPagoSemanal {
+  const sueldoFijo = t.tarifa_diaria === 0
+  const dias = diariosPresentes.reduce((s, d) => s + d.fraccion_jornada, 0)
+  const ganado = sueldoFijo ? 0 : diariosPresentes.reduce((s, d) => s + d.fraccion_jornada * t.tarifa_diaria, 0)
+  const viatico = diariosPresentes.reduce((s, d) => s + (d.viatico ? t.viatico_diario : 0), 0)
+  const calculado = ganado + viatico
+  const totalAjustes = ajustesDeLaSemana.reduce((s, a) => s + a.monto, 0)
+  const adelantosQueRestan = sueldoFijo ? [] : adelantosDeLaSemana
+  const totalAdelantosQueRestan = adelantosQueRestan.reduce((s, a) => s + a.monto, 0)
+  const neto = calculado + totalAjustes - totalAdelantosQueRestan
+  return {
+    trabajador: t.nombre, sueldoFijo, dias, ganado, viatico, calculado,
+    ajustes: ajustesDeLaSemana, totalAjustes, adelantosQueRestan, totalAdelantosQueRestan, neto,
+  }
+}
+
 /* ─── Comprobante de pago semanal (uno por fila de trabajador/semana) ──── */
 function ComprobanteCelda({ trabajador, semanaKey, montoCalculado, comprobante, onSubido }: {
   trabajador: string
@@ -1253,22 +1306,180 @@ function ComprobanteCelda({ trabajador, semanaKey, montoCalculado, comprobante, 
 }
 
 /* ─── Pago semanal a trabajadores (todas las obras) ──── */
+// Fila expandible con el detalle de ajustes/adelantos de la semana y los formularios
+// chicos para cargar uno nuevo -- usado solo por PanelPagoSemanal (donde SÍ se puede
+// cargar), PanelHistorialPagos solo muestra el detalle ya cargado, sin formularios.
+function DetalleAjustesAdelantos({ fila, semanaKey, onGuardado }: { fila: FilaPagoSemanal; semanaKey: string; onGuardado: () => void }) {
+  const [formAbierto, setFormAbierto] = useState<'ajuste' | 'adelanto' | null>(null)
+  const [montoAjuste, setMontoAjuste] = useState('')
+  const [motivoAjuste, setMotivoAjuste] = useState('')
+  const [montoAdelanto, setMontoAdelanto] = useState('')
+  const [fechaAdelanto, setFechaAdelanto] = useState(() => new Date().toISOString().slice(0, 10))
+  const [notaAdelanto, setNotaAdelanto] = useState('')
+  const [comprobanteAdelantoUrl, setComprobanteAdelantoUrl] = useState<string | null>(null)
+  const [subiendoComprobante, setSubiendoComprobante] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+
+  async function guardarAjuste() {
+    const monto = Number(montoAjuste)
+    if (!Number.isFinite(monto) || monto === 0) { alert('El monto tiene que ser un número distinto de cero.'); return }
+    if (!motivoAjuste.trim()) { alert('Escribe el motivo del ajuste.'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('ajustes_pago_semanal').insert({
+      trabajador: fila.trabajador, semana_key: semanaKey, monto, motivo: motivoAjuste.trim(),
+    })
+    setGuardando(false)
+    if (error) { alert('No se pudo guardar el ajuste: ' + error.message); return }
+    setMontoAjuste(''); setMotivoAjuste(''); setFormAbierto(null)
+    onGuardado()
+  }
+
+  async function subirComprobanteAdelanto(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0]
+    e.target.value = ''
+    if (!archivo) return
+    setSubiendoComprobante(true)
+    try {
+      const ext = archivo.name.split('.').pop() || 'jpg'
+      const filename = `adelanto-${fila.trabajador.replace(/\s+/g, '_')}-${Date.now()}.${ext}`
+      const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+      if (error) { alert('Error al subir el comprobante: ' + error.message); return }
+      const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
+      setComprobanteAdelantoUrl(urlData.publicUrl)
+    } finally {
+      setSubiendoComprobante(false)
+    }
+  }
+
+  async function guardarAdelanto() {
+    const monto = Number(montoAdelanto)
+    if (!Number.isFinite(monto) || monto <= 0) { alert('El monto tiene que ser un número mayor a cero.'); return }
+    if (!fechaAdelanto) { alert('Elige la fecha del adelanto.'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('adelantos_trabajador').insert({
+      trabajador: fila.trabajador, fecha: fechaAdelanto, monto,
+      comprobante_url: comprobanteAdelantoUrl, nota: notaAdelanto.trim() || null,
+    })
+    setGuardando(false)
+    if (error) { alert('No se pudo guardar el adelanto: ' + error.message); return }
+    setMontoAdelanto(''); setNotaAdelanto(''); setComprobanteAdelantoUrl(null)
+    setFechaAdelanto(new Date().toISOString().slice(0, 10)); setFormAbierto(null)
+    onGuardado()
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12 }}>
+      {fila.ajustes.length > 0 && (
+        <div>
+          <p style={{ fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>Ajustes de la semana</p>
+          {fila.ajustes.map(a => (
+            <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0' }}>
+              <span style={{ color: 'var(--text)' }}>{a.motivo}</span>
+              <span style={{ fontWeight: 700, color: a.monto >= 0 ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
+                {a.monto >= 0 ? '+' : ''}{fmtMoney(a.monto)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(fila.adelantosQueRestan.length > 0 || fila.sueldoFijo) && (
+        <div>
+          <p style={{ fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>Adelantos</p>
+          {fila.adelantosQueRestan.map(a => (
+            <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0' }}>
+              <span style={{ color: 'var(--text)' }}>
+                {a.fecha.split('-').reverse().join('/')}{a.nota ? ` — ${a.nota}` : ''}
+                {a.comprobante_url && <a href={a.comprobante_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: 'var(--primary)' }}>Ver comprobante</a>}
+              </span>
+              <span style={{ fontWeight: 700, color: 'var(--danger)', whiteSpace: 'nowrap' }}>-{fmtMoney(a.monto)}</span>
+            </div>
+          ))}
+          {fila.sueldoFijo && (
+            <p style={{ color: 'var(--muted)', fontStyle: 'italic' }}>
+              Sus adelantos no restan acá (sueldo fijo) — se descuentan de su sueldo mensual, ver "Historial de pagos".
+            </p>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => setFormAbierto(x => x === 'ajuste' ? null : 'ajuste')}
+          className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
+        >± Ajustar</button>
+        <button
+          onClick={() => setFormAbierto(x => x === 'adelanto' ? null : 'adelanto')}
+          className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}
+        >+ Adelanto</button>
+      </div>
+
+      {formAbierto === 'ajuste' && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', background: 'var(--bg)', padding: 8, borderRadius: 8 }}>
+          <div className="field" style={{ maxWidth: 140 }}>
+            <label>Monto (+/-)</label>
+            <input type="number" value={montoAjuste} onChange={e => setMontoAjuste(e.target.value)} placeholder="Ej: 50000 o -20000" />
+          </div>
+          <div className="field" style={{ flex: 1, minWidth: 160 }}>
+            <label>Motivo</label>
+            <input type="text" value={motivoAjuste} onChange={e => setMotivoAjuste(e.target.value)} placeholder="Ej: trabajó sábado" />
+          </div>
+          <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 10px' }} onClick={guardarAjuste} disabled={guardando}>
+            {guardando ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      )}
+
+      {formAbierto === 'adelanto' && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', background: 'var(--bg)', padding: 8, borderRadius: 8 }}>
+          <div className="field" style={{ maxWidth: 120 }}>
+            <label>Monto</label>
+            <input type="number" value={montoAdelanto} onChange={e => setMontoAdelanto(e.target.value)} placeholder="Ej: 100000" />
+          </div>
+          <div className="field" style={{ maxWidth: 140 }}>
+            <label>Fecha</label>
+            <input type="date" value={fechaAdelanto} onChange={e => setFechaAdelanto(e.target.value)} />
+          </div>
+          <div className="field" style={{ flex: 1, minWidth: 140 }}>
+            <label>Nota</label>
+            <input type="text" value={notaAdelanto} onChange={e => setNotaAdelanto(e.target.value)} placeholder="Opcional" />
+          </div>
+          <label className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 8px', cursor: subiendoComprobante ? 'default' : 'pointer' }}>
+            {subiendoComprobante ? 'Subiendo...' : comprobanteAdelantoUrl ? 'Comprobante ✓' : '+ Comprobante'}
+            <input type="file" accept="image/*" onChange={subirComprobanteAdelanto} disabled={subiendoComprobante} style={{ display: 'none' }} />
+          </label>
+          <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 10px' }} onClick={guardarAdelanto} disabled={guardando}>
+            {guardando ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function PanelPagoSemanal() {
   const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
   const [tarifas, setTarifas] = useState<Trabajador[]>([])
   const [comprobantes, setComprobantes] = useState<PagoSemanalComprobante[]>([])
+  const [ajustes, setAjustes] = useState<AjustePagoSemanal[]>([])
+  const [adelantos, setAdelantos] = useState<AdelantoTrabajador[]>([])
   const [loading, setLoading] = useState(true)
   const [semanaKey, setSemanaKey] = useState('')
+  const [expandido, setExpandido] = useState<string | null>(null)
 
   const cargar = useCallback(async () => {
-    const [{ data: d }, { data: t }, { data: c }] = await Promise.all([
+    const [{ data: d }, { data: t }, { data: c }, { data: aj }, { data: ad }] = await Promise.all([
       supabase.from('reportes_diarios').select('*'),
       supabase.from('trabajadores').select('*'),
       supabase.from('pago_semanal_comprobantes').select('*'),
+      supabase.from('ajustes_pago_semanal').select('*'),
+      supabase.from('adelantos_trabajador').select('*'),
     ])
     setDiarios((d as ReporteTrabajadorDia[]) || [])
     setTarifas((t as Trabajador[]) || [])
     setComprobantes((c as PagoSemanalComprobante[]) || [])
+    setAjustes((aj as AjustePagoSemanal[]) || [])
+    setAdelantos((ad as AdelantoTrabajador[]) || [])
     setLoading(false)
   }, [])
 
@@ -1288,19 +1499,18 @@ export function PanelPagoSemanal() {
     return <p style={{ color: 'var(--muted)', fontSize: 14 }}>Todavía no hay reportes diarios cargados.</p>
   }
   const semana = semanas.find(s => s.key === semanaKey) || semanas.find(s => s.enCurso) || semanas[0]
+  const { inicio, fin } = semanaRango(semana.key)
 
   const filas = tarifas
     .map(t => {
       const diasPresentes = semana.diarios.filter(d => d.trabajador === t.nombre && d.presente)
-      const dias = diasPresentes.reduce((s, d) => s + d.fraccion_jornada, 0)
-      const sueldoFijo = t.tarifa_diaria === 0
-      const ganado = sueldoFijo ? 0 : diasPresentes.reduce((s, d) => s + d.fraccion_jornada * t.tarifa_diaria, 0)
-      const viatico = diasPresentes.reduce((s, d) => s + (d.viatico ? t.viatico_diario : 0), 0)
-      return { trabajador: t.nombre, sueldoFijo, dias, ganado, viatico, total: ganado + viatico }
+      const ajustesDeLaSemana = ajustes.filter(a => a.trabajador === t.nombre && a.semana_key === semana.key)
+      const adelantosDeLaSemana = adelantos.filter(a => a.trabajador === t.nombre && a.fecha >= inicio && a.fecha <= fin)
+      return calcularFilaPagoSemanal(t, diasPresentes, ajustesDeLaSemana, adelantosDeLaSemana)
     })
-    .filter(f => f.dias > 0)
+    .filter(f => f.dias > 0 || f.ajustes.length > 0 || f.adelantosQueRestan.length > 0)
 
-  const totalSemana = filas.reduce((s, f) => s + f.total, 0)
+  const totalSemana = filas.reduce((s, f) => s + f.neto, 0)
   const haySueldoFijo = filas.some(f => f.sueldoFijo)
 
   return (
@@ -1329,7 +1539,7 @@ export function PanelPagoSemanal() {
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <StatTile label="Total a pagar esa semana" valor={fmtMoney(totalSemana)} tono="alerta" />
+        <StatTile label="Total neto a pagar esa semana" valor={fmtMoney(totalSemana)} tono="alerta" />
       </div>
 
       {filas.length === 0 ? (
@@ -1343,8 +1553,11 @@ export function PanelPagoSemanal() {
                 <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Días</th>
                 <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ganado</th>
                 <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Viático</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total</th>
+                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ajustes</th>
+                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Adelantos</th>
+                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Neto</th>
                 <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Comprobante</th>
+                <th style={{ padding: '8px 10px' }} />
               </tr>
             </thead>
             <tbody>
@@ -1353,30 +1566,52 @@ export function PanelPagoSemanal() {
                   .filter(c => c.trabajador === f.trabajador && c.semana_key === semana.key)
                   .sort((a, b) => b.created_at.localeCompare(a.created_at))
                 const ultimoComprobante = comprobantesFila[0] || null
+                const abierta = expandido === f.trabajador
                 return (
-                  <tr key={f.trabajador} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '10px', fontWeight: 700 }}>
-                      {f.trabajador}
-                      {f.sueldoFijo && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, color: 'var(--muted)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px' }}>
-                          Sueldo fijo
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: '10px', textAlign: 'right' }}>{f.dias}</td>
-                    <td style={{ padding: '10px', textAlign: 'right' }}>{f.sueldoFijo ? '—' : fmtMoney(f.ganado)}</td>
-                    <td style={{ padding: '10px', textAlign: 'right' }}>{f.viatico > 0 ? fmtMoney(f.viatico) : '—'}</td>
-                    <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: 'var(--secondary)' }}>{fmtMoney(f.total)}</td>
-                    <td style={{ padding: '10px', textAlign: 'right' }}>
-                      <ComprobanteCelda
-                        trabajador={f.trabajador}
-                        semanaKey={semana.key}
-                        montoCalculado={f.total}
-                        comprobante={ultimoComprobante}
-                        onSubido={cargar}
-                      />
-                    </td>
-                  </tr>
+                  <Fragment key={f.trabajador}>
+                    <tr style={{ borderBottom: abierta ? 'none' : '1px solid var(--border)' }}>
+                      <td style={{ padding: '10px', fontWeight: 700 }}>
+                        {f.trabajador}
+                        {f.sueldoFijo && (
+                          <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, color: 'var(--muted)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px' }}>
+                            Sueldo fijo
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px', textAlign: 'right' }}>{f.dias}</td>
+                      <td style={{ padding: '10px', textAlign: 'right' }}>{f.sueldoFijo ? '—' : fmtMoney(f.ganado)}</td>
+                      <td style={{ padding: '10px', textAlign: 'right' }}>{f.viatico > 0 ? fmtMoney(f.viatico) : '—'}</td>
+                      <td style={{ padding: '10px', textAlign: 'right', color: f.totalAjustes >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                        {f.totalAjustes !== 0 ? `${f.totalAjustes > 0 ? '+' : ''}${fmtMoney(f.totalAjustes)}` : '—'}
+                      </td>
+                      <td style={{ padding: '10px', textAlign: 'right', color: 'var(--danger)' }}>
+                        {f.totalAdelantosQueRestan > 0 ? `-${fmtMoney(f.totalAdelantosQueRestan)}` : '—'}
+                      </td>
+                      <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: 'var(--secondary)' }}>{fmtMoney(f.neto)}</td>
+                      <td style={{ padding: '10px', textAlign: 'right' }}>
+                        <ComprobanteCelda
+                          trabajador={f.trabajador}
+                          semanaKey={semana.key}
+                          montoCalculado={f.neto}
+                          comprobante={ultimoComprobante}
+                          onSubido={cargar}
+                        />
+                      </td>
+                      <td style={{ padding: '10px', textAlign: 'right' }}>
+                        <button
+                          onClick={() => setExpandido(abierta ? null : f.trabajador)}
+                          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}
+                        >{abierta ? '▲' : '▾'} Ajustar/Adelanto</button>
+                      </td>
+                    </tr>
+                    {abierta && (
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td colSpan={9} style={{ padding: '4px 10px 14px' }}>
+                          <DetalleAjustesAdelantos fila={f} semanaKey={semana.key} onGuardado={cargar} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 )
               })}
             </tbody>
@@ -1386,9 +1621,233 @@ export function PanelPagoSemanal() {
 
       {haySueldoFijo && (
         <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
-          Los trabajadores marcados "Sueldo fijo" tienen mensualidad fija (ver Gastos Fijos en Estado de Resultados) — acá solo se refleja su viático de esa semana, no un cálculo por día.
+          Los trabajadores marcados "Sueldo fijo" tienen mensualidad fija (ver Gastos Fijos en Estado de Resultados) — acá solo se refleja su viático de esa semana más los ajustes que corresponda, no un cálculo por día. Sus adelantos se ven en "Historial de pagos".
         </p>
       )}
+    </div>
+  )
+}
+
+/* ─── Fila de detalle semanal, solo lectura, para el historial ──── */
+function FilaSemanaHistorial({ fila, semanaKey, semanaLabel, comprobante, onSubido }: {
+  fila: FilaPagoSemanal
+  semanaKey: string
+  semanaLabel: string
+  comprobante: PagoSemanalComprobante | null
+  onSubido: () => void
+}) {
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, fontSize: 13 }}>{semanaLabel}</span>
+        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--secondary)' }}>Neto {fmtMoney(fila.neto)}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+        <span>Calculado: {fmtMoney(fila.calculado)}</span>
+        {fila.totalAjustes !== 0 && (
+          <span style={{ color: fila.totalAjustes >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+            Ajustes: {fila.totalAjustes > 0 ? '+' : ''}{fmtMoney(fila.totalAjustes)}
+          </span>
+        )}
+        {fila.totalAdelantosQueRestan > 0 && (
+          <span style={{ color: 'var(--danger)' }}>Adelantos: -{fmtMoney(fila.totalAdelantosQueRestan)}</span>
+        )}
+      </div>
+      {fila.ajustes.length > 0 && (
+        <div style={{ fontSize: 12, marginBottom: 4 }}>
+          {fila.ajustes.map(a => (
+            <div key={a.id} style={{ color: 'var(--text)' }}>• {a.motivo} ({a.monto >= 0 ? '+' : ''}{fmtMoney(a.monto)})</div>
+          ))}
+        </div>
+      )}
+      {fila.adelantosQueRestan.length > 0 && (
+        <div style={{ fontSize: 12, marginBottom: 4 }}>
+          {fila.adelantosQueRestan.map(a => (
+            <div key={a.id} style={{ color: 'var(--text)' }}>
+              • {a.fecha.split('-').reverse().join('/')} -{fmtMoney(a.monto)}{a.nota ? ` — ${a.nota}` : ''}
+              {a.comprobante_url && <a href={a.comprobante_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: 'var(--primary)' }}>Ver comprobante</a>}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+        <ComprobanteCelda trabajador={fila.trabajador} semanaKey={semanaKey} montoCalculado={fila.neto} comprobante={comprobante} onSubido={onSubido} />
+      </div>
+    </div>
+  )
+}
+
+/* ─── Historial de pagos (por trabajador) — card separada de "Pago semanal" ──── */
+export function PanelHistorialPagos() {
+  const [tarifas, setTarifas] = useState<Trabajador[]>([])
+  const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
+  const [ajustes, setAjustes] = useState<AjustePagoSemanal[]>([])
+  const [adelantos, setAdelantos] = useState<AdelantoTrabajador[]>([])
+  const [comprobantes, setComprobantes] = useState<PagoSemanalComprobante[]>([])
+  const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [trabajadorSel, setTrabajadorSel] = useState('')
+
+  const cargar = useCallback(async () => {
+    const [{ data: t }, { data: d }, { data: aj }, { data: ad }, { data: c }, { data: gf }] = await Promise.all([
+      supabase.from('trabajadores').select('*').order('nombre'),
+      supabase.from('reportes_diarios').select('*'),
+      supabase.from('ajustes_pago_semanal').select('*'),
+      supabase.from('adelantos_trabajador').select('*'),
+      supabase.from('pago_semanal_comprobantes').select('*'),
+      supabase.from('gastos_fijos').select('*'),
+    ])
+    setTarifas((t as Trabajador[]) || [])
+    setDiarios((d as ReporteTrabajadorDia[]) || [])
+    setAjustes((aj as AjustePagoSemanal[]) || [])
+    setAdelantos((ad as AdelantoTrabajador[]) || [])
+    setComprobantes((c as PagoSemanalComprobante[]) || [])
+    setGastosFijos((gf as GastoFijo[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  if (loading) return <div className="spinner" />
+  if (tarifas.length === 0) {
+    return <p style={{ color: 'var(--muted)', fontSize: 14 }}>Todavía no hay trabajadores cargados.</p>
+  }
+
+  const trabajador = tarifas.find(t => t.nombre === trabajadorSel) || tarifas[0]
+  const sueldoFijo = trabajador.tarifa_diaria === 0
+
+  const diariosTrabajador = diarios.filter(d => d.trabajador === trabajador.nombre && d.presente)
+  const ajustesTrabajador = ajustes.filter(a => a.trabajador === trabajador.nombre)
+  const adelantosTrabajador = adelantos.filter(a => a.trabajador === trabajador.nombre)
+  const comprobantesTrabajador = comprobantes.filter(c => c.trabajador === trabajador.nombre)
+
+  const selector = (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--secondary)', marginBottom: 18 }}>
+      Trabajador:
+      <select
+        value={trabajador.nombre}
+        onChange={e => setTrabajadorSel(e.target.value)}
+        style={{
+          width: 'auto', padding: '6px 10px', fontSize: 13, fontWeight: 600, borderRadius: 6,
+          border: '1.5px solid var(--primary)', background: 'var(--white)', color: 'var(--secondary)',
+          cursor: 'pointer', appearance: 'auto',
+        }}
+      >
+        {tarifas.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
+      </select>
+    </label>
+  )
+
+  const ultimoComprobante = (semanaKey: string) =>
+    comprobantesTrabajador
+      .filter(c => c.semana_key === semanaKey)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0] || null
+
+  if (sueldoFijo) {
+    // Concepto de gastos_fijos se empareja por texto (ilike), no por FK -- funciona
+    // hoy porque el único caso (Fabriel) tiene su nombre literal en el concepto. Ver
+    // limitación documentada en el plan (steady-purring-spring.md).
+    const sueldoMensual = gastosFijos
+      .filter(g => g.activo && g.concepto.toLowerCase().includes(trabajador.nombre.toLowerCase()))
+      .reduce((s, g) => s + g.monto_mensual, 0)
+
+    const semanas = agruparPorPeriodo('semana', diariosTrabajador, [], [], [])
+
+    // Cada semana pertenece al mes calendario de su lunes.
+    const mesesSet = new Set<string>()
+    const mesDeSemana = new Map<string, string>()
+    for (const s of semanas) {
+      const mesKey = getPeriodo(s.key, 'mes').key
+      mesesSet.add(mesKey)
+      mesDeSemana.set(s.key, mesKey)
+    }
+    for (const a of adelantosTrabajador) mesesSet.add(getPeriodo(a.fecha, 'mes').key)
+
+    const meses = Array.from(mesesSet).sort((a, b) => b.localeCompare(a))
+
+    if (meses.length === 0) {
+      return <div>{selector}<p style={{ color: 'var(--muted)', fontSize: 14 }}>Sin actividad ni adelantos registrados todavía para {trabajador.nombre}.</p></div>
+    }
+
+    return (
+      <div>
+        {selector}
+        {meses.map(mesKey => {
+          const [y, m] = mesKey.split('-').map(Number)
+          const label = `${MESES[m - 1]} ${y}`
+          const adelantadoMes = adelantosTrabajador.filter(a => getPeriodo(a.fecha, 'mes').key === mesKey).reduce((s, a) => s + a.monto, 0)
+          const restaPagar = sueldoMensual - adelantadoMes
+          const semanasDelMes = semanas.filter(s => mesDeSemana.get(s.key) === mesKey)
+
+          return (
+            <div key={mesKey} className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>{label}</h3>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                <StatTile label="Sueldo del mes" valor={fmtMoney(sueldoMensual)} />
+                <StatTile label="Adelantado" valor={fmtMoney(adelantadoMes)} tono={adelantadoMes > 0 ? 'alerta' : 'neutral'} />
+                <StatTile label="Resta pagar" valor={fmtMoney(restaPagar)} tono={restaPagar >= 0 ? 'positivo' : 'negativo'} />
+              </div>
+
+              {adelantosTrabajador.filter(a => getPeriodo(a.fecha, 'mes').key === mesKey).length > 0 && (
+                <div style={{ fontSize: 12, marginBottom: 12 }}>
+                  <p style={{ fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>Adelantos del mes</p>
+                  {adelantosTrabajador.filter(a => getPeriodo(a.fecha, 'mes').key === mesKey).map(a => (
+                    <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0' }}>
+                      <span>{a.fecha.split('-').reverse().join('/')}{a.nota ? ` — ${a.nota}` : ''}
+                        {a.comprobante_url && <a href={a.comprobante_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: 'var(--primary)' }}>Ver comprobante</a>}
+                      </span>
+                      <span style={{ fontWeight: 700, color: 'var(--danger)' }}>-{fmtMoney(a.monto)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {semanasDelMes.length > 0 && (
+                <div>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 8 }}>Detalle semanal (viático y ajustes)</p>
+                  {semanasDelMes.map(s => {
+                    const ajustesSemana = ajustesTrabajador.filter(a => a.semana_key === s.key)
+                    // Los adelantos de sueldo fijo no restan de la semana -- se muestran arriba, contra el mes.
+                    const fila = calcularFilaPagoSemanal(trabajador, s.diarios.filter(d => d.presente), ajustesSemana, [])
+                    return (
+                      <FilaSemanaHistorial
+                        key={s.key} fila={fila} semanaKey={s.key} semanaLabel={s.label}
+                        comprobante={ultimoComprobante(s.key)} onSubido={cargar}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Trabajador semanal: agrupa por semana, misma lógica que PanelPagoSemanal.
+  const semanas = agruparPorPeriodo('semana', diariosTrabajador, [], [], [])
+    .map(s => {
+      const { inicio, fin } = semanaRango(s.key)
+      const ajustesSemana = ajustesTrabajador.filter(a => a.semana_key === s.key)
+      const adelantosSemana = adelantosTrabajador.filter(a => a.fecha >= inicio && a.fecha <= fin)
+      return { key: s.key, label: s.label, fila: calcularFilaPagoSemanal(trabajador, s.diarios.filter(d => d.presente), ajustesSemana, adelantosSemana) }
+    })
+    .filter(s => s.fila.dias > 0 || s.fila.ajustes.length > 0 || s.fila.adelantosQueRestan.length > 0)
+
+  if (semanas.length === 0) {
+    return <div>{selector}<p style={{ color: 'var(--muted)', fontSize: 14 }}>Sin actividad registrada todavía para {trabajador.nombre}.</p></div>
+  }
+
+  return (
+    <div>
+      {selector}
+      {semanas.map(s => (
+        <FilaSemanaHistorial
+          key={s.key} fila={s.fila} semanaKey={s.key} semanaLabel={s.label}
+          comprobante={ultimoComprobante(s.key)} onSubido={cargar}
+        />
+      ))}
     </div>
   )
 }
@@ -2965,23 +3424,21 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
           <h2 style={{ fontSize: 18, fontWeight: 800 }}>{seleccionado.nombre}</h2>
-          {modoAdmin && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              {onNuevoPendiente && (
-                <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => onNuevoPendiente(seleccionado.nombre)}>
-                  + Pendiente
-                </button>
-              )}
-              <button
-                className="btn btn-ghost"
-                style={{ fontSize: 12, padding: '6px 12px' }}
-                onClick={() => toggleArchivado(seleccionado)}
-                title={seleccionado.archivado ? 'Volver a mostrar en la lista' : 'Sacar de la lista sin borrar el historial'}
-              >
-                {seleccionado.archivado ? 'Desarchivar' : 'Archivar'}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {modoAdmin && onNuevoPendiente && (
+              <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => onNuevoPendiente(seleccionado.nombre)}>
+                + Pendiente
               </button>
-            </div>
-          )}
+            )}
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 12, padding: '6px 12px' }}
+              onClick={() => toggleArchivado(seleccionado)}
+              title={seleccionado.archivado ? 'Volver a mostrar en la lista' : 'Sacar de la lista sin borrar el historial'}
+            >
+              {seleccionado.archivado ? 'Desarchivar' : 'Archivar'}
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
@@ -3132,15 +3589,13 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
 
   return (
     <div>
-      {modoAdmin && (
-        <button
-          onClick={() => setVerArchivados(v => !v)}
-          className="btn btn-secondary"
-          style={{ fontSize: 12, padding: '6px 12px', marginBottom: 12 }}
-        >
-          {verArchivados ? '← Ver clientes activos' : 'Ver archivados'}
-        </button>
-      )}
+      <button
+        onClick={() => setVerArchivados(v => !v)}
+        className="btn btn-secondary"
+        style={{ fontSize: 12, padding: '6px 12px', marginBottom: 12 }}
+      >
+        {verArchivados ? '← Ver clientes activos' : 'Ver archivados'}
+      </button>
       {loading ? (
         <div className="spinner" />
       ) : clientes.length === 0 ? (

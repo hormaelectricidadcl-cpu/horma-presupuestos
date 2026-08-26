@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelClientes, PanelBancoContenido, PanelIdeasContenido } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelClientes, PanelBancoContenido, PanelIdeasContenido } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
@@ -1220,7 +1220,7 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  type SeccionAdmin = 'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados' | 'boletas' | 'banco_contenido' | 'ideas'
+  type SeccionAdmin = 'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'resultados' | 'boletas' | 'banco_contenido' | 'ideas'
   const [seccion, setSeccion] = useState<SeccionAdmin | null>(null)
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
 
@@ -1346,6 +1346,7 @@ export default function Admin() {
     { key: 'calendario', label: 'Calendario', color: '#7c3aed' },
     { key: 'stock', label: 'Stock', color: '#0891b2' },
     { key: 'pagos', label: 'Pago semanal', color: '#e67e22' },
+    { key: 'historial_pagos', label: 'Historial de pagos', color: '#b45309' },
     { key: 'resultados', label: 'Estado de resultados', color: '#14213D' },
     { key: 'banco_contenido', label: 'Banco de contenido', color: '#0d9488' },
     { key: 'ideas', label: 'Ideas de contenido', color: '#db2777' },
@@ -1521,6 +1522,8 @@ export default function Admin() {
             <PanelStock />
           ) : seccion === 'pagos' ? (
             <PanelPagoSemanal />
+          ) : seccion === 'historial_pagos' ? (
+            <PanelHistorialPagos />
           ) : seccion === 'resultados' ? (
             <PanelEstadoResultados />
           ) : seccion === 'banco_contenido' ? (
