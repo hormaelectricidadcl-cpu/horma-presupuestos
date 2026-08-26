@@ -294,4 +294,21 @@ export interface Cliente {
   comuna: string | null
   archivado: boolean
   archivado_at: string | null
+  // Facturación (sql/20260826_clientes_facturacion.sql)
+  razon_social: string | null
+  giro: string | null
+  direccion_fiscal: string | null
+  // Marketing (sql/20260826_clientes_facturacion.sql)
+  origen: string | null
+  notas: string | null
+}
+
+export interface PagoSemanalComprobante {
+  id: string
+  created_at: string
+  trabajador: string
+  semana_key: string
+  captura_url: string
+  monto_leido: number | null
+  monto_calculado: number | null
 }

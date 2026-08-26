@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelClientes } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
-import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario, Cliente } from '../types'
+import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario } from '../types'
 
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
@@ -1223,8 +1223,6 @@ export default function Admin() {
   type SeccionAdmin = 'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados' | 'boletas'
   const [seccion, setSeccion] = useState<SeccionAdmin | null>(null)
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [verArchivados, setVerArchivados] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('horma_admin_token')
@@ -1249,23 +1247,9 @@ export default function Admin() {
     if (showSpinner) setLoading(false)
   }, [])
 
-  const loadClientes = useCallback(async () => {
-    const { data } = await supabase.from('clientes').select('*')
-    setClientes((data as Cliente[]) || [])
-  }, [])
-
-  async function archivarCliente(nombre: string, archivar: boolean) {
-    await supabase.from('clientes').upsert(
-      { nombre, archivado: archivar, archivado_at: archivar ? new Date().toISOString() : null },
-      { onConflict: 'nombre' }
-    )
-    loadClientes()
-  }
-
   useEffect(() => {
     if (!authed) return
     loadPendientes(true)
-    loadClientes()
     const interval = setInterval(() => loadPendientes(false), 60000)
     return () => clearInterval(interval)
   }, [authed, loadPendientes])
@@ -1348,23 +1332,6 @@ export default function Admin() {
       </div>
     ))
   }
-
-  const clientesSummaryTodos = Object.entries(
-    pendientes.reduce<Record<string, Pendiente[]>>((acc, p) => {
-      if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
-      acc[p.cliente_nombre].push(p)
-      return acc
-    }, {})
-  ).map(([nombre, items]) => {
-    const activos = items.filter(p => p.estado !== 'respondido')
-    const vencidos = activos.filter(p => new Date(p.fecha_limite) < new Date())
-    const last = items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-    const archivado = clientes.find(c => c.nombre === nombre)?.archivado ?? false
-    return { nombre, total: items.length, activos: activos.length, vencidos: vencidos.length, ultimaInteraccion: last.created_at, archivado }
-  }).sort((a, b) => new Date(b.ultimaInteraccion).getTime() - new Date(a.ultimaInteraccion).getTime())
-
-  const clientesArchivadosCount = clientesSummaryTodos.filter(c => c.archivado).length
-  const clientesSummary = clientesSummaryTodos.filter(c => verArchivados ? c.archivado : !c.archivado)
 
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
   const presupuestoToken = import.meta.env.VITE_PRESUPUESTO_TOKEN as string
@@ -1555,90 +1522,7 @@ export default function Admin() {
           ) : seccion === 'resultados' ? (
             <PanelEstadoResultados />
           ) : (
-            <div>
-              {clientesArchivadosCount > 0 && (
-                <button
-                  onClick={() => setVerArchivados(v => !v)}
-                  className="btn btn-secondary"
-                  style={{ fontSize: 12, padding: '6px 12px', marginBottom: 12 }}
-                >
-                  {verArchivados ? '← Ver clientes activos' : `Ver archivados (${clientesArchivadosCount})`}
-                </button>
-              )}
-              {clientesSummary.length === 0 ? (
-                <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
-                  {verArchivados ? 'No hay clientes archivados.' : 'Sin clientes registrados aún.'}
-                </p>
-              ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {clientesSummary.map(c => (
-                <div
-                  key={c.nombre}
-                  className="card"
-                  style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, borderLeft: `4px solid ${c.vencidos > 0 ? 'var(--danger)' : c.activos > 0 ? 'var(--primary)' : 'var(--success)'}` }}
-                >
-                  {/* Avatar */}
-                  <div style={{
-                    width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-                    background: c.vencidos > 0 ? '#fee2e2' : c.activos > 0 ? '#eff6ff' : '#f0fdf4',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 18, fontWeight: 800,
-                    color: c.vencidos > 0 ? 'var(--danger)' : c.activos > 0 ? 'var(--primary)' : 'var(--success)',
-                  }}>
-                    {c.nombre.charAt(0).toUpperCase()}
-                  </div>
-
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p className="font-serif" style={{ fontSize: 19, marginBottom: 3, color: 'var(--secondary)' }}>{c.nombre}</p>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        {c.total} interacción{c.total !== 1 ? 'es' : ''}
-                      </span>
-                      {c.activos > 0 && (
-                        <span style={{ fontSize: 12, fontWeight: 600, color: c.vencidos > 0 ? 'var(--danger)' : 'var(--primary)' }}>
-                          {c.vencidos > 0 ? `⚠ ${c.vencidos} vencido${c.vencidos !== 1 ? 's' : ''}` : `● ${c.activos} activo${c.activos !== 1 ? 's' : ''}`}
-                        </span>
-                      )}
-                      {c.activos === 0 && (
-                        <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ Al día</span>
-                      )}
-                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        Última: {fmtFecha(c.ultimaInteraccion)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setHistorialCliente(c.nombre)}
-                      style={{ fontSize: 12, padding: '6px 12px' }}
-                    >
-                      Historial
-                    </button>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => abrirSeguimiento(c.nombre)}
-                      style={{ fontSize: 12, padding: '6px 12px' }}
-                    >
-                      + Pendiente
-                    </button>
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => archivarCliente(c.nombre, !c.archivado)}
-                      style={{ fontSize: 12, padding: '6px 12px' }}
-                      title={c.archivado ? 'Volver a mostrar en la lista' : 'Sacar de la lista sin borrar el historial'}
-                    >
-                      {c.archivado ? 'Desarchivar' : 'Archivar'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-              )}
-            </div>
+            <PanelClientes modoAdmin onNuevoPendiente={abrirSeguimiento} />
           )}
         </div>
       )}

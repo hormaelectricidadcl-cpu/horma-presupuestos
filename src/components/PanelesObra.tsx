@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -1152,20 +1152,123 @@ function agruparPorPeriodo(
   return Array.from(mapa.values()).sort((a, b) => b.key.localeCompare(a.key))
 }
 
+/* ─── Comprobante de pago semanal (uno por fila de trabajador/semana) ──── */
+function ComprobanteCelda({ trabajador, semanaKey, montoCalculado, comprobante, onSubido }: {
+  trabajador: string
+  semanaKey: string
+  montoCalculado: number
+  comprobante: PagoSemanalComprobante | null
+  onSubido: () => void
+}) {
+  const [subiendo, setSubiendo] = useState(false)
+
+  async function subir(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0]
+    e.target.value = ''
+    if (!archivo) return
+    setSubiendo(true)
+    try {
+      const ext = archivo.name.split('.').pop() || 'jpg'
+      const filename = `comprobante-pago-${trabajador.replace(/\s+/g, '_')}-${Date.now()}.${ext}`
+      const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+      if (error) {
+        alert('Error al subir la captura: ' + error.message)
+        return
+      }
+      const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
+
+      let montoLeido: number | null = null
+      try {
+        const res = await fetch('/api/parse-comprobante', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlData.publicUrl }),
+        })
+        const resultado = await res.json()
+        if (!res.ok) throw new Error(resultado.error || 'error desconocido')
+        montoLeido = resultado.monto != null ? Number(resultado.monto) : null
+      } catch (err) {
+        alert('La captura se guardó, pero la IA no pudo leerla (' + String(err) + '). Se guarda sin monto leído.')
+      }
+
+      const { error: insertError } = await supabase.from('pago_semanal_comprobantes').insert({
+        trabajador, semana_key: semanaKey, captura_url: urlData.publicUrl,
+        monto_leido: montoLeido, monto_calculado: montoCalculado,
+      })
+      if (insertError) {
+        alert('Error al guardar el comprobante: ' + insertError.message)
+        return
+      }
+      onSubido()
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
+  const coincide = comprobante?.monto_leido != null && comprobante?.monto_calculado != null
+    ? Math.round(comprobante.monto_leido) === Math.round(comprobante.monto_calculado)
+    : null
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+      {comprobante && (
+        coincide === true ? (
+          <a
+            href={comprobante.captura_url} target="_blank" rel="noreferrer"
+            style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', textDecoration: 'none' }}
+            title="Ver captura"
+          >
+            ✓ Coincide
+          </a>
+        ) : coincide === false ? (
+          <a
+            href={comprobante.captura_url} target="_blank" rel="noreferrer"
+            style={{
+              fontSize: 11, fontWeight: 700, color: 'var(--danger)', textDecoration: 'none',
+              background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 6, padding: '2px 6px',
+            }}
+            title="Ver captura"
+          >
+            ⚠ No coincide: comprobante {fmtMoney(comprobante.monto_leido!)} · calculado {fmtMoney(comprobante.monto_calculado!)}
+          </a>
+        ) : (
+          <a
+            href={comprobante.captura_url} target="_blank" rel="noreferrer"
+            style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textDecoration: 'none' }}
+            title="Ver captura"
+          >
+            Captura sin monto leído
+          </a>
+        )
+      )}
+      <label
+        className="btn btn-ghost"
+        style={{ fontSize: 11, padding: '4px 8px', cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}
+      >
+        {subiendo ? 'Subiendo...' : comprobante ? '+ Reemplazar' : '+ Comprobante'}
+        <input type="file" accept="image/*" onChange={subir} disabled={subiendo} style={{ display: 'none' }} />
+      </label>
+    </div>
+  )
+}
+
 /* ─── Pago semanal a trabajadores (todas las obras) ──── */
 export function PanelPagoSemanal() {
   const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
   const [tarifas, setTarifas] = useState<Trabajador[]>([])
+  const [comprobantes, setComprobantes] = useState<PagoSemanalComprobante[]>([])
   const [loading, setLoading] = useState(true)
   const [semanaKey, setSemanaKey] = useState('')
 
   const cargar = useCallback(async () => {
-    const [{ data: d }, { data: t }] = await Promise.all([
+    const [{ data: d }, { data: t }, { data: c }] = await Promise.all([
       supabase.from('reportes_diarios').select('*'),
       supabase.from('trabajadores').select('*'),
+      supabase.from('pago_semanal_comprobantes').select('*'),
     ])
     setDiarios((d as ReporteTrabajadorDia[]) || [])
     setTarifas((t as Trabajador[]) || [])
+    setComprobantes((c as PagoSemanalComprobante[]) || [])
     setLoading(false)
   }, [])
 
@@ -1241,25 +1344,41 @@ export function PanelPagoSemanal() {
                 <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ganado</th>
                 <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Viático</th>
                 <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total</th>
+                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Comprobante</th>
               </tr>
             </thead>
             <tbody>
-              {filas.map(f => (
-                <tr key={f.trabajador} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '10px', fontWeight: 700 }}>
-                    {f.trabajador}
-                    {f.sueldoFijo && (
-                      <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, color: 'var(--muted)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px' }}>
-                        Sueldo fijo
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>{f.dias}</td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>{f.sueldoFijo ? '—' : fmtMoney(f.ganado)}</td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>{f.viatico > 0 ? fmtMoney(f.viatico) : '—'}</td>
-                  <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: 'var(--secondary)' }}>{fmtMoney(f.total)}</td>
-                </tr>
-              ))}
+              {filas.map(f => {
+                const comprobantesFila = comprobantes
+                  .filter(c => c.trabajador === f.trabajador && c.semana_key === semana.key)
+                  .sort((a, b) => b.created_at.localeCompare(a.created_at))
+                const ultimoComprobante = comprobantesFila[0] || null
+                return (
+                  <tr key={f.trabajador} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '10px', fontWeight: 700 }}>
+                      {f.trabajador}
+                      {f.sueldoFijo && (
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, color: 'var(--muted)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px' }}>
+                          Sueldo fijo
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'right' }}>{f.dias}</td>
+                    <td style={{ padding: '10px', textAlign: 'right' }}>{f.sueldoFijo ? '—' : fmtMoney(f.ganado)}</td>
+                    <td style={{ padding: '10px', textAlign: 'right' }}>{f.viatico > 0 ? fmtMoney(f.viatico) : '—'}</td>
+                    <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: 'var(--secondary)' }}>{fmtMoney(f.total)}</td>
+                    <td style={{ padding: '10px', textAlign: 'right' }}>
+                      <ComprobanteCelda
+                        trabajador={f.trabajador}
+                        semanaKey={semana.key}
+                        montoCalculado={f.total}
+                        comprobante={ultimoComprobante}
+                        onSubido={cargar}
+                      />
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -2722,6 +2841,331 @@ export function PanelStock() {
             })}
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+/* ─── Ficha de cliente: facturación + marketing + timeline de pendientes ──── */
+/* Compartido entre Gustavo.tsx y Admin.tsx (antes había dos listas separadas,
+   ambas derivadas de `pendientes.cliente_nombre` — un cliente sin ningún pendiente
+   cargado no aparecía en ninguna. Ahora la lista sale directo de la tabla `clientes`.) */
+const TIPO_LABELS_CLIENTE: Record<TipoPendiente, string> = {
+  confirmar_visita: 'Confirmar visita',
+  revisar_fotos: 'Revisar fotos',
+  presupuesto: 'Ingresar presupuesto',
+  otro: 'Revisar',
+  emitir_boleta: 'Emitir boleta',
+  emitir_factura: 'Emitir factura',
+  cobro: 'Cobro pendiente',
+  seguimiento: 'Seguimiento',
+  pedido_material: 'Pedido de material',
+  solicitud_garantia: 'Solicitud de garantía',
+}
+
+function fmtFechaCliente(iso: string) {
+  return new Date(iso).toLocaleString('es-CL', {
+    timeZone: 'America/Santiago',
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+interface DraftCliente {
+  rut: string
+  razon_social: string
+  giro: string
+  direccion_fiscal: string
+  origen: string
+  notas: string
+}
+
+function draftDeCliente(c: Cliente): DraftCliente {
+  return {
+    rut: c.rut || '',
+    razon_social: c.razon_social || '',
+    giro: c.giro || '',
+    direccion_fiscal: c.direccion_fiscal || '',
+    origen: c.origen || '',
+    notas: c.notas || '',
+  }
+}
+
+/* `modoAdmin`/`onNuevoPendiente` preservan dos acciones que ya existían solo en la
+   sección "Clientes" de Admin.tsx (archivar/desarchivar, atajo "+ Pendiente") — no son
+   funcionalidad nueva, solo se mantienen al unificar los dos paneles en este componente. */
+export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdmin?: boolean; onNuevoPendiente?: (nombre: string) => void } = {}) {
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [loading, setLoading] = useState(true)
+  const [verArchivados, setVerArchivados] = useState(false)
+  const [seleccionado, setSeleccionado] = useState<Cliente | null>(null)
+  const [historial, setHistorial] = useState<Pendiente[]>([])
+  const [loadingH, setLoadingH] = useState(false)
+  const [draft, setDraft] = useState<DraftCliente>({ rut: '', razon_social: '', giro: '', direccion_fiscal: '', origen: '', notas: '' })
+  const [guardando, setGuardando] = useState(false)
+
+  const cargar = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase.from('clientes').select('*').eq('archivado', verArchivados).order('nombre')
+    setClientes((data as Cliente[]) || [])
+    setLoading(false)
+  }, [verArchivados])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function verCliente(c: Cliente) {
+    setSeleccionado(c)
+    setDraft(draftDeCliente(c))
+    setLoadingH(true)
+    const { data } = await supabase
+      .from('pendientes')
+      .select('*')
+      .eq('cliente_nombre', c.nombre)
+      .order('created_at', { ascending: true })
+    setHistorial((data as Pendiente[]) || [])
+    setLoadingH(false)
+  }
+
+  async function guardar() {
+    if (!seleccionado) return
+    setGuardando(true)
+    const patch = {
+      rut: draft.rut.trim() || null,
+      razon_social: draft.razon_social.trim() || null,
+      giro: draft.giro.trim() || null,
+      direccion_fiscal: draft.direccion_fiscal.trim() || null,
+      origen: draft.origen.trim() || null,
+      notas: draft.notas.trim() || null,
+    }
+    const { error } = await supabase.from('clientes').update(patch).eq('id', seleccionado.id)
+    setGuardando(false)
+    if (error) {
+      alert('Error al guardar: ' + error.message)
+      return
+    }
+    setSeleccionado(prev => (prev ? { ...prev, ...patch } : prev))
+    cargar()
+  }
+
+  async function toggleArchivado(c: Cliente) {
+    await supabase.from('clientes').update({ archivado: !c.archivado, archivado_at: !c.archivado ? new Date().toISOString() : null }).eq('id', c.id)
+    setSeleccionado(null)
+    cargar()
+  }
+
+  if (seleccionado) {
+    return (
+      <div>
+        <button
+          onClick={() => setSeleccionado(null)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--secondary)', marginBottom: 16, padding: 0 }}
+        >
+          ← Volver a clientes
+        </button>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800 }}>{seleccionado.nombre}</h2>
+          {modoAdmin && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              {onNuevoPendiente && (
+                <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => onNuevoPendiente(seleccionado.nombre)}>
+                  + Pendiente
+                </button>
+              )}
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 12, padding: '6px 12px' }}
+                onClick={() => toggleArchivado(seleccionado)}
+                title={seleccionado.archivado ? 'Volver a mostrar en la lista' : 'Sacar de la lista sin borrar el historial'}
+              >
+                {seleccionado.archivado ? 'Desarchivar' : 'Archivar'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
+          {seleccionado.telefono && <span>Tel: {seleccionado.telefono}</span>}
+          {seleccionado.email && <span>Email: {seleccionado.email}</span>}
+          {seleccionado.comuna && <span>Comuna: {seleccionado.comuna}</span>}
+        </div>
+
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+            Facturación
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+            <div className="field">
+              <label>RUT</label>
+              <input value={draft.rut} onChange={e => setDraft(d => ({ ...d, rut: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Razón social</label>
+              <input value={draft.razon_social} onChange={e => setDraft(d => ({ ...d, razon_social: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Giro</label>
+              <input value={draft.giro} onChange={e => setDraft(d => ({ ...d, giro: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Dirección fiscal</label>
+              <input value={draft.direccion_fiscal} onChange={e => setDraft(d => ({ ...d, direccion_fiscal: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+            Marketing
+          </p>
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label>Cómo llegó</label>
+            <input value={draft.origen} onChange={e => setDraft(d => ({ ...d, origen: e.target.value }))} placeholder="Ej: Recomendado, Instagram, Google..." />
+          </div>
+          <div className="field">
+            <label>Notas</label>
+            <textarea value={draft.notas} onChange={e => setDraft(d => ({ ...d, notas: e.target.value }))} rows={3} />
+          </div>
+        </div>
+
+        <button className="btn btn-primary" onClick={guardar} disabled={guardando} style={{ marginBottom: 24 }}>
+          {guardando ? 'Guardando...' : 'Guardar cambios'}
+        </button>
+
+        <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+          Historial
+        </p>
+
+        {loadingH ? (
+          <div className="spinner" />
+        ) : historial.length === 0 ? (
+          <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Sin historial.</p>
+        ) : (
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', left: 11, top: 8, bottom: 8, width: 2, background: 'var(--border)' }} />
+            {historial.map((h, idx) => {
+              const esIrazu = h.destinatario === 'irazu'
+              const isLast = idx === historial.length - 1
+              return (
+                <div key={h.id} style={{ position: 'relative', paddingLeft: 36, marginBottom: isLast ? 0 : 20 }}>
+                  <div style={{
+                    position: 'absolute', left: 3, top: 4,
+                    width: 18, height: 18, borderRadius: '50%',
+                    background: h.estado === 'respondido' ? 'var(--success)' : esIrazu ? '#0891b2' : 'var(--primary)',
+                    border: '3px solid var(--white)', fontSize: 8, color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {h.estado === 'respondido' ? '✓' : '•'}
+                  </div>
+                  <div style={{ background: 'var(--white)', borderRadius: 12, padding: '12px 14px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                      <span style={{
+                        fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                        color: esIrazu ? '#0891b2' : 'var(--primary)',
+                        background: esIrazu ? '#ecfeff' : '#eff6ff',
+                      }}>
+                        {TIPO_LABELS_CLIENTE[h.tipo]}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtFechaCliente(h.created_at)}</span>
+                      {h.estado === 'respondido' && <span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>✓ Respondido</span>}
+                    </div>
+
+                    {h.descripcion && (
+                      <p style={{ fontSize: 13, color: 'var(--secondary)', lineHeight: 1.5, marginBottom: 4, whiteSpace: 'pre-wrap' }}>
+                        {h.descripcion}
+                      </p>
+                    )}
+                    {h.mensaje_cliente && (
+                      <p style={{ fontSize: 13, color: '#0284c7', lineHeight: 1.5, marginBottom: 4, whiteSpace: 'pre-wrap' }}>
+                        {h.mensaje_cliente}
+                      </p>
+                    )}
+                    {h.direccion && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.direccion)}`}
+                        target="_blank" rel="noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 6, textDecoration: 'none' }}
+                      >
+                        {h.direccion}
+                      </a>
+                    )}
+                    <GaleriaArchivos urls={h.drive_links} />
+
+                    {h.respuesta && (
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', marginBottom: 3 }}>
+                          {esIrazu ? 'Admin respondió:' : 'Respuesta:'}
+                        </p>
+                        <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{h.respuesta}</p>
+                      </div>
+                    )}
+
+                    {h.audio_url && (
+                      <div style={{ marginTop: 8 }}>
+                        {esIrazu ? (
+                          <>
+                            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>Archivo adjunto</p>
+                            {/\.(jpe?g|png|gif|webp)(\?|$)/i.test(h.audio_url) && (
+                              <img src={h.audio_url} alt="Boleta" style={{ width: '100%', borderRadius: 8, marginBottom: 6 }} />
+                            )}
+                            <a href={h.audio_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#0891b2', fontWeight: 600 }}>
+                              Abrir archivo →
+                            </a>
+                          </>
+                        ) : (
+                          <>
+                            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>Nota de voz</p>
+                            <audio controls src={h.audio_url} style={{ width: '100%', height: 36 }} />
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {modoAdmin && (
+        <button
+          onClick={() => setVerArchivados(v => !v)}
+          className="btn btn-secondary"
+          style={{ fontSize: 12, padding: '6px 12px', marginBottom: 12 }}
+        >
+          {verArchivados ? '← Ver clientes activos' : 'Ver archivados'}
+        </button>
+      )}
+      {loading ? (
+        <div className="spinner" />
+      ) : clientes.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>
+          {verArchivados ? 'No hay clientes archivados.' : 'Aún no hay clientes registrados.'}
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {clientes.map(c => (
+            <button
+              key={c.id}
+              onClick={() => verCliente(c)}
+              style={{
+                width: '100%', padding: '14px 16px',
+                borderRadius: 12, border: '1.5px solid var(--border)',
+                background: 'var(--white)', fontSize: 15, fontWeight: 600,
+                color: 'var(--text)', cursor: 'pointer', textAlign: 'left',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}
+            >
+              <span>{c.nombre}{c.rut ? ` · ${c.rut}` : ''}</span>
+              <span style={{ fontSize: 14, color: 'var(--muted)' }}>→</span>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )
