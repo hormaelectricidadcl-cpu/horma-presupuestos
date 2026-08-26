@@ -135,10 +135,10 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function PresupuestoEtapas() {
+export default function PresupuestoEtapas({ embedded = false }: { embedded?: boolean } = {}) {
   // Auth
   const [session, setSession]   = useState<any>(null)
-  const [authLoading, setAuthLoading] = useState(true)
+  const [authLoading, setAuthLoading] = useState(!embedded)
 
   // Presupuesto state
   const [client, setClient]         = useState<Client>({ name: '', telefono: '', email: '', address: '' })
@@ -161,8 +161,10 @@ export default function PresupuestoEtapas() {
   const iva      = Math.round(subtotal * 0.19)
   const total    = subtotal + iva
 
-  // Auth init
+  // Auth init — la versión embebida en el panel de Gustavo (acceso por token de
+  // URL, sin login real de Supabase Auth) no necesita ni debe pedir sesión.
   useEffect(() => {
+    if (embedded) return
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setAuthLoading(false)
@@ -171,7 +173,7 @@ export default function PresupuestoEtapas() {
       setSession(session)
     })
     return () => subscription.unsubscribe()
-  }, [])
+  }, [embedded])
 
   async function handleLogin(email: string, password: string): Promise<string | null> {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -262,8 +264,10 @@ export default function PresupuestoEtapas() {
     const referencia = `HRM-${Date.now().toString(36).toUpperCase()}`
     await generatePDFEtapas(client, etapas, { pct: ggPct, amount: ggAmount }, referencia)
 
-    // Guardar en Supabase
-    if (session?.user?.id) {
+    // Guardar en Supabase — en la versión embebida (panel de Gustavo, sin login
+    // real) se guarda igual que el resto de esa pantalla, con user_id: null
+    // (mismo criterio de confianza que ya usa el presupuesto simple).
+    if (embedded || session?.user?.id) {
       const clientePayload: { nombre: string; telefono?: string; email?: string } = { nombre: client.name.trim() }
       if (client.telefono?.trim()) clientePayload.telefono = client.telefono.trim()
       if (client.email?.trim()) clientePayload.email = client.email.trim()
@@ -274,7 +278,7 @@ export default function PresupuestoEtapas() {
         .single()
 
       const { error: dbErr } = await supabase.from('presupuestos').insert({
-        user_id:          session.user.id,
+        user_id:          embedded ? null : session.user.id,
         cliente_id:       cliente?.id ?? null,
         cliente_nombre:   client.name,
         cliente_telefono: client.telefono,
@@ -303,7 +307,7 @@ export default function PresupuestoEtapas() {
     )
   }
 
-  if (!session) {
+  if (!embedded && !session) {
     return <LoginScreen onLogin={handleLogin} />
   }
 
@@ -322,16 +326,18 @@ export default function PresupuestoEtapas() {
             <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#1a1a1a' }}>Presupuesto Itemizado por Etapas</h1>
             <p style={{ fontSize: 13, color: '#615e5b', fontWeight: 500 }}>Horma Electricidad — Estándar de Ingeniería</p>
           </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: '#93918e' }}>{session.user.email}</span>
-            <button
-              onClick={handleLogout}
-              style={{ fontSize: 12, color: '#615e5b', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-            >
-              Salir
-            </button>
-            <a href="/admin" style={{ fontSize: 13, color: '#615e5b', textDecoration: 'none', fontWeight: 600 }}>← Admin</a>
-          </div>
+          {!embedded && (
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: '#93918e' }}>{session.user.email}</span>
+              <button
+                onClick={handleLogout}
+                style={{ fontSize: 12, color: '#615e5b', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+              >
+                Salir
+              </button>
+              <a href="/admin" style={{ fontSize: 13, color: '#615e5b', textDecoration: 'none', fontWeight: 600 }}>← Admin</a>
+            </div>
+          )}
         </div>
 
         {/* Client form */}

@@ -139,7 +139,7 @@ export interface PresupuestoGuardado {
   cliente_email: string | null
   cliente_direccion: string | null
   referencia: string | null
-  tipo: 'simple' | 'etapas'
+  tipo: 'simple' | 'etapas' | 'externo'
   estado: EstadoPresupuesto
   subtotal: number | null
   iva: number | null
@@ -179,6 +179,7 @@ export interface PresupuestoDetalle extends PresupuestoGuardado {
   gg_amount: number | null
   items: PresupuestoItemSimple[] | null
   etapas: PresupuestoEtapa[] | null
+  archivo_url: string | null
 }
 
 export interface EventoCalendario {

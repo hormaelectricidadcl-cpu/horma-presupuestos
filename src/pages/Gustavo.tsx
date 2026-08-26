@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock } from '../components/PanelesObra'
+import Presupuesto from './Presupuesto'
+import PresupuestoEtapas from './PresupuestoEtapas'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
@@ -9,6 +11,7 @@ import type { Pendiente, TipoPendiente } from '../types'
 
 const GUSTAVO_TOKEN = import.meta.env.VITE_GUSTAVO_TOKEN as string
 const REPORTE_TOKEN = import.meta.env.VITE_REPORTE_TOKEN as string
+const PRESUPUESTO_TOKEN = import.meta.env.VITE_PRESUPUESTO_TOKEN as string
 
 const TIPO_LABELS: Record<TipoPendiente, string> = {
   confirmar_visita: 'Confirmar visita',
@@ -655,9 +658,27 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados'>('pendientes')
+  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados' | 'boletas' | 'presupuestador'
+  const [seccion, setSeccion] = useState<SeccionGustavo | null>(null)
+  const [modoPresupuestador, setModoPresupuestador] = useState<'simple' | 'etapas'>('simple')
 
   const tokenValido = token === GUSTAVO_TOKEN
+
+  const SECCIONES: { key: SeccionGustavo; label: string; color: string }[] = [
+    { key: 'reporte', label: 'Reporte diario', color: 'var(--primary)' },
+    { key: 'calendario', label: 'Calendario', color: '#7c3aed' },
+    { key: 'obras', label: 'Obras', color: '#c1440e' },
+    { key: 'pagos', label: 'Pago semanal', color: '#e67e22' },
+    { key: 'boletas', label: 'Boletas', color: '#0ea5e9' },
+    { key: 'presupuestos', label: 'Mis presupuestos', color: '#059669' },
+    { key: 'presupuestador', label: 'Hacer presupuesto', color: '#e69a21' },
+    { key: 'pendientes', label: 'Mis tareas', color: '#dc2626' },
+    { key: 'notas', label: 'Mis notas', color: '#0284c7' },
+    { key: 'clientes', label: 'Clientes', color: '#0d9488' },
+    { key: 'stock', label: 'Stock', color: '#0891b2' },
+    { key: 'resultados', label: 'Estado de resultados', color: '#14213D' },
+  ]
+  const seccionActual = SECCIONES.find(s => s.key === seccion)
 
   const loadPendientes = async () => {
     setLoading(true)
@@ -708,7 +729,7 @@ export default function Gustavo({ token }: Props) {
           <div>
             <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 2 }}>Horma Grup</p>
             <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#fff' }}>Hola Gustavo</h1>
-            {!loading && tab === 'pendientes' && (
+            {!loading && seccion === null && (
               <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
                 {pendientes.length === 0 ? 'Sin pendientes' : `${pendientes.length} pendiente${pendientes.length !== 1 ? 's' : ''} para responder`}
               </p>
@@ -716,53 +737,103 @@ export default function Gustavo({ token }: Props) {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', borderBottom: '2px solid var(--border)', paddingBottom: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {([['reporte', 'Reporte diario'], ['calendario', 'Calendario'], ['obras', 'Obras'], ['pagos', 'Pago semanal'], ['presupuestos', 'Mis presupuestos'], ['pendientes', 'Mis tareas'], ['notas', 'Mis notas'], ['clientes', 'Clientes'], ['stock', 'Stock'], ['resultados', 'Estado de resultados']] as const).map(([k, label]) => (
-            <button
-              key={k}
-              onClick={() => setTab(k)}
-              style={{
-                padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 14, fontWeight: tab === k ? 700 : 500,
-                color: tab === k ? 'var(--primary)' : 'var(--muted)',
-                borderBottom: `2px solid ${tab === k ? 'var(--primary)' : 'transparent'}`,
-                marginBottom: -2, whiteSpace: 'nowrap', flexShrink: 0,
-              }}
-            >{label}</button>
-          ))}
-        </div>
-
-        {tab === 'notas' ? (
-          <NotasRapidas autor="gustavo" />
-        ) : tab === 'presupuestos' ? (
-          <PanelPresupuestos />
-        ) : tab === 'reporte' ? (
-          <Reporte token={REPORTE_TOKEN} embedded />
-        ) : tab === 'clientes' ? (
-          <PanelClientes />
-        ) : tab === 'obras' ? (
-          <PanelObras />
-        ) : tab === 'calendario' ? (
-          <PanelCalendario />
-        ) : tab === 'stock' ? (
-          <PanelStock />
-        ) : tab === 'pagos' ? (
-          <PanelPagoSemanal />
-        ) : tab === 'resultados' ? (
-          <PanelEstadoResultados />
-        ) : loading ? (
-          <div className="spinner" />
-        ) : pendientes.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '4rem 1rem' }}>
-            <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
-            <h2 style={{ fontWeight: 800, fontSize: 22, marginBottom: 8 }}>Todo listo</h2>
-            <p style={{ color: 'var(--muted)', fontSize: 16 }}>No tienes pendientes por responder.</p>
+        {seccion === null ? (
+          /* Home: grilla de cards */
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+            {SECCIONES.map(s => {
+              const badge = s.key === 'pendientes' ? pendientes.length : 0
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => setSeccion(s.key)}
+                  className="card"
+                  style={{
+                    position: 'relative', padding: '16px 12px', border: 'none', cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10,
+                    textAlign: 'left', borderTop: `3px solid ${s.color}`,
+                  }}
+                >
+                  {badge > 0 && (
+                    <span style={{
+                      position: 'absolute', top: 10, right: 10, minWidth: 20, height: 20, borderRadius: 10,
+                      background: 'var(--danger)', color: '#fff', fontSize: 11, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px',
+                    }}>{badge}</span>
+                  )}
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{s.label}</span>
+                </button>
+              )
+            })}
           </div>
         ) : (
-          pendientes.map(p => (
-            <PendienteCardGustavo key={p.id} p={p} onRespondido={loadPendientes} />
-          ))
+          <div>
+            {/* Volver */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
+              <button
+                onClick={() => setSeccion(null)}
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}
+              >← Volver</button>
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: seccionActual?.color }}>{seccionActual?.label}</h2>
+            </div>
+
+            {seccion === 'notas' ? (
+              <NotasRapidas autor="gustavo" />
+            ) : seccion === 'boletas' ? (
+              <PanelBoletas />
+            ) : seccion === 'presupuestador' ? (
+              <div>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
+                  {(['simple', 'etapas'] as const).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setModoPresupuestador(m)}
+                      style={{
+                        padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                        border: `1.5px solid ${modoPresupuestador === m ? 'var(--primary)' : 'var(--border)'}`,
+                        background: modoPresupuestador === m ? 'var(--primary)' : 'var(--white)',
+                        color: modoPresupuestador === m ? '#fff' : 'var(--muted)',
+                      }}
+                    >
+                      {m === 'simple' ? 'Simple' : 'Por etapas'}
+                    </button>
+                  ))}
+                </div>
+                {modoPresupuestador === 'simple' ? (
+                  <Presupuesto token={PRESUPUESTO_TOKEN} />
+                ) : (
+                  <PresupuestoEtapas embedded />
+                )}
+              </div>
+            ) : seccion === 'presupuestos' ? (
+              <PanelPresupuestos />
+            ) : seccion === 'reporte' ? (
+              <Reporte token={REPORTE_TOKEN} embedded />
+            ) : seccion === 'clientes' ? (
+              <PanelClientes />
+            ) : seccion === 'obras' ? (
+              <PanelObras />
+            ) : seccion === 'calendario' ? (
+              <PanelCalendario />
+            ) : seccion === 'stock' ? (
+              <PanelStock />
+            ) : seccion === 'pagos' ? (
+              <PanelPagoSemanal />
+            ) : seccion === 'resultados' ? (
+              <PanelEstadoResultados />
+            ) : loading ? (
+              <div className="spinner" />
+            ) : pendientes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+                <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
+                <h2 style={{ fontWeight: 800, fontSize: 22, marginBottom: 8 }}>Todo listo</h2>
+                <p style={{ color: 'var(--muted)', fontSize: 16 }}>No tienes pendientes por responder.</p>
+              </div>
+            ) : (
+              pendientes.map(p => (
+                <PendienteCardGustavo key={p.id} p={p} onRespondido={loadPendientes} />
+              ))
+            )}
+          </div>
         )}
       </div>
     </div>

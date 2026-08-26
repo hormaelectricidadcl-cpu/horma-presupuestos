@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
@@ -1220,7 +1220,8 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  const [tab, setTab] = useState<'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados'>('activos')
+  type SeccionAdmin = 'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados' | 'boletas'
+  const [seccion, setSeccion] = useState<SeccionAdmin | null>(null)
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [verArchivados, setVerArchivados] = useState(false)
@@ -1368,6 +1369,20 @@ export default function Admin() {
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
   const presupuestoToken = import.meta.env.VITE_PRESUPUESTO_TOKEN as string
 
+  const SECCIONES: { key: SeccionAdmin; label: string; color: string }[] = [
+    { key: 'activos', label: 'Activos', color: 'var(--primary)' },
+    { key: 'respondidos_gustavo', label: 'Gustavo', color: '#0284c7' },
+    { key: 'clientes', label: 'Clientes', color: '#7c3aed' },
+    { key: 'presupuestos', label: 'Presupuestos', color: '#059669' },
+    { key: 'boletas', label: 'Boletas', color: '#0ea5e9' },
+    { key: 'obras', label: 'Obras', color: '#c1440e' },
+    { key: 'calendario', label: 'Calendario', color: '#7c3aed' },
+    { key: 'stock', label: 'Stock', color: '#0891b2' },
+    { key: 'pagos', label: 'Pago semanal', color: '#e67e22' },
+    { key: 'resultados', label: 'Estado de resultados', color: '#14213D' },
+  ]
+  const seccionActual = SECCIONES.find(s => s.key === seccion)
+
   return (
     <div className="pendientes" style={{ background: 'var(--bg)', minHeight: '100vh' }}>
 
@@ -1426,29 +1441,6 @@ export default function Admin() {
         </button>
       </div>
 
-      {/* Stats */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        <div className="card" onClick={() => setTab('activos')} style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: tab === 'activos' ? '3px solid var(--primary)' : undefined }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--primary)' }}>{activos.length}</span>
-          <div>
-            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>Activos</p>
-            {vencidos.length > 0 && <p style={{ fontSize: 11, color: 'var(--danger)' }}>{vencidos.length} vencido{vencidos.length !== 1 ? 's' : ''}</p>}
-          </div>
-        </div>
-        <div className="card" onClick={() => setTab('respondidos_gustavo')} style={{ padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: tab === 'respondidos_gustavo' ? '3px solid #0284c7' : undefined }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#0284c7' }}>{respondidosGustavo.length}</span>
-          <div>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#0284c7' }}>Gustavo</p>
-            <p style={{ fontSize: 11, color: 'var(--muted)' }}>respondidos</p>
-            {activosGustavo.length > 0 && (
-              <p style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
-                {activosGustavo.length} activo{activosGustavo.length !== 1 ? 's' : ''}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Quick notes */}
       <NotasRapidas autor="alexandra" />
 
@@ -1463,173 +1455,190 @@ export default function Admin() {
         />
       )}
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: '1rem', borderBottom: '2px solid var(--border)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        {([
-          ['activos', `Activos (${activos.length})`, 'var(--primary)'],
-          ['respondidos_gustavo', `Gustavo (${respondidosGustavo.length})`, '#0284c7'],
-          ['clientes', `Clientes (${clientesSummary.length})`, '#7c3aed'],
-          ['presupuestos', 'Presupuestos', '#059669'],
-          ['obras', 'Obras', '#c1440e'],
-          ['calendario', 'Calendario', '#7c3aed'],
-          ['stock', 'Stock', '#0891b2'],
-          ['pagos', 'Pago semanal', '#e67e22'],
-          ['resultados', 'Estado de resultados', '#14213D'],
-        ] as const).map(([k, label, color]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            style={{
-              padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer',
-              fontSize: 13, fontWeight: tab === k ? 700 : 500,
-              color: tab === k ? color : 'var(--muted)',
-              borderBottom: `2px solid ${tab === k ? color : 'transparent'}`,
-              marginBottom: -2, whiteSpace: 'nowrap', flexShrink: 0,
-            }}
-          >{label}</button>
-        ))}
-      </div>
-
-      {/* List */}
-      {loading ? (
-        <div className="spinner" />
-      ) : tab === 'activos' ? (
-        activos.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-            <p style={{ fontWeight: 600 }}>Sin pendientes activos</p>
-            <p style={{ fontSize: 14, marginTop: 6 }}>Crea uno con el botón de arriba.</p>
-          </div>
-        ) : (
-          Object.entries(clienteGroups).map(([cliente, items]) => (
-            <div key={cliente}>
-              {items.length > 1 && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 12px', marginBottom: 6,
-                  background: '#f0f4ff', border: '1px solid #c7d2fe',
-                  borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
-                }}>
-                  <span></span>
-                  <span>{cliente}</span>
-                  <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
-                  <button
-                    onClick={() => setHistorialCliente(cliente)}
-                    style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
-                  >Ver historial →</button>
-                </div>
-              )}
-              <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
-                {items.map(p => (
-                  <PendienteCard
-                    key={p.id}
-                    p={p}
-                    onUpdate={loadPendientes}
-                    onVerHistorial={setHistorialCliente}
-                    onSeguimiento={abrirSeguimiento}
-                  />
-                ))}
-              </div>
-            </div>
-          ))
-        )
-      ) : tab === 'respondidos_gustavo' ? (
-        renderRespondidos(respondidosGustavo)
-      ) : tab === 'presupuestos' ? (
-        <PanelPresupuestos />
-      ) : tab === 'obras' ? (
-        <PanelObras />
-      ) : tab === 'calendario' ? (
-        <PanelCalendario />
-      ) : tab === 'stock' ? (
-        <PanelStock />
-      ) : tab === 'pagos' ? (
-        <PanelPagoSemanal />
-      ) : tab === 'resultados' ? (
-        <PanelEstadoResultados />
+      {seccion === null ? (
+        /* Home: grilla de cards */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: '1.25rem' }}>
+          {SECCIONES.map(s => {
+            const stat = s.key === 'activos' ? activos.length : s.key === 'respondidos_gustavo' ? respondidosGustavo.length : null
+            return (
+              <button
+                key={s.key}
+                onClick={() => setSeccion(s.key)}
+                className="card"
+                style={{
+                  padding: '14px 14px', border: 'none', cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: stat != null ? 2 : 10,
+                  textAlign: 'left', borderTop: `3px solid ${s.color}`,
+                }}
+              >
+                {stat != null && (
+                  <span style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{stat}</span>
+                )}
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{s.label}</span>
+                {s.key === 'activos' && vencidos.length > 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--danger)' }}>{vencidos.length} vencido{vencidos.length !== 1 ? 's' : ''}</span>
+                )}
+                {s.key === 'respondidos_gustavo' && activosGustavo.length > 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>{activosGustavo.length} activo{activosGustavo.length !== 1 ? 's' : ''}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
       ) : (
         <div>
-          {clientesArchivadosCount > 0 && (
+          {/* Volver */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
             <button
-              onClick={() => setVerArchivados(v => !v)}
-              className="btn btn-secondary"
-              style={{ fontSize: 12, padding: '6px 12px', marginBottom: 12 }}
-            >
-              {verArchivados ? '← Ver clientes activos' : `Ver archivados (${clientesArchivadosCount})`}
-            </button>
-          )}
-          {clientesSummary.length === 0 ? (
-            <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
-              {verArchivados ? 'No hay clientes archivados.' : 'Sin clientes registrados aún.'}
-            </p>
-          ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {clientesSummary.map(c => (
-            <div
-              key={c.nombre}
-              className="card"
-              style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, borderLeft: `4px solid ${c.vencidos > 0 ? 'var(--danger)' : c.activos > 0 ? 'var(--primary)' : 'var(--success)'}` }}
-            >
-              {/* Avatar */}
-              <div style={{
-                width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-                background: c.vencidos > 0 ? '#fee2e2' : c.activos > 0 ? '#eff6ff' : '#f0fdf4',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 18, fontWeight: 800,
-                color: c.vencidos > 0 ? 'var(--danger)' : c.activos > 0 ? 'var(--primary)' : 'var(--success)',
-              }}>
-                {c.nombre.charAt(0).toUpperCase()}
-              </div>
+              onClick={() => setSeccion(null)}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}
+            >← Volver</button>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: seccionActual?.color }}>{seccionActual?.label}</h2>
+          </div>
 
-              {/* Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p className="font-serif" style={{ fontSize: 19, marginBottom: 3, color: 'var(--secondary)' }}>{c.nombre}</p>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {c.total} interacción{c.total !== 1 ? 'es' : ''}
-                  </span>
-                  {c.activos > 0 && (
-                    <span style={{ fontSize: 12, fontWeight: 600, color: c.vencidos > 0 ? 'var(--danger)' : 'var(--primary)' }}>
-                      {c.vencidos > 0 ? `⚠ ${c.vencidos} vencido${c.vencidos !== 1 ? 's' : ''}` : `● ${c.activos} activo${c.activos !== 1 ? 's' : ''}`}
-                    </span>
+          {loading ? (
+            <div className="spinner" />
+          ) : seccion === 'activos' ? (
+            activos.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+                <p style={{ fontWeight: 600 }}>Sin pendientes activos</p>
+                <p style={{ fontSize: 14, marginTop: 6 }}>Crea uno con el botón de arriba.</p>
+              </div>
+            ) : (
+              Object.entries(clienteGroups).map(([cliente, items]) => (
+                <div key={cliente}>
+                  {items.length > 1 && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '7px 12px', marginBottom: 6,
+                      background: '#f0f4ff', border: '1px solid #c7d2fe',
+                      borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
+                    }}>
+                      <span></span>
+                      <span>{cliente}</span>
+                      <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
+                      <button
+                        onClick={() => setHistorialCliente(cliente)}
+                        style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
+                      >Ver historial →</button>
+                    </div>
                   )}
-                  {c.activos === 0 && (
-                    <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ Al día</span>
-                  )}
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    Última: {fmtFecha(c.ultimaInteraccion)}
-                  </span>
+                  <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
+                    {items.map(p => (
+                      <PendienteCard
+                        key={p.id}
+                        p={p}
+                        onUpdate={loadPendientes}
+                        onVerHistorial={setHistorialCliente}
+                        onSeguimiento={abrirSeguimiento}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              ))
+            )
+          ) : seccion === 'respondidos_gustavo' ? (
+            renderRespondidos(respondidosGustavo)
+          ) : seccion === 'presupuestos' ? (
+            <PanelPresupuestos />
+          ) : seccion === 'boletas' ? (
+            <PanelBoletas />
+          ) : seccion === 'obras' ? (
+            <PanelObras />
+          ) : seccion === 'calendario' ? (
+            <PanelCalendario />
+          ) : seccion === 'stock' ? (
+            <PanelStock />
+          ) : seccion === 'pagos' ? (
+            <PanelPagoSemanal />
+          ) : seccion === 'resultados' ? (
+            <PanelEstadoResultados />
+          ) : (
+            <div>
+              {clientesArchivadosCount > 0 && (
                 <button
+                  onClick={() => setVerArchivados(v => !v)}
                   className="btn btn-secondary"
-                  onClick={() => setHistorialCliente(c.nombre)}
-                  style={{ fontSize: 12, padding: '6px 12px' }}
+                  style={{ fontSize: 12, padding: '6px 12px', marginBottom: 12 }}
                 >
-                  Historial
+                  {verArchivados ? '← Ver clientes activos' : `Ver archivados (${clientesArchivadosCount})`}
                 </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => abrirSeguimiento(c.nombre)}
-                  style={{ fontSize: 12, padding: '6px 12px' }}
+              )}
+              {clientesSummary.length === 0 ? (
+                <p style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
+                  {verArchivados ? 'No hay clientes archivados.' : 'Sin clientes registrados aún.'}
+                </p>
+              ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {clientesSummary.map(c => (
+                <div
+                  key={c.nombre}
+                  className="card"
+                  style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, borderLeft: `4px solid ${c.vencidos > 0 ? 'var(--danger)' : c.activos > 0 ? 'var(--primary)' : 'var(--success)'}` }}
                 >
-                  + Pendiente
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => archivarCliente(c.nombre, !c.archivado)}
-                  style={{ fontSize: 12, padding: '6px 12px' }}
-                  title={c.archivado ? 'Volver a mostrar en la lista' : 'Sacar de la lista sin borrar el historial'}
-                >
-                  {c.archivado ? 'Desarchivar' : 'Archivar'}
-                </button>
-              </div>
+                  {/* Avatar */}
+                  <div style={{
+                    width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                    background: c.vencidos > 0 ? '#fee2e2' : c.activos > 0 ? '#eff6ff' : '#f0fdf4',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 18, fontWeight: 800,
+                    color: c.vencidos > 0 ? 'var(--danger)' : c.activos > 0 ? 'var(--primary)' : 'var(--success)',
+                  }}>
+                    {c.nombre.charAt(0).toUpperCase()}
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p className="font-serif" style={{ fontSize: 19, marginBottom: 3, color: 'var(--secondary)' }}>{c.nombre}</p>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        {c.total} interacción{c.total !== 1 ? 'es' : ''}
+                      </span>
+                      {c.activos > 0 && (
+                        <span style={{ fontSize: 12, fontWeight: 600, color: c.vencidos > 0 ? 'var(--danger)' : 'var(--primary)' }}>
+                          {c.vencidos > 0 ? `⚠ ${c.vencidos} vencido${c.vencidos !== 1 ? 's' : ''}` : `● ${c.activos} activo${c.activos !== 1 ? 's' : ''}`}
+                        </span>
+                      )}
+                      {c.activos === 0 && (
+                        <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ Al día</span>
+                      )}
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Última: {fmtFecha(c.ultimaInteraccion)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setHistorialCliente(c.nombre)}
+                      style={{ fontSize: 12, padding: '6px 12px' }}
+                    >
+                      Historial
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => abrirSeguimiento(c.nombre)}
+                      style={{ fontSize: 12, padding: '6px 12px' }}
+                    >
+                      + Pendiente
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => archivarCliente(c.nombre, !c.archivado)}
+                      style={{ fontSize: 12, padding: '6px 12px' }}
+                      title={c.archivado ? 'Volver a mostrar en la lista' : 'Sacar de la lista sin borrar el historial'}
+                    >
+                      {c.archivado ? 'Desarchivar' : 'Archivar'}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+              )}
+            </div>
           )}
         </div>
       )}

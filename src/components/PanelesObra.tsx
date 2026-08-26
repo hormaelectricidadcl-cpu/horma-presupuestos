@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock } from '../types'
+import { GaleriaArchivos } from './GaleriaArchivos'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -1790,6 +1791,148 @@ const ESTADO_PRESUPUESTO_LABELS: Record<EstadoPresupuesto, string> = {
   convertido: 'Convertido en obra',
 }
 
+const TIPO_PRESUPUESTO_LABELS: Record<PresupuestoGuardado['tipo'], string> = {
+  simple: 'Simple',
+  etapas: 'Por etapas',
+  externo: 'Externo',
+}
+
+/* ─── Boletas y compras cargadas (con o sin foto) ────── */
+const LABEL_DESTINO: Record<string, string> = {
+  stock: 'Stock (sin obra)',
+  trabajo_puntual: 'Trabajo puntual (sin obra)',
+}
+
+export function PanelBoletas() {
+  const [compras, setCompras] = useState<ReporteCompraDia[]>([])
+  const [itemsPorCompra, setItemsPorCompra] = useState<Record<string, CompraItem[]>>({})
+  const [loading, setLoading] = useState(true)
+  const [periodoKey, setPeriodoKey] = useState('')
+  const [expandidoId, setExpandidoId] = useState<string | null>(null)
+
+  const cargar = useCallback(async () => {
+    const { data: comprasData } = await supabase
+      .from('reportes_compras')
+      .select('*')
+      .order('fecha', { ascending: false })
+    const lista = (comprasData as ReporteCompraDia[]) || []
+    setCompras(lista)
+
+    if (lista.length) {
+      const { data: itemsData } = await supabase
+        .from('compra_items')
+        .select('*')
+        .in('compra_id', lista.map(c => c.id))
+      const porCompra: Record<string, CompraItem[]> = {}
+      for (const it of (itemsData as CompraItem[]) || []) {
+        if (!porCompra[it.compra_id]) porCompra[it.compra_id] = []
+        porCompra[it.compra_id].push(it)
+      }
+      setItemsPorCompra(porCompra)
+    } else {
+      setItemsPorCompra({})
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  if (loading) return <div className="spinner" />
+
+  const periodos = agruparPorPeriodo('mes', [], compras, [], [])
+  if (periodos.length === 0) {
+    return <p style={{ color: 'var(--muted)', fontSize: 14 }}>Todavía no hay compras cargadas.</p>
+  }
+  const periodo = periodos.find(p => p.key === periodoKey) || periodos.find(p => p.enCurso) || periodos[0]
+  const totalPeriodo = periodo.compras.reduce((s, c) => s + c.monto, 0)
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--secondary)' }}>
+          Mes:
+          <select
+            value={periodo.key}
+            onChange={e => setPeriodoKey(e.target.value)}
+            style={{
+              width: 'auto', padding: '6px 10px', fontSize: 13, fontWeight: 600, borderRadius: 6,
+              border: '1.5px solid var(--primary)', background: 'var(--white)', color: 'var(--secondary)',
+              cursor: 'pointer', appearance: 'auto',
+            }}
+          >
+            {periodos.map(p => (
+              <option key={p.key} value={p.key}>{p.label}{p.enCurso ? ' (en curso)' : ''}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          onClick={cargar}
+          style={{ padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--white)', cursor: 'pointer', color: 'var(--muted)' }}
+        >↻ Actualizar</button>
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <StatTile label="Total compras del mes" valor={fmtMoney(totalPeriodo)} tono="neutral" />
+      </div>
+
+      {periodo.compras.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 14 }}>Sin compras cargadas ese mes.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {periodo.compras.map(c => {
+            const items = itemsPorCompra[c.id] || []
+            const expandido = expandidoId === c.id
+            return (
+              <div key={c.id} className="card" style={{ padding: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: 14 }}>{c.descripcion}</p>
+                    <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {new Date(c.fecha + 'T00:00:00').toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}
+                      {' · '}{c.obra || LABEL_DESTINO[c.destino || ''] || 'Sin destino'}
+                    </p>
+                  </div>
+                  <p style={{ fontWeight: 700, fontSize: 15 }}>{fmtMoney(c.monto)}</p>
+                </div>
+
+                <div style={{ marginTop: 10, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {c.foto_boleta_url ? (
+                    <div>
+                      <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Foto de la boleta</p>
+                      <GaleriaArchivos urls={[c.foto_boleta_url]} />
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 12, color: 'var(--muted)' }}>Sin foto cargada</p>
+                  )}
+                  {items.length > 0 && (
+                    <button
+                      onClick={() => setExpandidoId(expandido ? null : c.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--primary)', fontWeight: 600, padding: 0, marginLeft: 'auto' }}
+                    >
+                      {expandido ? 'Ocultar materiales ▲' : `Ver materiales (${items.length}) ▼`}
+                    </button>
+                  )}
+                </div>
+
+                {expandido && items.length > 0 && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {items.map(it => (
+                      <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12 }}>
+                        <span style={{ color: 'var(--muted)' }}>{it.descripcion} × {it.cantidad}</span>
+                        <span>{fmtMoney(it.cantidad * it.precio_unitario)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function PanelPresupuestos() {
   const [presupuestos, setPresupuestos] = useState<PresupuestoGuardado[]>([])
   const [loading, setLoading] = useState(true)
@@ -1800,6 +1943,14 @@ export function PanelPresupuestos() {
   const [convirtiendoId, setConvirtiendoId] = useState<string | null>(null)
   const [nombreObraNueva, setNombreObraNueva] = useState('')
   const [convirtiendo, setConvirtiendo] = useState(false)
+
+  const [mostrarFormExterno, setMostrarFormExterno] = useState(false)
+  const [clienteExterno, setClienteExterno] = useState('')
+  const [montoExterno, setMontoExterno] = useState('')
+  const [estadoExterno, setEstadoExterno] = useState<EstadoPresupuesto>('enviado')
+  const [archivoExternoUrl, setArchivoExternoUrl] = useState('')
+  const [subiendoArchivo, setSubiendoArchivo] = useState(false)
+  const [guardandoExterno, setGuardandoExterno] = useState(false)
 
   const cargar = useCallback(async () => {
     const { data } = await supabase
@@ -1868,6 +2019,56 @@ export function PanelPresupuestos() {
     alert(`Obra "${nombreObraNueva.trim()}" creada. Ya la puedes ver en la pestaña Obras.`)
   }
 
+  async function subirArchivoExterno(archivo: File) {
+    setSubiendoArchivo(true)
+    try {
+      const ext = archivo.name.split('.').pop() || 'pdf'
+      const filename = `presupuesto-externo-${Date.now()}.${ext}`
+      const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+      if (error) {
+        alert('Error al subir el archivo: ' + error.message)
+        return
+      }
+      const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
+      setArchivoExternoUrl(urlData.publicUrl)
+    } finally {
+      setSubiendoArchivo(false)
+    }
+  }
+
+  async function guardarExterno() {
+    if (!clienteExterno.trim()) { alert('Completa el nombre del cliente.'); return }
+    const monto = Number(montoExterno)
+    if (!montoExterno.trim() || Number.isNaN(monto) || monto <= 0) { alert('Completa un monto válido.'); return }
+    setGuardandoExterno(true)
+
+    const { data: cliente } = await supabase
+      .from('clientes')
+      .upsert({ nombre: clienteExterno.trim() }, { onConflict: 'nombre' })
+      .select('id')
+      .single()
+
+    const { error } = await supabase.from('presupuestos').insert({
+      cliente_id: cliente?.id ?? null,
+      cliente_nombre: clienteExterno.trim(),
+      tipo: 'externo',
+      estado: estadoExterno,
+      total: monto,
+      archivo_url: archivoExternoUrl || null,
+    })
+    setGuardandoExterno(false)
+    if (error) {
+      alert('No se pudo guardar el presupuesto externo. Intenta de nuevo.')
+      return
+    }
+    setMostrarFormExterno(false)
+    setClienteExterno('')
+    setMontoExterno('')
+    setEstadoExterno('enviado')
+    setArchivoExternoUrl('')
+    cargar()
+  }
+
   const filtrados = presupuestos.filter(p =>
     !busqueda.trim() || (p.cliente_nombre || '').toLowerCase().includes(busqueda.trim().toLowerCase())
   )
@@ -1876,10 +2077,62 @@ export function PanelPresupuestos() {
 
   return (
     <div>
-      <div className="field" style={{ maxWidth: 320, marginBottom: 18 }}>
-        <label>Buscar por cliente</label>
-        <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Nombre del cliente..." />
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 18 }}>
+        <div className="field" style={{ maxWidth: 320, marginBottom: 0, flex: 1, minWidth: 200 }}>
+          <label>Buscar por cliente</label>
+          <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Nombre del cliente..." />
+        </div>
+        <button
+          className="btn btn-secondary"
+          onClick={() => setMostrarFormExterno(v => !v)}
+          style={{ fontSize: 13, padding: '8px 14px' }}
+        >
+          {mostrarFormExterno ? 'Cancelar' : '+ Cargar presupuesto externo'}
+        </button>
       </div>
+
+      {mostrarFormExterno && (
+        <div className="card" style={{ padding: 16, marginBottom: 18 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Presupuesto hecho fuera de la app</p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div className="field" style={{ flex: 1, minWidth: 160 }}>
+              <label>Cliente</label>
+              <input value={clienteExterno} onChange={e => setClienteExterno(e.target.value)} placeholder="Nombre del cliente" />
+            </div>
+            <div className="field" style={{ width: 160 }}>
+              <label>Monto total</label>
+              <input type="number" min="0" value={montoExterno} onChange={e => setMontoExterno(e.target.value)} placeholder="0" />
+            </div>
+            <div className="field" style={{ width: 180 }}>
+              <label>Estado</label>
+              <select value={estadoExterno} onChange={e => setEstadoExterno(e.target.value as EstadoPresupuesto)}>
+                {(Object.entries(ESTADO_PRESUPUESTO_LABELS) as [EstadoPresupuesto, string][]).map(([k, label]) => (
+                  <option key={k} value={k}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="field" style={{ marginTop: 10, maxWidth: 320 }}>
+            <label>Archivo (PDF o foto)</label>
+            <input
+              type="file"
+              accept="application/pdf,image/*"
+              onChange={e => { const f = e.target.files?.[0]; if (f) subirArchivoExterno(f) }}
+              disabled={subiendoArchivo}
+            />
+            {subiendoArchivo && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Subiendo...</p>}
+            {archivoExternoUrl && !subiendoArchivo && <p style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>Archivo subido.</p>}
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={guardarExterno}
+            disabled={guardandoExterno || subiendoArchivo}
+            style={{ marginTop: 14, fontSize: 13, padding: '8px 16px' }}
+          >
+            {guardandoExterno ? 'Guardando...' : 'Guardar presupuesto'}
+          </button>
+        </div>
+      )}
 
       {filtrados.length === 0 ? (
         <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>
@@ -1895,7 +2148,7 @@ export function PanelPresupuestos() {
                   <p style={{ fontSize: 12, color: 'var(--muted)' }}>
                     {p.referencia ? `${p.referencia} · ` : ''}
                     {new Date(p.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}
-                    {' · '}{p.tipo === 'simple' ? 'Simple' : 'Por etapas'}
+                    {' · '}{TIPO_PRESUPUESTO_LABELS[p.tipo]}
                   </p>
                 </div>
                 <p style={{ fontWeight: 700, fontSize: 15 }}>{fmtMoney(p.total || 0)}</p>
@@ -1986,6 +2239,14 @@ export function PanelPresupuestos() {
                       <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin ítems cargados.</p>
                     )}
                   </div>
+                ) : detalle.tipo === 'externo' ? (
+                  <div style={{ marginBottom: 16 }}>
+                    {detalle.archivo_url ? (
+                      <GaleriaArchivos urls={[detalle.archivo_url]} />
+                    ) : (
+                      <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin archivo cargado.</p>
+                    )}
+                  </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
                     {(detalle.etapas || []).map((etapa, i) => (
@@ -2013,11 +2274,15 @@ export function PanelPresupuestos() {
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span>{fmtMoney(detalle.subtotal || 0)}</span></div>
-                  {detalle.gg_amount != null && detalle.gg_amount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gastos generales ({detalle.gg_pct}%)</span><span>{fmtMoney(detalle.gg_amount)}</span></div>
+                  {detalle.tipo !== 'externo' && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span>{fmtMoney(detalle.subtotal || 0)}</span></div>
+                      {detalle.gg_amount != null && detalle.gg_amount > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gastos generales ({detalle.gg_pct}%)</span><span>{fmtMoney(detalle.gg_amount)}</span></div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>IVA</span><span>{fmtMoney(detalle.iva || 0)}</span></div>
+                    </>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>IVA</span><span>{fmtMoney(detalle.iva || 0)}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}><span>Total</span><span>{fmtMoney(detalle.total || 0)}</span></div>
                 </div>
 
