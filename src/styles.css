@@ -53,9 +53,12 @@ body {
 }
 
 /* ── Todo lo demás SOLO dentro de .pendientes ─────────── */
-/* Esto evita interferir con el presupuestador            */
+/* Esto evita interferir con el presupuestador, salvo que ahora el     */
+/* presupuestador (.app, de App.css) también vive embebido dentro de   */
+/* .pendientes (pestaña "Hacer presupuesto") — se excluye ese subárbol */
+/* del reset para que conserve su propio margin/padding.               */
 
-.pendientes *, .pendientes *::before, .pendientes *::after {
+.pendientes *:not(.app, .app *), .pendientes *:not(.app, .app *)::before, .pendientes *:not(.app, .app *)::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
