@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
 import Presupuesto from './Presupuesto'
 import PresupuestoEtapas from './PresupuestoEtapas'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelClientes } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelClientes, PanelIdeasContenido } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
@@ -489,7 +489,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados' | 'boletas' | 'presupuestador'
+  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'resultados' | 'boletas' | 'presupuestador' | 'ideas'
   const [seccion, setSeccion] = useState<SeccionGustavo | null>(null)
   const [modoPresupuestador, setModoPresupuestador] = useState<'simple' | 'etapas'>('simple')
 
@@ -503,6 +503,7 @@ export default function Gustavo({ token }: Props) {
     { key: 'boletas', label: 'Boletas', color: '#0ea5e9' },
     { key: 'presupuestos', label: 'Mis presupuestos', color: '#059669' },
     { key: 'presupuestador', label: 'Hacer presupuesto', color: '#e69a21' },
+    { key: 'ideas', label: 'Ideas de contenido', color: '#db2777' },
     { key: 'pendientes', label: 'Mis tareas', color: '#dc2626' },
     { key: 'notas', label: 'Mis notas', color: '#0284c7' },
     { key: 'clientes', label: 'Clientes', color: '#0d9488' },
@@ -651,6 +652,8 @@ export default function Gustavo({ token }: Props) {
               <PanelPagoSemanal />
             ) : seccion === 'resultados' ? (
               <PanelEstadoResultados />
+            ) : seccion === 'ideas' ? (
+              <PanelIdeasContenido soloLectura />
             ) : loading ? (
               <div className="spinner" />
             ) : pendientes.length === 0 ? (

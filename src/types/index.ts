@@ -211,6 +211,22 @@ export interface ObraMedia {
   tipo: 'foto' | 'video' | 'documento'
   descripcion: string | null
   subido_por: string | null
+  // Banco de contenido (sql/20260826_obra_media_contenido.sql)
+  lat: number | null
+  lng: number | null
+  momento: 'antes' | 'durante' | 'despues' | null
+  autorizado_cliente: boolean
+  destacado: boolean
+}
+
+export interface IdeaContenido {
+  id: string
+  created_at: string
+  titulo: string
+  hook: string | null
+  formato: string | null
+  tema: string | null
+  estado: 'pendiente' | 'hecho'
 }
 
 export type EstadoObra = 'en_curso' | 'terminada_terreno' | 'facturada' | 'en_garantia' | 'cerrada'

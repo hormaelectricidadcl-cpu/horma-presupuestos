@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -3165,6 +3165,319 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
               <span style={{ fontSize: 14, color: 'var(--muted)' }}>→</span>
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Banco de contenido: fotos/video de obra para marketing ──────────
+   Alimentado por Fabriel/Misael desde /obra-fotos. Alexandra revisa, marca
+   destacados y descarga por obra/período. */
+type VistaBanco = 'semana' | 'mes'
+
+const MOMENTO_LABEL: Record<'antes' | 'durante' | 'despues', string> = {
+  antes: 'Antes', durante: 'Durante', despues: 'Después',
+}
+
+function agruparMediaPorPeriodo(vista: VistaBanco, media: ObraMedia[]): { key: string; label: string; enCurso: boolean; items: ObraMedia[] }[] {
+  const mapa = new Map<string, { key: string; label: string; enCurso: boolean; items: ObraMedia[] }>()
+  for (const m of media) {
+    const fecha = m.created_at.slice(0, 10)
+    const { key, label, enCurso } = getPeriodo(fecha, vista)
+    if (!mapa.has(key)) mapa.set(key, { key, label, enCurso, items: [] })
+    mapa.get(key)!.items.push(m)
+  }
+  return Array.from(mapa.values()).sort((a, b) => b.key.localeCompare(a.key))
+}
+
+export function PanelBancoContenido() {
+  const [obras, setObras] = useState<{ id: string; nombre: string }[]>([])
+  const [media, setMedia] = useState<ObraMedia[]>([])
+  const [loading, setLoading] = useState(true)
+  const [obraFiltro, setObraFiltro] = useState('')
+  const [vista, setVista] = useState<VistaBanco>('semana')
+  const [periodoKey, setPeriodoKey] = useState('')
+  const [soloDestacados, setSoloDestacados] = useState(false)
+
+  const cargar = useCallback(async () => {
+    const [{ data: o }, { data: m }] = await Promise.all([
+      supabase.from('obras').select('id, nombre').order('nombre'),
+      supabase.from('obra_media').select('*').order('created_at', { ascending: false }),
+    ])
+    setObras((o as { id: string; nombre: string }[]) || [])
+    setMedia((m as ObraMedia[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function toggleDestacado(item: ObraMedia) {
+    await supabase.from('obra_media').update({ destacado: !item.destacado }).eq('id', item.id)
+    setMedia(prev => prev.map(m => m.id === item.id ? { ...m, destacado: !m.destacado } : m))
+  }
+
+  if (loading) return <div className="spinner" />
+
+  const obraMap = new Map(obras.map(o => [o.id, o.nombre]))
+  const mediaFiltradaObra = obraFiltro ? media.filter(m => m.obra_id === obraFiltro) : media
+  const periodos = agruparMediaPorPeriodo(vista, mediaFiltradaObra)
+  const periodo = periodos.find(p => p.key === periodoKey) || periodos.find(p => p.enCurso) || periodos[0] || null
+  const itemsPeriodo = periodo ? (soloDestacados ? periodo.items.filter(m => m.destacado) : periodo.items) : []
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--secondary)' }}>
+          Obra:
+          <select
+            value={obraFiltro}
+            onChange={e => { setObraFiltro(e.target.value); setPeriodoKey('') }}
+            style={{
+              width: 'auto', padding: '6px 10px', fontSize: 13, fontWeight: 600, borderRadius: 6,
+              border: '1.5px solid var(--primary)', background: 'var(--white)', color: 'var(--secondary)',
+              cursor: 'pointer', appearance: 'auto',
+            }}
+          >
+            <option value="">Todas</option>
+            {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+          </select>
+        </label>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['semana', 'mes'] as const).map(v => (
+            <button
+              key={v}
+              onClick={() => { setVista(v); setPeriodoKey('') }}
+              style={{
+                padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                border: `1.5px solid ${vista === v ? 'var(--primary)' : 'var(--border)'}`,
+                background: vista === v ? 'var(--primary)' : 'var(--white)',
+                color: vista === v ? '#fff' : 'var(--text)',
+              }}
+            >{v === 'semana' ? 'Semana' : 'Mes'}</button>
+          ))}
+        </div>
+        {periodo && (
+          <select
+            value={periodo.key}
+            onChange={e => setPeriodoKey(e.target.value)}
+            style={{
+              width: 'auto', padding: '6px 10px', fontSize: 13, fontWeight: 600, borderRadius: 6,
+              border: '1.5px solid var(--primary)', background: 'var(--white)', color: 'var(--secondary)',
+              cursor: 'pointer', appearance: 'auto',
+            }}
+          >
+            {periodos.map(p => (
+              <option key={p.key} value={p.key}>{p.label}{p.enCurso ? ' (en curso)' : ''}</option>
+            ))}
+          </select>
+        )}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', marginLeft: 'auto' }}>
+          <input type="checkbox" checked={soloDestacados} onChange={e => setSoloDestacados(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }} />
+          Solo destacados
+        </label>
+      </div>
+
+      {itemsPeriodo.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 14 }}>
+          {media.length === 0
+            ? 'Todavía no hay fotos ni videos cargados desde obra.'
+            : `Sin material ${soloDestacados ? 'destacado ' : ''}en este período${obraFiltro ? ' para esta obra' : ''}.`}
+        </p>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
+          {itemsPeriodo.map(m => (
+            <div key={m.id} className="card" style={{ padding: 8, position: 'relative' }}>
+              <button
+                onClick={() => toggleDestacado(m)}
+                title={m.destacado ? 'Quitar de destacados' : 'Marcar como destacado'}
+                style={{
+                  position: 'absolute', top: 12, left: 12, zIndex: 1,
+                  background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: '50%',
+                  width: 26, height: 26, cursor: 'pointer', fontSize: 15, lineHeight: 1,
+                  color: m.destacado ? '#fbbf24' : '#fff',
+                }}
+              >★</button>
+              {m.autorizado_cliente && (
+                <span
+                  title="El cliente autorizó usar esto en redes"
+                  style={{
+                    position: 'absolute', top: 12, right: 12, zIndex: 1, fontSize: 13,
+                    background: 'rgba(0,0,0,0.55)', borderRadius: '50%', width: 26, height: 26,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80',
+                  }}
+                >✓</span>
+              )}
+              <a href={m.url} target="_blank" rel="noreferrer">
+                {m.tipo === 'foto' ? (
+                  <img src={m.url} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                ) : m.tipo === 'video' ? (
+                  <div style={{ width: '100%', height: 120, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Video</div>
+                ) : (
+                  <div style={{ width: '100%', height: 120, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Archivo</div>
+                )}
+              </a>
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {!obraFiltro && (
+                  <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {obraMap.get(m.obra_id) || 'Obra eliminada'}
+                  </p>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    {m.momento ? MOMENTO_LABEL[m.momento] : '—'}{m.subido_por ? ` · ${m.subido_por}` : ''}
+                  </span>
+                  <a href={m.url} download target="_blank" rel="noreferrer" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}>
+                    Descargar
+                  </a>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Ideas de contenido: Alexandra carga, Gustavo ejecuta ─────────────
+   En Admin (soloLectura=false) se puede crear/borrar/cambiar estado. En
+   Gustavo (soloLectura=true) solo se puede tildar "Marcar como hecho". */
+export function PanelIdeasContenido({ soloLectura = false }: { soloLectura?: boolean }) {
+  const [ideas, setIdeas] = useState<IdeaContenido[]>([])
+  const [loading, setLoading] = useState(true)
+  const [titulo, setTitulo] = useState('')
+  const [hook, setHook] = useState('')
+  const [formato, setFormato] = useState('')
+  const [tema, setTema] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('ideas_contenido').select('*').order('created_at', { ascending: false })
+    setIdeas((data as IdeaContenido[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function crear() {
+    if (!titulo.trim()) { alert('Escribe un título para la idea.'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('ideas_contenido').insert({
+      titulo: titulo.trim(),
+      hook: hook.trim() || null,
+      formato: formato.trim() || null,
+      tema: tema.trim() || null,
+    })
+    setGuardando(false)
+    if (error) { alert('Error al guardar la idea: ' + error.message); return }
+    setTitulo(''); setHook(''); setFormato(''); setTema('')
+    cargar()
+  }
+
+  async function toggleEstado(idea: IdeaContenido) {
+    const nuevoEstado = idea.estado === 'hecho' ? 'pendiente' : 'hecho'
+    await supabase.from('ideas_contenido').update({ estado: nuevoEstado }).eq('id', idea.id)
+    setIdeas(prev => prev.map(i => i.id === idea.id ? { ...i, estado: nuevoEstado } : i))
+  }
+
+  async function eliminar(id: string) {
+    if (!window.confirm('¿Seguro que quieres borrar esta idea?')) return
+    await supabase.from('ideas_contenido').delete().eq('id', id)
+    setIdeas(prev => prev.filter(i => i.id !== id))
+  }
+
+  if (loading) return <div className="spinner" />
+
+  const pendientes = ideas.filter(i => i.estado === 'pendiente')
+  const hechas = ideas.filter(i => i.estado === 'hecho')
+
+  return (
+    <div>
+      {!soloLectura && (
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Nueva idea
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              value={titulo}
+              onChange={e => setTitulo(e.target.value)}
+              placeholder="Título de la idea"
+              style={{ padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14 }}
+            />
+            <input
+              value={hook}
+              onChange={e => setHook(e.target.value)}
+              placeholder="Hook (la frase que engancha al empezar el video)"
+              style={{ padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={formato}
+                onChange={e => setFormato(e.target.value)}
+                placeholder="Formato (ej: Reel, Antes/Después)"
+                style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14 }}
+              />
+              <input
+                value={tema}
+                onChange={e => setTema(e.target.value)}
+                placeholder="Tema"
+                style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14 }}
+              />
+            </div>
+            <button className="btn btn-primary" onClick={crear} disabled={guardando} style={{ alignSelf: 'flex-start' }}>
+              {guardando ? 'Guardando...' : '+ Agregar idea'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {ideas.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>
+          {soloLectura ? 'Todavía no hay ideas de contenido cargadas.' : 'Todavía no cargaste ninguna idea.'}
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {pendientes.map(idea => (
+            <div key={idea.id} className="card" style={{ padding: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <p style={{ fontWeight: 700, fontSize: 14 }}>{idea.titulo}</p>
+                {!soloLectura && (
+                  <button onClick={() => eliminar(idea.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, color: 'var(--muted)', lineHeight: 1, flexShrink: 0 }}>✕</button>
+                )}
+              </div>
+              {idea.hook && <p style={{ fontSize: 13, color: 'var(--text)', marginTop: 6, fontStyle: 'italic' }}>"{idea.hook}"</p>}
+              {(idea.formato || idea.tema) && (
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                  {[idea.formato, idea.tema].filter(Boolean).join(' · ')}
+                </p>
+              )}
+              <button
+                onClick={() => toggleEstado(idea)}
+                className="btn btn-secondary"
+                style={{ fontSize: 12, padding: '6px 12px', marginTop: 10 }}
+              >
+                Marcar como hecho
+              </button>
+            </div>
+          ))}
+          {hechas.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {hechas.map(idea => (
+                <div key={idea.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', opacity: 0.6 }}>
+                  <span style={{ flex: 1, fontSize: 13, textDecoration: 'line-through' }}>{idea.titulo}</span>
+                  <button
+                    onClick={() => toggleEstado(idea)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}
+                  >Reabrir</button>
+                  {!soloLectura && (
+                    <button onClick={() => eliminar(idea.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--muted)', lineHeight: 1 }}>✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
