@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
 import Presupuesto from './Presupuesto'
 import PresupuestoEtapas from './PresupuestoEtapas'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelClientes, PanelIdeasContenido } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
@@ -489,7 +489,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'resultados' | 'boletas' | 'presupuestador' | 'ideas'
+  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas'
   const [seccion, setSeccion] = useState<SeccionGustavo | null>(null)
   const [modoPresupuestador, setModoPresupuestador] = useState<'simple' | 'etapas'>('simple')
 
@@ -501,7 +501,9 @@ export default function Gustavo({ token }: Props) {
     { key: 'obras', label: 'Obras', color: '#c1440e' },
     { key: 'pagos', label: 'Pago semanal', color: '#e67e22' },
     { key: 'historial_pagos', label: 'Historial de pagos', color: '#b45309' },
+    { key: 'trabajadores', label: 'Trabajadores', color: '#4d7c0f' },
     { key: 'boletas', label: 'Boletas', color: '#0ea5e9' },
+    { key: 'facturas', label: 'Facturas', color: '#1d4ed8' },
     { key: 'presupuestos', label: 'Mis presupuestos', color: '#059669' },
     { key: 'presupuestador', label: 'Hacer presupuesto', color: '#e69a21' },
     { key: 'ideas', label: 'Ideas de contenido', color: '#db2777' },
@@ -613,6 +615,8 @@ export default function Gustavo({ token }: Props) {
               <NotasRapidas autor="gustavo" />
             ) : seccion === 'boletas' ? (
               <PanelBoletas />
+            ) : seccion === 'facturas' ? (
+              <PanelFacturas />
             ) : seccion === 'presupuestador' ? (
               <div>
                 <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
@@ -653,6 +657,8 @@ export default function Gustavo({ token }: Props) {
               <PanelPagoSemanal />
             ) : seccion === 'historial_pagos' ? (
               <PanelHistorialPagos />
+            ) : seccion === 'trabajadores' ? (
+              <PanelTrabajadores />
             ) : seccion === 'resultados' ? (
               <PanelEstadoResultados />
             ) : seccion === 'ideas' ? (

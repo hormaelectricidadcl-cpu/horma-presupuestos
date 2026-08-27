@@ -21,6 +21,12 @@ const FASE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444']
 
 const fmt = (n: number) => Math.round(n).toLocaleString('es-CL')
 
+// La IA deja precioUnitario en 0 cuando no encontró un precio para esa línea en el
+// texto de origen -- eso arma un presupuesto "mocho" (con ítems en $0) si nadie lo nota.
+function detectarItemsSinPrecio(etapas: Etapa[]): string[] {
+  return etapas.flatMap(e => e.items.filter(it => !it.precioUnitario).map(it => it.descripcion || '(sin descripción)'))
+}
+
 const thS: React.CSSProperties = {
   padding: '6px 10px',
   fontSize: 10,
@@ -152,6 +158,8 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
   const [error, setError]           = useState('')
   const [ggPct, setGgPct]           = useState(0)
   const [guardado, setGuardado]     = useState<string | null>(null)
+  const [guardadoError, setGuardadoError] = useState(false)
+  const [itemsSinPrecio, setItemsSinPrecio] = useState<string[]>([])
 
   const grandMO  = etapas.reduce((s, e) => s + e.totalMO,  0)
   const grandMAT = etapas.reduce((s, e) => s + e.totalMAT, 0)
@@ -200,6 +208,7 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
       if (!res.ok || !data.etapas) throw new Error(data.error || 'Error al procesar')
       setEtapas(data.etapas)
       setTotalNeto(data.totalNeto ?? null)
+      setItemsSinPrecio(detectarItemsSinPrecio(data.etapas))
       setProcesado(true)
       setGuardado(null)
     } catch (e) {
@@ -241,6 +250,7 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
       if (!res.ok || !data.etapas) throw new Error(data.error || 'Error al procesar')
       setEtapas(data.etapas)
       setTotalNeto(data.totalNeto ?? null)
+      setItemsSinPrecio(detectarItemsSinPrecio(data.etapas))
       setProcesado(true)
       setGuardado(null)
     } catch (e) {
@@ -256,13 +266,18 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
     setTotalNeto(null)
     setGgPct(0)
     setGuardado(null)
+    setGuardadoError(false)
+    setItemsSinPrecio([])
   }
 
   async function generarPDF() {
     if (!client.name.trim()) { alert('Ingresa el nombre del cliente antes de generar el PDF.'); return }
+    if (!client.address.trim()) { alert('Ingresa la dirección del cliente antes de generar el PDF.'); return }
     if (ggBase === 0) { alert('Procesa el texto con IA antes de generar el PDF.'); return }
     const referencia = `HRM-${Date.now().toString(36).toUpperCase()}`
     await generatePDFEtapas(client, etapas, { pct: ggPct, amount: ggAmount }, referencia)
+    setGuardado(null)
+    setGuardadoError(false)
 
     // Guardar en Supabase — en la versión embebida (panel de Gustavo, sin login
     // real) se guarda igual que el resto de esa pantalla, con user_id: null
@@ -293,7 +308,8 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
         iva,
         total,
       })
-      if (!dbErr) setGuardado(referencia)
+      if (dbErr) setGuardadoError(true)
+      else setGuardado(referencia)
     }
   }
 
@@ -351,15 +367,15 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
               <input value={client.name}     onChange={e => setClient(c => ({ ...c, name:     e.target.value }))} placeholder="Ej: Patricio Valdés" />
             </div>
             <div className="field">
-              <label>Teléfono</label>
+              <label>Teléfono (opcional)</label>
               <input value={client.telefono} onChange={e => setClient(c => ({ ...c, telefono: e.target.value }))} placeholder="+56 9 1234 5678" />
             </div>
             <div className="field">
-              <label>Email</label>
+              <label>Email (opcional)</label>
               <input type="email" value={client.email} onChange={e => setClient(c => ({ ...c, email: e.target.value }))} placeholder="cliente@email.com" />
             </div>
             <div className="field">
-              <label>Dirección</label>
+              <label>Dirección *</label>
               <input value={client.address}  onChange={e => setClient(c => ({ ...c, address:  e.target.value }))} placeholder="Las Condes, Santiago" />
             </div>
           </div>
@@ -574,6 +590,20 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
           </div>
         </div>
 
+        {procesado && itemsSinPrecio.length > 0 && (
+          <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.25rem', background: '#fef2f2', border: '1px solid #ef4444' }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#b91c1c', marginBottom: 6 }}>
+              {itemsSinPrecio.length === 1 ? 'Hay 1 ítem sin precio' : `Hay ${itemsSinPrecio.length} ítems sin precio`} — quedaron en $0 porque la IA no encontró un monto para esa línea en el texto:
+            </p>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#7f1d1d' }}>
+              {itemsSinPrecio.map((desc, i) => <li key={i}>{desc}</li>)}
+            </ul>
+            <p style={{ fontSize: 12, color: '#7f1d1d', marginTop: 6 }}>
+              Revisa el texto de origen (agrega el precio a esas líneas) y volvé a procesar antes de generar el PDF.
+            </p>
+          </div>
+        )}
+
         {/* Gastos Generales selector */}
         {procesado && (
           <div className="card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
@@ -675,6 +705,11 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
           {guardado && (
             <p style={{ textAlign: 'center', fontSize: 12, color: '#15803d', marginTop: 8, fontWeight: 600 }}>
               ✓ Guardado en el historial — Ref: {guardado}
+            </p>
+          )}
+          {guardadoError && (
+            <p style={{ textAlign: 'center', fontSize: 12, color: '#b91c1c', marginTop: 8, fontWeight: 600 }}>
+              El PDF se generó pero no se pudo guardar en Mis presupuestos. Avisa a Alexandra o intenta de nuevo.
             </p>
           )}
         </div>

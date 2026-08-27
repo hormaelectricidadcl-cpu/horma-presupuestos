@@ -249,6 +249,7 @@ export interface Trabajador {
   nombre: string
   tarifa_diaria: number
   viatico_diario: number
+  activo: boolean
 }
 
 export interface CuentaPorCobrar {

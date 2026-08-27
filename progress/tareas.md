@@ -2,6 +2,15 @@
 > Estados: 🔲 pendiente · 🔄 en progreso · ✅ hecho (mover a estado_actual.md como resumen y borrar de acá cuando se confirme)
 > Contexto del rediseño grande del 20/08 → ver decisiones.md.
 
+## ✅ Lote de 11 puntos — pruebas reales de Alexandra y Gustavo, 27/08/2026
+Los 11 puntos quedaron construidos y verificados el 27/08/2026 (detalle completo de causa raíz y verificación en `estado_actual.md`, sección "Sesión 27/08/2026"). **Sin commit ni push todavía.** Pendiente real que queda:
+- Correr `sql/20260827_trabajadores_activo.sql` (bloquea Archivar/Reactivar en la card de Trabajadores — agregar ya funciona sin la migración).
+- Confirmar en producción que la IA lee bien el monto de comprobantes de abono y de presupuestos externos (Cloudflare Functions, no probables en local) — especialmente el caso PDF del presupuesto externo, que usa un tipo de contenido (`input_file`) distinto al de las boletas y no se pudo verificar contra la API real de OpenAI.
+- Confirmar en un iPhone real que el PDF ahora se puede seleccionar en "Cargar presupuesto externo".
+- Convertir de nuevo el presupuesto real de "Gustavo Castillo" en obra (quedó a propósito sin tocar, ver `estado_actual.md`).
+
+Resuelto en la misma conversación, sin código: (11) los links de Fabriel/Misael son los que ya estaban anotados en la sesión del 26/08 — `https://horma-presupuestos.pages.dev/obra-fotos?t=55165640daf27c94` (Fabriel) y `...?t=55cecd957fcf3736` (Misael). Si no funcionan, falta confirmar que las variables `VITE_FABRIEL_TOKEN`/`VITE_MISAEL_TOKEN` estén cargadas en Cloudflare Pages con redeploy hecho (mismo bug que ya pasó una vez con `VITE_PRESUPUESTO_TOKEN`).
+
 ## 🔲 Confirmar plan de Supabase (backups automáticos)
 Conversación del 20/08: no está confirmado si el proyecto tiene el plan Pro de Supabase con backups automáticos activos. Dado que maneja plata real de nómina, prioridad alta — revisar en el dashboard de Supabase (Settings → Billing) y, si hace falta, subir de plan.
 

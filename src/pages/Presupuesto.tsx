@@ -49,15 +49,19 @@ const Presupuesto: React.FC<Props> = ({ token }) => {
       }
       const referencia = `HRM-${Date.now().toString(36).toUpperCase()}`;
       generatePDF(clientData, items, overheadPercentage, referencia);
-      void guardarPresupuesto(referencia);
-      alert(`PDF generado correctamente — Ref: ${referencia}`);
+      const guardadoOk = await guardarPresupuesto(referencia);
+      if (guardadoOk) {
+        alert(`PDF generado correctamente — Ref: ${referencia}`);
+      } else {
+        alert(`El PDF se generó (Ref: ${referencia}), pero no se pudo guardar en Mis presupuestos. Avísale a Alexandra o intenta de nuevo.`);
+      }
     } catch (error) {
       console.error('Error in handleGeneratePDF:', error);
       alert('Error al generar el PDF');
     }
   };
 
-  const guardarPresupuesto = async (referencia: string) => {
+  const guardarPresupuesto = async (referencia: string): Promise<boolean> => {
     try {
       const clientePayload: { nombre: string; rut?: string; email?: string } = { nombre: clientData.name.trim() };
       if (clientData.rut.trim()) clientePayload.rut = clientData.rut.trim();
@@ -86,8 +90,10 @@ const Presupuesto: React.FC<Props> = ({ token }) => {
         total,
       });
       if (presupuestoErr) throw presupuestoErr;
+      return true;
     } catch (error) {
       console.error('Error al guardar presupuesto en Supabase:', error);
+      return false;
     }
   };
 
@@ -136,10 +142,10 @@ const Presupuesto: React.FC<Props> = ({ token }) => {
       <div className="card client-form">
         <h2>Datos del cliente</h2>
         <div className="field-grid">
-          <input type="text" name="name" placeholder="Nombre" value={clientData.name} onChange={handleClientChange} />
-          <input type="text" name="rut" placeholder="RUT" value={clientData.rut} onChange={handleClientChange} />
-          <input type="email" name="email" placeholder="Email" value={clientData.email} onChange={handleClientChange} />
-          <input type="text" name="address" placeholder="Dirección" value={clientData.address} onChange={handleClientChange} />
+          <input type="text" name="name" placeholder="Nombre *" value={clientData.name} onChange={handleClientChange} />
+          <input type="text" name="rut" placeholder="RUT (opcional)" value={clientData.rut} onChange={handleClientChange} />
+          <input type="email" name="email" placeholder="Email (opcional)" value={clientData.email} onChange={handleClientChange} />
+          <input type="text" name="address" placeholder="Dirección *" value={clientData.address} onChange={handleClientChange} />
         </div>
       </div>
 

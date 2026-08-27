@@ -2077,6 +2077,9 @@ function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEli
           ))}
         </div>
       )}
+      <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>
+        Sube la captura del comprobante y la IA completa fecha y monto — revísalos antes de agregar el abono. También se puede cargar todo a mano, sin foto.
+      </p>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div className="field" style={{ flex: 1, minWidth: 130 }}>
           <label>Fecha del abono</label>
@@ -2087,7 +2090,7 @@ function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEli
           <input type="number" min="0" placeholder="Monto en pesos" value={monto} onChange={e => setMonto(e.target.value)} />
         </div>
         <label className="btn btn-secondary" style={{ flexShrink: 0, cursor: subiendoComprobante ? 'default' : 'pointer', opacity: subiendoComprobante ? 0.6 : 1 }}>
-          {subiendoComprobante ? 'Subiendo...' : comprobanteUrl ? 'Comprobante ✓' : '+ Comprobante'}
+          {subiendoComprobante ? 'Leyendo el comprobante...' : comprobanteUrl ? 'Comprobante ✓' : '+ Comprobante'}
           <input
             type="file"
             accept="image/*,.pdf"
@@ -2108,6 +2111,22 @@ function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEli
               }
               const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
               setComprobanteUrl(urlData.publicUrl)
+              // La IA completa monto/fecha a partir de la captura -- revisables antes de
+              // confirmar "+ Agregar abono", la carga manual sigue disponible si falla o
+              // si hace falta corregir algo.
+              try {
+                const res = await fetch('/api/parse-comprobante', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ url: urlData.publicUrl }),
+                })
+                const resultado = await res.json()
+                if (!res.ok) throw new Error(resultado.error || 'error desconocido')
+                if (resultado.monto) setMonto(String(resultado.monto))
+                if (resultado.fecha) setFecha(resultado.fecha)
+              } catch (err) {
+                alert('El comprobante se guardó, pero la IA no pudo leerlo (' + String(err) + '). Completa fecha y monto a mano.')
+              }
               setSubiendoComprobante(false)
             }}
           />
@@ -2361,6 +2380,147 @@ export function HistorialObraModal({
   )
 }
 
+/* ─── Trabajadores: agregar/archivar, resumen de lo pagado ───────────── */
+export function PanelTrabajadores() {
+  const [trabajadores, setTrabajadores] = useState<Trabajador[]>([])
+  const [comprobantes, setComprobantes] = useState<PagoSemanalComprobante[]>([])
+  const [loading, setLoading] = useState(true)
+  const [verArchivados, setVerArchivados] = useState(false)
+  const [mostrarForm, setMostrarForm] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevaTarifa, setNuevaTarifa] = useState('')
+  const [nuevoViatico, setNuevoViatico] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const cargar = useCallback(async () => {
+    const [{ data: t }, { data: c }] = await Promise.all([
+      supabase.from('trabajadores').select('*').order('nombre'),
+      supabase.from('pago_semanal_comprobantes').select('*'),
+    ])
+    setTrabajadores((t as Trabajador[]) || [])
+    setComprobantes((c as PagoSemanalComprobante[]) || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function agregarTrabajador() {
+    if (!nuevoNombre.trim()) { alert('Completa el nombre.'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('trabajadores').insert({
+      nombre: nuevoNombre.trim(),
+      tarifa_diaria: Number(nuevaTarifa) || 0,
+      viatico_diario: Number(nuevoViatico) || 0,
+    })
+    setGuardando(false)
+    if (error) { alert('No se pudo agregar. Puede que ya exista un trabajador con ese nombre.'); return }
+    setNuevoNombre(''); setNuevaTarifa(''); setNuevoViatico(''); setMostrarForm(false)
+    cargar()
+  }
+
+  // Archivar (no borrar) -- deja de aparecer en Reporte Diario y Pago semanal, pero
+  // sus comprobantes/ajustes/adelantos pasados (guardados por nombre, no por FK) siguen
+  // disponibles en "Historial de pagos", que lista trabajadores sin filtrar por activo.
+  async function archivar(t: Trabajador) {
+    if (!window.confirm(`¿Archivar a ${t.nombre}? Deja de aparecer en Reporte Diario y Pago semanal. Su historial de pagos sigue disponible en "Historial de pagos".`)) return
+    await supabase.from('trabajadores').update({ activo: false }).eq('id', t.id)
+    cargar()
+  }
+
+  async function reactivar(t: Trabajador) {
+    await supabase.from('trabajadores').update({ activo: true }).eq('id', t.id)
+    cargar()
+  }
+
+  if (loading) return <div className="spinner" />
+
+  const totalPagadoPorNombre = new Map<string, number>()
+  for (const c of comprobantes) {
+    const monto = c.monto_leido ?? c.monto_calculado ?? 0
+    totalPagadoPorNombre.set(c.trabajador, (totalPagadoPorNombre.get(c.trabajador) || 0) + monto)
+  }
+
+  // `!== false` en vez de solo `t.activo`: mientras la migración de la columna `activo` no
+  // esté corrida, `select('*')` no la trae y quedaría `undefined` -- tratarlo como activo evita
+  // que la lista se vea vacía por error antes de que Alexandra corra la migración.
+  const visibles = trabajadores.filter(t => verArchivados || t.activo !== false)
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" onClick={() => setMostrarForm(v => !v)} style={{ fontSize: 13, padding: '7px 14px' }}>
+          {mostrarForm ? 'Cancelar' : '+ Agregar trabajador'}
+        </button>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted)', marginLeft: 'auto', cursor: 'pointer' }}>
+          <input type="checkbox" checked={verArchivados} onChange={e => setVerArchivados(e.target.checked)} />
+          Ver archivados
+        </label>
+      </div>
+
+      {mostrarForm && (
+        <div className="card" style={{ padding: 14, marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="field" style={{ flex: 1, minWidth: 140 }}>
+            <label>Nombre</label>
+            <input type="text" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} />
+          </div>
+          <div className="field" style={{ width: 140 }}>
+            <label>Tarifa diaria</label>
+            <input type="number" min="0" value={nuevaTarifa} onChange={e => setNuevaTarifa(e.target.value)} placeholder="0" />
+          </div>
+          <div className="field" style={{ width: 140 }}>
+            <label>Viático diario</label>
+            <input type="number" min="0" value={nuevoViatico} onChange={e => setNuevoViatico(e.target.value)} placeholder="0" />
+          </div>
+          <button className="btn btn-primary" onClick={agregarTrabajador} disabled={guardando} style={{ fontSize: 13, padding: '8px 16px' }}>
+            {guardando ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      )}
+
+      {visibles.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Sin trabajadores para mostrar.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {visibles.map(t => {
+            const activo = t.activo !== false
+            return (
+              <div key={t.id} className="card" style={{ padding: 14, opacity: activo ? 1 : 0.6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: 15 }}>
+                      {t.nombre}
+                      {!activo && <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}> · Archivado</span>}
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {t.tarifa_diaria > 0 ? `Tarifa diaria: ${fmtMoney(t.tarifa_diaria)}` : 'Sueldo fijo mensual'}
+                      {t.viatico_diario > 0 ? ` · Viático: ${fmtMoney(t.viatico_diario)}` : ''}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ fontSize: 11, color: 'var(--muted)' }}>Total pagado (comprobantes)</p>
+                    <p style={{ fontWeight: 700, fontSize: 15 }}>{fmtMoney(totalPagadoPorNombre.get(t.nombre) || 0)}</p>
+                  </div>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  {activo ? (
+                    <button onClick={() => archivar(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--danger)', fontWeight: 600, padding: 0 }}>
+                      Archivar
+                    </button>
+                  ) : (
+                    <button onClick={() => reactivar(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--primary)', fontWeight: 600, padding: 0 }}>
+                      Reactivar
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Mis presupuestos ──────────────────────────────── */
 const ESTADO_PRESUPUESTO_LABELS: Record<EstadoPresupuesto, string> = {
   borrador: 'Borrador',
@@ -2414,6 +2574,16 @@ export function PanelBoletas() {
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
+
+  async function borrarCompra(id: string, descripcion: string) {
+    if (!window.confirm(`¿Borrar la compra "${descripcion}"? Si se cargó a Stock, también se revierte esa entrada. No se puede deshacer.`)) return
+    const { error } = await supabase.from('reportes_compras').delete().eq('id', id)
+    if (error) {
+      alert('No se pudo borrar. Intenta de nuevo.')
+      return
+    }
+    setCompras(prev => prev.filter(c => c.id !== id))
+  }
 
   if (loading) return <div className="spinner" />
 
@@ -2490,6 +2660,12 @@ export function PanelBoletas() {
                       {expandido ? 'Ocultar materiales ▲' : `Ver materiales (${items.length}) ▼`}
                     </button>
                   )}
+                  <button
+                    onClick={() => borrarCompra(c.id, c.descripcion)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--danger)', fontWeight: 600, padding: 0, marginLeft: items.length > 0 ? 0 : 'auto' }}
+                  >
+                    Borrar
+                  </button>
                 </div>
 
                 {expandido && items.length > 0 && (
@@ -2505,6 +2681,111 @@ export function PanelBoletas() {
               </div>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Facturas emitidas ───────────────────────────────── */
+export function PanelFacturas() {
+  const [facturas, setFacturas] = useState<{ id: string; fecha: string; obra: string | null; monto: number }[]>([])
+  const [obras, setObras] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [mostrarForm, setMostrarForm] = useState(false)
+  const [nuevaFecha, setNuevaFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [nuevaObra, setNuevaObra] = useState('')
+  const [nuevoMonto, setNuevoMonto] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const cargar = useCallback(async () => {
+    const [{ data: f }, { data: o }] = await Promise.all([
+      supabase.from('facturas').select('*').order('fecha', { ascending: false }),
+      supabase.from('obras').select('nombre').order('nombre'),
+    ])
+    setFacturas(f || [])
+    setObras((o || []).map((x: { nombre: string }) => x.nombre))
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function agregarFactura() {
+    if (!nuevaFecha || !nuevoMonto.trim()) { alert('Completa la fecha y el monto.'); return }
+    const monto = Number(nuevoMonto)
+    if (!Number.isFinite(monto) || monto <= 0) { alert('El monto no es válido.'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('facturas').insert({ fecha: nuevaFecha, obra: nuevaObra || null, monto })
+    setGuardando(false)
+    if (error) { alert('No se pudo guardar. Intenta de nuevo.'); return }
+    setNuevaObra(''); setNuevoMonto(''); setMostrarForm(false)
+    cargar()
+  }
+
+  async function borrarFactura(id: string) {
+    if (!window.confirm('¿Borrar esta factura? No se puede deshacer.')) return
+    const { error } = await supabase.from('facturas').delete().eq('id', id)
+    if (error) { alert('No se pudo borrar. Intenta de nuevo.'); return }
+    setFacturas(prev => prev.filter(f => f.id !== id))
+  }
+
+  if (loading) return <div className="spinner" />
+
+  const totalGeneral = facturas.reduce((s, f) => s + f.monto, 0)
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" onClick={() => setMostrarForm(v => !v)} style={{ fontSize: 13, padding: '7px 14px' }}>
+          {mostrarForm ? 'Cancelar' : '+ Agregar factura'}
+        </button>
+      </div>
+
+      {mostrarForm && (
+        <div className="card" style={{ padding: 14, marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="field" style={{ width: 160 }}>
+            <label>Fecha</label>
+            <input type="date" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} />
+          </div>
+          <div className="field" style={{ flex: 1, minWidth: 160 }}>
+            <label>Obra (opcional)</label>
+            <select value={nuevaObra} onChange={e => setNuevaObra(e.target.value)}>
+              <option value="">Sin obra</option>
+              {obras.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div className="field" style={{ width: 160 }}>
+            <label>Monto</label>
+            <input type="number" min="0" value={nuevoMonto} onChange={e => setNuevoMonto(e.target.value)} placeholder="0" />
+          </div>
+          <button className="btn btn-primary" onClick={agregarFactura} disabled={guardando} style={{ fontSize: 13, padding: '8px 16px' }}>
+            {guardando ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      )}
+
+      <div style={{ marginBottom: 18 }}>
+        <StatTile label="Total facturado" valor={fmtMoney(totalGeneral)} tono="neutral" />
+      </div>
+
+      {facturas.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Todavía no hay facturas cargadas.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {facturas.map(f => (
+            <div key={f.id} className="card" style={{ padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ fontWeight: 700, fontSize: 14 }}>{f.obra || 'Sin obra asignada'}</p>
+                <p style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(f.fecha + 'T00:00:00').toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <p style={{ fontWeight: 700, fontSize: 15 }}>{fmtMoney(f.monto)}</p>
+                <button onClick={() => borrarFactura(f.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--danger)', fontWeight: 600, padding: 0 }}>
+                  Borrar
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -2549,6 +2830,21 @@ export function PanelPresupuestos() {
       alert('No se pudo actualizar el estado. Intenta de nuevo.')
       cargar()
     }
+  }
+
+  // "Convertido en obra" nunca se escribe directo desde el selector de estado -- solo
+  // el flujo real de conversión (que crea la obra) puede llegar a ese estado, para que
+  // nunca quede un presupuesto "convertido" sin ninguna obra vinculada.
+  function seleccionarEstado(p: PresupuestoGuardado, estado: EstadoPresupuesto) {
+    if (estado === 'convertido') {
+      if (p.estado !== 'aceptado') {
+        alert('Primero marca el presupuesto como "Aceptado" y después conviértelo en obra.')
+        return
+      }
+      abrirConvertir(p)
+      return
+    }
+    cambiarEstado(p.id, estado)
   }
 
   async function abrirDetalle(id: string) {
@@ -2609,6 +2905,20 @@ export function PanelPresupuestos() {
       }
       const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
       setArchivoExternoUrl(urlData.publicUrl)
+      // La IA completa el monto a partir del PDF/foto -- revisable antes de guardar, la
+      // carga manual del monto sigue disponible si falla o si hace falta corregirlo.
+      try {
+        const res = await fetch('/api/parse-presupuesto-externo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlData.publicUrl }),
+        })
+        const resultado = await res.json()
+        if (!res.ok) throw new Error(resultado.error || 'error desconocido')
+        if (resultado.monto) setMontoExterno(String(resultado.monto))
+      } catch (err) {
+        alert('El archivo se guardó, pero la IA no pudo leer el monto (' + String(err) + '). Complétalo a mano.')
+      }
     } finally {
       setSubiendoArchivo(false)
     }
@@ -2684,9 +2994,11 @@ export function PanelPresupuestos() {
             <div className="field" style={{ width: 180 }}>
               <label>Estado</label>
               <select value={estadoExterno} onChange={e => setEstadoExterno(e.target.value as EstadoPresupuesto)}>
-                {(Object.entries(ESTADO_PRESUPUESTO_LABELS) as [EstadoPresupuesto, string][]).map(([k, label]) => (
-                  <option key={k} value={k}>{label}</option>
-                ))}
+                {(Object.entries(ESTADO_PRESUPUESTO_LABELS) as [EstadoPresupuesto, string][])
+                  .filter(([k]) => k !== 'convertido')
+                  .map(([k, label]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
               </select>
             </div>
           </div>
@@ -2694,11 +3006,12 @@ export function PanelPresupuestos() {
             <label>Archivo (PDF o foto)</label>
             <input
               type="file"
-              accept="application/pdf,image/*"
+              accept="image/*,.pdf"
               onChange={e => { const f = e.target.files?.[0]; if (f) subirArchivoExterno(f) }}
               disabled={subiendoArchivo}
             />
-            {subiendoArchivo && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Subiendo...</p>}
+            <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>La IA completa el campo "Monto total" de arriba al subir el archivo — revísalo antes de guardar.</p>
+            {subiendoArchivo && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Subiendo y leyendo el monto...</p>}
             {archivoExternoUrl && !subiendoArchivo && <p style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>Archivo subido.</p>}
           </div>
           <button
@@ -2734,7 +3047,7 @@ export function PanelPresupuestos() {
               <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <select
                   value={p.estado}
-                  onChange={e => cambiarEstado(p.id, e.target.value as EstadoPresupuesto)}
+                  onChange={e => seleccionarEstado(p, e.target.value as EstadoPresupuesto)}
                   style={{ fontSize: 13, padding: '5px 10px', width: 'auto' }}
                 >
                   {(Object.entries(ESTADO_PRESUPUESTO_LABELS) as [EstadoPresupuesto, string][]).map(([k, label]) => (
@@ -2744,11 +3057,6 @@ export function PanelPresupuestos() {
                 <button className="btn btn-secondary" onClick={() => abrirDetalle(p.id)} style={{ fontSize: 12, padding: '6px 12px' }}>
                   Detalle
                 </button>
-                {p.estado === 'aceptado' && (
-                  <button className="btn btn-primary" onClick={() => abrirConvertir(p)} style={{ fontSize: 12, padding: '6px 12px' }}>
-                    Convertir en obra
-                  </button>
-                )}
                 <button className="btn btn-danger" onClick={() => eliminarPresupuesto(p.id, p.cliente_nombre)} style={{ fontSize: 12, padding: '6px 12px', marginLeft: 'auto' }}>
                   Borrar
                 </button>
@@ -2867,22 +3175,24 @@ export function PanelPresupuestos() {
                 <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
                   <select
                     value={detalle.estado}
-                    onChange={e => cambiarEstado(detalle.id, e.target.value as EstadoPresupuesto)}
+                    onChange={e => {
+                      const nuevo = e.target.value as EstadoPresupuesto
+                      if (nuevo === 'convertido') {
+                        if (detalle.estado !== 'aceptado') {
+                          alert('Primero marca el presupuesto como "Aceptado" y después conviértelo en obra.')
+                          return
+                        }
+                        setDetalleId(null); setDetalle(null); abrirConvertir(detalle)
+                        return
+                      }
+                      cambiarEstado(detalle.id, nuevo)
+                    }}
                     style={{ fontSize: 13, padding: '5px 10px', width: 'auto' }}
                   >
                     {(Object.entries(ESTADO_PRESUPUESTO_LABELS) as [EstadoPresupuesto, string][]).map(([k, label]) => (
                       <option key={k} value={k}>{label}</option>
                     ))}
                   </select>
-                  {detalle.estado === 'aceptado' && (
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => { setDetalleId(null); setDetalle(null); abrirConvertir(detalle) }}
-                      style={{ fontSize: 12, padding: '6px 12px' }}
-                    >
-                      Convertir en obra
-                    </button>
-                  )}
                   <button className="btn btn-danger" onClick={() => eliminarPresupuesto(detalle.id, detalle.cliente_nombre)} style={{ fontSize: 12, padding: '6px 12px', marginLeft: 'auto' }}>
                     Borrar
                   </button>

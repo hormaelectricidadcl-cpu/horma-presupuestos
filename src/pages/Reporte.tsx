@@ -1,13 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 const REPORTE_TOKEN = import.meta.env.VITE_REPORTE_TOKEN as string
 
+// Respaldo por si falla la carga desde Supabase (tabla `trabajadores`, fuente real de la
+// lista) -- la lista real, filtrada a los activos, se carga en un efecto más abajo.
 export const TRABAJADORES = ['Alejandro', 'Fabriel', 'Henry', 'Manuel', 'Misael', 'Samuel']
-// Gustavo no tiene tarifa diaria (no está en la tabla `trabajadores`, cobra distinto por ser el
-// dueño) -- no puede sumarse a TRABAJADORES o aparecería en asistencia/pago semanal por error.
-// Se usa aparte solo donde tiene sentido que él sea la respuesta (ej: quién hizo un trabajo puntual).
-const QUIEN_LO_HIZO = [...TRABAJADORES, 'Gustavo']
 const OBRA_LIMACHE = 'Ohiggins 126 Limache'
 // Respaldo por si falla la carga desde Supabase (tabla `obras`, fuente real de la lista).
 const OBRAS_FALLBACK = [
@@ -104,9 +102,9 @@ function todayISO() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
 }
 
-function defaultTrabajadores(): Record<string, TrabajadorState> {
+function defaultTrabajadores(nombres: string[]): Record<string, TrabajadorState> {
   const base: Record<string, TrabajadorState> = {}
-  for (const nombre of TRABAJADORES) base[nombre] = { ...DEFAULT_TRABAJADOR }
+  for (const nombre of nombres) base[nombre] = { ...DEFAULT_TRABAJADOR }
   return base
 }
 
@@ -125,7 +123,9 @@ export default function Reporte({ token, embedded = false }: Props) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [trabajadores, setTrabajadores] = useState<Record<string, TrabajadorState>>(defaultTrabajadores())
+  const [trabajadorNombres, setTrabajadorNombres] = useState<string[]>(TRABAJADORES)
+  const trabajadorNombresRef = useRef<string[]>(TRABAJADORES)
+  const [trabajadores, setTrabajadores] = useState<Record<string, TrabajadorState>>(defaultTrabajadores(TRABAJADORES))
   const [obras, setObras] = useState<string[]>(OBRAS_FALLBACK)
   const [obraGeneral, setObraGeneral] = useState('')
   const [compras, setCompras] = useState<CompraRow[]>([])
@@ -151,7 +151,7 @@ export default function Reporte({ token, embedded = false }: Props) {
       supabase.from('movimientos_stock').select('*').eq('fecha', f).eq('tipo', 'salida').order('created_at'),
     ])
 
-    const base = defaultTrabajadores()
+    const base = defaultTrabajadores(trabajadorNombresRef.current)
     for (const row of dia || []) {
       if (base[row.trabajador]) {
         base[row.trabajador] = {
@@ -216,7 +216,27 @@ export default function Reporte({ token, embedded = false }: Props) {
     supabase.from('materiales').select('id, nombre, stock_actual').order('nombre').then(({ data }) => {
       setMateriales(data || [])
     })
+    // Trabajadores activos reales -- si alguien se archiva desde la card de Trabajadores,
+    // deja de aparecer acá (aunque su historial de pagos pasado se mantenga intacto).
+    supabase.from('trabajadores').select('nombre').eq('activo', true).order('nombre').then(({ data }) => {
+      if (data && data.length) {
+        const nombres = data.map((t: { nombre: string }) => t.nombre)
+        trabajadorNombresRef.current = nombres
+        setTrabajadorNombres(nombres)
+        setTrabajadores(prev => {
+          const next = defaultTrabajadores(nombres)
+          for (const nombre of nombres) if (prev[nombre]) next[nombre] = prev[nombre]
+          return next
+        })
+      }
+    })
   }, [tokenValido])
+
+  // Gustavo no tiene tarifa diaria (no está en la tabla `trabajadores`, cobra distinto por ser
+  // el dueño) -- no puede sumarse a trabajadorNombres o aparecería en asistencia/pago semanal
+  // por error. Se usa aparte solo donde tiene sentido que él sea la respuesta (ej: quién hizo
+  // un trabajo puntual).
+  const quienLoHizo = [...trabajadorNombres, 'Gustavo']
 
   function actualizarTrabajador(nombre: string, patch: Partial<TrabajadorState>) {
     setTrabajadores(prev => ({ ...prev, [nombre]: { ...prev[nombre], ...patch } }))
@@ -226,8 +246,8 @@ export default function Reporte({ token, embedded = false }: Props) {
     if (!obraGeneral) return
     setTrabajadores(prev => {
       const next = { ...prev }
-      for (const nombre of TRABAJADORES) {
-        if (next[nombre].presente) next[nombre] = { ...next[nombre], obra: obraGeneral, viatico: viaticoPorObra(obraGeneral) }
+      for (const nombre of trabajadorNombres) {
+        if (next[nombre]?.presente) next[nombre] = { ...next[nombre], obra: obraGeneral, viatico: viaticoPorObra(obraGeneral) }
       }
       return next
     })
@@ -343,8 +363,13 @@ export default function Reporte({ token, embedded = false }: Props) {
   async function enviarReporte() {
     setError(null)
 
-    const filasDiarias = TRABAJADORES.map(nombre => {
-      const t = trabajadores[nombre]
+    if (subiendoBoletaIdx !== null) {
+      alert('Espera a que la IA termine de leer la boleta antes de guardar.')
+      return
+    }
+
+    const filasDiarias = trabajadorNombres.map(nombre => {
+      const t = trabajadores[nombre] || { ...DEFAULT_TRABAJADOR, presente: false }
       return {
         fecha,
         trabajador: nombre,
@@ -369,9 +394,12 @@ export default function Reporte({ token, embedded = false }: Props) {
 
     const montoInvalido = (m: string) => { const n = Number(m); return !Number.isFinite(n) || n <= 0 }
 
-    const comprasValidas = compras.filter(c => c.descripcion.trim() || c.monto.trim())
+    // Una compra con foto pero sin descripción/monto (la IA no pudo leerlos, o falló)
+    // también cuenta como "con datos" -- si no, quedaba afuera del chequeo de abajo y
+    // se guardaba el reporte sin avisar que esa compra nunca se guardó.
+    const comprasValidas = compras.filter(c => c.descripcion.trim() || c.monto.trim() || c.fotoBoletaUrl)
     if (comprasValidas.some(c => !c.descripcion.trim() || !c.monto.trim())) {
-      alert('Cada compra necesita descripción y monto.')
+      alert('Cada compra necesita descripción y monto. Si subiste una foto y la IA no pudo leerlos, complétalos a mano antes de guardar.')
       return
     }
     if (comprasValidas.some(c => montoInvalido(c.monto))) {
@@ -451,26 +479,31 @@ export default function Reporte({ token, embedded = false }: Props) {
               precio_unitario: Number(it.precioUnitario),
             }))
           )
+        }
 
-          // Si la compra es para Stock, cada material entra al catálogo automáticamente --
-          // el trigger de la base de datos ajusta `stock_actual`, acá solo se crea el
-          // movimiento. Se crea/reusa el material por nombre (upsert), nunca se duplica.
-          if (c.destino === 'stock') {
-            for (const it of itemsValidos) {
-              const { data: material } = await supabase
-                .from('materiales')
-                .upsert({ nombre: it.descripcion.trim() }, { onConflict: 'nombre', ignoreDuplicates: false })
-                .select('id')
-                .single()
-              if (material) {
-                await supabase.from('movimientos_stock').insert({
-                  material_id: material.id,
-                  tipo: 'entrada',
-                  cantidad: Number(it.cantidad) > 0 ? Number(it.cantidad) : 1,
-                  fecha,
-                  compra_id: compraInsertada.id,
-                })
-              }
+        // Si la compra es para Stock, cada material entra al catálogo automáticamente --
+        // el trigger de la base de datos ajusta `stock_actual`, acá solo se crea el
+        // movimiento. Se crea/reusa el material por nombre (upsert), nunca se duplica.
+        // Si no hay desglose por ítem (compra cargada solo con descripción y monto,
+        // sin "Materiales de esta compra"), la compra entera entra como un material.
+        if (c.destino === 'stock') {
+          const materialesAIngresar = itemsValidos.length
+            ? itemsValidos.map(it => ({ nombre: it.descripcion.trim(), cantidad: Number(it.cantidad) > 0 ? Number(it.cantidad) : 1 }))
+            : [{ nombre: c.descripcion.trim(), cantidad: 1 }]
+          for (const m of materialesAIngresar) {
+            const { data: material } = await supabase
+              .from('materiales')
+              .upsert({ nombre: m.nombre }, { onConflict: 'nombre', ignoreDuplicates: false })
+              .select('id')
+              .single()
+            if (material) {
+              await supabase.from('movimientos_stock').insert({
+                material_id: material.id,
+                tipo: 'entrada',
+                cantidad: m.cantidad,
+                fecha,
+                compra_id: compraInsertada.id,
+              })
             }
           }
         }
@@ -690,8 +723,9 @@ export default function Reporte({ token, embedded = false }: Props) {
             {/* Trabajadores */}
             <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Trabajadores</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-              {TRABAJADORES.map(nombre => {
+              {trabajadorNombres.map(nombre => {
                 const t = trabajadores[nombre]
+                if (!t) return null
                 const esFabriel = nombre === 'Fabriel'
                 return (
                   <div key={nombre} className="card" style={{ padding: 14 }}>
@@ -891,7 +925,7 @@ export default function Reporte({ token, embedded = false }: Props) {
                       <label>¿Quién pagó?</label>
                       <select value={c.pagadoPor} onChange={e => actualizarCompra(idx, { pagadoPor: e.target.value })}>
                         <option value="">Caja de la empresa</option>
-                        {TRABAJADORES.map(n => <option key={n} value={n}>{n} (con su propia plata — hay que reembolsarle)</option>)}
+                        {trabajadorNombres.map(n => <option key={n} value={n}>{n} (con su propia plata — hay que reembolsarle)</option>)}
                       </select>
                     </div>
                     <button type="button" className="btn btn-ghost" onClick={() => quitarCompra(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
@@ -1086,7 +1120,7 @@ export default function Reporte({ token, embedded = false }: Props) {
                       <label>Quién lo hizo (opcional)</label>
                       <select value={p.trabajador} onChange={e => actualizarTrabajoPuntual(idx, { trabajador: e.target.value })}>
                         <option value="">Selecciona...</option>
-                        {QUIEN_LO_HIZO.map(n => <option key={n} value={n}>{n}</option>)}
+                        {quienLoHizo.map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
                     <div className="field">
