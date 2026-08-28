@@ -3,8 +3,8 @@
 > Contexto del rediseño grande del 20/08 → ver decisiones.md.
 
 ## ✅ Lote de 11 puntos — pruebas reales de Alexandra y Gustavo, 27/08/2026
-Los 11 puntos quedaron construidos y verificados el 27/08/2026 (detalle completo de causa raíz y verificación en `estado_actual.md`, sección "Sesión 27/08/2026"). **Sin commit ni push todavía.** Pendiente real que queda:
-- Correr `sql/20260827_trabajadores_activo.sql` (bloquea Archivar/Reactivar en la card de Trabajadores — agregar ya funciona sin la migración).
+Los 11 puntos quedaron construidos y verificados el 27/08/2026 (detalle completo de causa raíz y verificación en `estado_actual.md`, sección "Sesión 27/08/2026"). **Commiteado y pusheado a `main` (`75888db`).** `sql/20260827_trabajadores_activo.sql` ya corrida por Alexandra el mismo día. Pendiente real que queda:
+- Probar Archivar/Reactivar en la card de Trabajadores con un trabajador real (la migración ya está corrida, agregar ya se había probado antes).
 - Confirmar en producción que la IA lee bien el monto de comprobantes de abono y de presupuestos externos (Cloudflare Functions, no probables en local) — especialmente el caso PDF del presupuesto externo, que usa un tipo de contenido (`input_file`) distinto al de las boletas y no se pudo verificar contra la API real de OpenAI.
 - Confirmar en un iPhone real que el PDF ahora se puede seleccionar en "Cargar presupuesto externo".
 - Convertir de nuevo el presupuesto real de "Gustavo Castillo" en obra (quedó a propósito sin tocar, ver `estado_actual.md`).
