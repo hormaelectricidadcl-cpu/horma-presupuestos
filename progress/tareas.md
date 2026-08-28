@@ -2,6 +2,14 @@
 > Estados: 🔲 pendiente · 🔄 en progreso · ✅ hecho (mover a estado_actual.md como resumen y borrar de acá cuando se confirme)
 > Contexto del rediseño grande del 20/08 → ver decisiones.md.
 
+## 🔴 URGENTE — Seguridad de fondo, conversación iniciada 28/08/2026 (ver `estado_actual.md` para el detalle completo)
+Alexandra preguntó directamente si "con Supabase estamos seguros" es cierto. Verificado en vivo, no de memoria: casi todas las tablas del negocio tienen política RLS `"anon full access"` (lectura/escritura total para cualquiera con la clave pública del proyecto, sin login real). No es que la plataforma sea insegura — es que la configuración actual de esta app no tiene una barrera real más allá de que nadie busque la clave. Orden acordado para resolver, sin tocar nada todavía salvo lo que ya se cerró:
+1. **Confirmar backups automáticos de Supabase** (pendiente desde el 20/08, nunca revisado — solo Alexandra puede verlo, dashboard → Settings → Billing/Database). Lo más urgente: decide si un error es recuperable.
+2. **Cerrar el `list` público del bucket `audio-notas`** (mantener la lectura pública de un archivo puntual, que la app necesita) — propuesto, todavía sin hacer, esperando el ok de Alexandra.
+3. Conversación aparte sobre reemplazar "anon full access" por control de acceso real — cambio de fondo, no se toca sin plan y sin hablarlo primero con Alexandra/Gustavo.
+
+Ya no hace falta el ítem viejo "Confirmar plan de Supabase (backups automáticos)" por separado — queda reemplazado por el punto 1 de arriba. El ítem de RLS deshabilitado en `notas_rapidas`/`tareas_clientes`/`seo_*` sigue aparte más abajo — es un hallazgo distinto (tablas con RLS completamente apagado, no el patrón "anon full access" de este bloque).
+
 ## ✅ Lote de 11 puntos — pruebas reales de Alexandra y Gustavo, 27/08/2026
 Los 11 puntos quedaron construidos y verificados el 27/08/2026 (detalle completo de causa raíz y verificación en `estado_actual.md`, sección "Sesión 27/08/2026"). **Commiteado y pusheado a `main` (`75888db`).** `sql/20260827_trabajadores_activo.sql` ya corrida por Alexandra el mismo día. Pendiente real que queda:
 - Probar Archivar/Reactivar en la card de Trabajadores con un trabajador real (la migración ya está corrida, agregar ya se había probado antes).
@@ -10,9 +18,6 @@ Los 11 puntos quedaron construidos y verificados el 27/08/2026 (detalle completo
 - Convertir de nuevo el presupuesto real de "Gustavo Castillo" en obra (quedó a propósito sin tocar, ver `estado_actual.md`).
 
 Resuelto en la misma conversación, sin código: (11) los links de Fabriel/Misael son los que ya estaban anotados en la sesión del 26/08 — `https://horma-presupuestos.pages.dev/obra-fotos?t=55165640daf27c94` (Fabriel) y `...?t=55cecd957fcf3736` (Misael). Si no funcionan, falta confirmar que las variables `VITE_FABRIEL_TOKEN`/`VITE_MISAEL_TOKEN` estén cargadas en Cloudflare Pages con redeploy hecho (mismo bug que ya pasó una vez con `VITE_PRESUPUESTO_TOKEN`).
-
-## 🔲 Confirmar plan de Supabase (backups automáticos)
-Conversación del 20/08: no está confirmado si el proyecto tiene el plan Pro de Supabase con backups automáticos activos. Dado que maneja plata real de nómina, prioridad alta — revisar en el dashboard de Supabase (Settings → Billing) y, si hace falta, subir de plan.
 
 ## 🔲 Verificar en producción el sync nuevo a Google Sheets
 `sync-compras.js` / `sync-cobros.js` / `sync-subcontratos.js` (creadas 20/08) no se pudieron probar en local (sin wrangler/pages dev). Falta: que alguien cargue un reporte diario real después del deploy y confirme en la planilla "Control de Obra - Horma" que las filas nuevas aparecieron bien (incluida la fila espejo en "Asignación Materiales" para compras).
