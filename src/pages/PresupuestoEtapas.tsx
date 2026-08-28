@@ -97,7 +97,7 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
           }}>H</div>
           <div>
             <p style={{ fontWeight: 800, fontSize: 16, color: '#1a1a1a', lineHeight: 1.2 }}>Presupuestador</p>
-            <p style={{ fontSize: 12, color: '#615e5b' }}>Horma Electricidad</p>
+            <p style={{ fontSize: 12, color: '#615e5b' }}>Horma Grup</p>
           </div>
         </div>
         <form onSubmit={handleSubmit}>
@@ -340,7 +340,7 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
           }}>H</div>
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#1a1a1a' }}>Presupuesto Itemizado por Etapas</h1>
-            <p style={{ fontSize: 13, color: '#615e5b', fontWeight: 500 }}>Horma Electricidad — Estándar de Ingeniería</p>
+            <p style={{ fontSize: 13, color: '#615e5b', fontWeight: 500 }}>Horma Grup — Estándar de Ingeniería</p>
           </div>
           {!embedded && (
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>

@@ -73,7 +73,7 @@ export const generatePDFEtapas = async (
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(15)
   doc.setTextColor(...WHITE)
-  doc.text('PRESUPUESTO HORMA ELECTRICIDAD', tx, 18)
+  doc.text('PRESUPUESTO HORMA GRUP', tx, 18)
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
@@ -83,7 +83,7 @@ export const generatePDFEtapas = async (
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.5)
   doc.setTextColor(210, 210, 210)
-  doc.text('Estándar de ingeniería — Horma Electricidad', tx, 34)
+  doc.text('Estándar de ingeniería — Horma Grup', tx, 34)
 
   y = hH + 8
 
@@ -91,7 +91,7 @@ export const generatePDFEtapas = async (
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9.5)
   doc.setTextColor(...BLACK)
-  doc.text('HORMA ELECTRICIDAD', margin, y)
+  doc.text('HORMA GRUP', margin, y)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)

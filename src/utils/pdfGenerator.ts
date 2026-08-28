@@ -67,7 +67,7 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(17);
   doc.setTextColor(255, 255, 255);
-  doc.text('PRESUPUESTO HORMA ELECTRICIDAD', titleX, 23);
+  doc.text('PRESUPUESTO HORMA GRUP', titleX, 23);
 
   yPosition = 52;
 
@@ -75,7 +75,7 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
-  doc.text('HORMA ELECTRICIDAD', margin, yPosition);
+  doc.text('HORMA GRUP', margin, yPosition);
 
   doc.setFontSize(10);
 

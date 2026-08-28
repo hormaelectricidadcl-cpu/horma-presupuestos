@@ -121,7 +121,7 @@ const Presupuesto: React.FC<Props> = ({ token }) => {
     <div className="app">
       <header className="app-header">
         <span className="eyebrow">Presupuesto</span>
-        <h1>Horma Electricidad</h1>
+        <h1>Horma Grup</h1>
       </header>
 
       <div className="card config-section">
