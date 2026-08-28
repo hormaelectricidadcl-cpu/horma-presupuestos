@@ -454,6 +454,22 @@ export default function Reporte({ token, embedded = false }: Props) {
       return
     }
 
+    // Aviso de posible duplicado -- mismo criterio que ya existe para cobros más abajo:
+    // solo mira las compras NUEVAS (sin id, recién tipeadas/subidas ahora). Si ya hay una
+    // compra guardada ese mismo día con el mismo monto, probablemente es la misma boleta
+    // cargada dos veces sin querer (ej: se subió de nuevo por las dudas de si había
+    // guardado la primera vez).
+    for (const c of comprasValidas) {
+      if (c.id) continue
+      const { data: existentes } = await supabase.from('reportes_compras').select('id, descripcion').eq('fecha', fecha).eq('monto', Number(c.monto)).limit(1)
+      if (existentes && existentes.length > 0) {
+        if (!window.confirm(`Ya hay una compra de $${c.monto} cargada hoy ("${existentes[0].descripcion}"). ¿Es una compra distinta (Aceptar) o la misma boleta cargada dos veces (Cancelar)?`)) {
+          setSaving(false)
+          return
+        }
+      }
+    }
+
     // Borra las compras viejas del día -- el `on delete cascade` de `compra_items` limpia solo
     // el desglose de esas compras, no hace falta borrarlo aparte.
     await supabase.from('reportes_compras').delete().eq('fecha', fecha)
@@ -653,17 +669,13 @@ export default function Reporte({ token, embedded = false }: Props) {
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 5000)
-    // A pedido de Gustavo: después de guardar, el formulario queda en blanco (como un día
-    // nuevo), listo para cargar más compras/cobros sin ver lo ya guardado en el medio --
-    // en vez de recargar el día con cargarDia() (que dejaba todo con la misma pinta de
-    // antes y confundía sobre si había guardado o no). Si necesita revisar o corregir algo
-    // ya guardado ese mismo día, cambia la fecha (aunque sea a la misma) para que recargue.
-    setTrabajadores(defaultTrabajadores(trabajadorNombresRef.current))
-    setObraGeneral('')
-    setCompras([])
-    setCobros([])
-    setSubcontratos([])
-    setTrabajosPuntuales([])
+    // OJO -- se probó dejar el formulario en blanco tras guardar (pedido inicial de
+    // Alexandra) pero se revirtió: como el guardado borra TODAS las compras/cobros/etc. del
+    // día y reinserta solo lo que hay en el formulario, un formulario vacío en el segundo
+    // guardado del mismo día borraba lo ya guardado en el primero (bug real, encontrado
+    // antes de que pasara con datos reales). Se vuelve a recargar el día completo -- para
+    // sumar otra compra/cobro sin perder lo anterior, se usa "+ Agregar..." como siempre.
+    cargarDia(fecha)
     setUsosStock([])
   }
 
@@ -1161,7 +1173,7 @@ export default function Reporte({ token, embedded = false }: Props) {
             {saved && (
               <div style={{ padding: '12px 16px', background: '#eaf4ee', border: '1px solid #7fb894', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>
                 <p style={{ fontSize: 14, color: '#1f6b3f', fontWeight: 700 }}>
-                  ✓ Reporte guardado correctamente. El formulario quedó en blanco, listo para cargar más compras u otra información de hoy.
+                  ✓ Reporte guardado correctamente. Para cargar otra boleta o compra, tocá "+ Agregar compra" abajo — no hace falta volver a tocar "Guardar" de nuevo por esto.
                 </p>
               </div>
             )}
