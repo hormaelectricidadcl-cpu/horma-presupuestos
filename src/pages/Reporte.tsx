@@ -652,8 +652,19 @@ export default function Reporte({ token, embedded = false }: Props) {
 
     setSaving(false)
     setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
-    cargarDia(fecha)
+    setTimeout(() => setSaved(false), 5000)
+    // A pedido de Gustavo: después de guardar, el formulario queda en blanco (como un día
+    // nuevo), listo para cargar más compras/cobros sin ver lo ya guardado en el medio --
+    // en vez de recargar el día con cargarDia() (que dejaba todo con la misma pinta de
+    // antes y confundía sobre si había guardado o no). Si necesita revisar o corregir algo
+    // ya guardado ese mismo día, cambia la fecha (aunque sea a la misma) para que recargue.
+    setTrabajadores(defaultTrabajadores(trabajadorNombresRef.current))
+    setObraGeneral('')
+    setCompras([])
+    setCobros([])
+    setSubcontratos([])
+    setTrabajosPuntuales([])
+    setUsosStock([])
   }
 
   if (!tokenValido) {
@@ -1145,6 +1156,14 @@ export default function Reporte({ token, embedded = false }: Props) {
 
             {error && (
               <p style={{ color: 'var(--danger)', fontSize: 14, fontWeight: 600, marginBottom: 12, textAlign: 'center' }}>{error}</p>
+            )}
+
+            {saved && (
+              <div style={{ padding: '12px 16px', background: '#eaf4ee', border: '1px solid #7fb894', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>
+                <p style={{ fontSize: 14, color: '#1f6b3f', fontWeight: 700 }}>
+                  ✓ Reporte guardado correctamente. El formulario quedó en blanco, listo para cargar más compras u otra información de hoy.
+                </p>
+              </div>
             )}
 
             <button
