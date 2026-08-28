@@ -92,6 +92,135 @@ export async function copiarItemsAObra(
   await supabase.from('obra_items').insert(filas)
 }
 
+// Atajo para cuando una obra se creó por la vía de excepción (sin presupuesto aceptado
+// todavía, ver decisiones.md 25/08) y después aparece el PDF real -- evita tener que
+// pasar por "Hacer presupuesto" -> "Mis presupuestos" -> "Convertido en obra" cuando la
+// obra ya existe. Sube el archivo, la IA lee monto + ítems (mismo lector que "Cargar
+// presupuesto externo"), y al confirmar crea el presupuesto YA vinculado a esta obra y
+// copia los ítems a Avance de obra en el mismo paso.
+function CargarPresupuestoObra({ obra, onGuardado }: { obra: { id: string; nombre: string; cliente: string | null }; onGuardado: () => void }) {
+  const [abierto, setAbierto] = useState(false)
+  const [subiendo, setSubiendo] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [archivoUrl, setArchivoUrl] = useState('')
+  const [monto, setMonto] = useState('')
+  const [items, setItems] = useState<PresupuestoItemSimple[]>([])
+  const [incluirItems, setIncluirItems] = useState(true)
+
+  async function subir(archivo: File) {
+    setSubiendo(true)
+    try {
+      const ext = archivo.name.split('.').pop() || 'pdf'
+      const filename = `presupuesto-obra-${obra.id}-${Date.now()}.${ext}`
+      const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+      if (error) { alert('Error al subir el archivo: ' + error.message); return }
+      const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
+      setArchivoUrl(urlData.publicUrl)
+      try {
+        const res = await fetch('/api/parse-presupuesto-externo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlData.publicUrl }),
+        })
+        const resultado = await res.json()
+        if (!res.ok) throw new Error(resultado.error || 'error desconocido')
+        if (resultado.monto) setMonto(String(resultado.monto))
+        if (Array.isArray(resultado.items) && resultado.items.length > 0) {
+          setItems(resultado.items.map((it: { descripcion: string; cantidad: number; precio_unitario: number; total: number }, idx: number) => ({
+            id: idx, categoria: '', description: it.descripcion, quantity: it.cantidad, price: it.precio_unitario, total: it.total,
+          })))
+        }
+      } catch (err) {
+        alert('El archivo se guardó, pero la IA no pudo leerlo (' + String(err) + '). Completa el monto a mano.')
+      }
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
+  async function guardar() {
+    const montoNum = Number(monto)
+    if (!monto.trim() || !Number.isFinite(montoNum) || montoNum <= 0) { alert('Completa un monto válido.'); return }
+    setGuardando(true)
+
+    const { data: cliente } = obra.cliente
+      ? await supabase.from('clientes').upsert({ nombre: obra.cliente }, { onConflict: 'nombre' }).select('id').single()
+      : { data: null }
+
+    const itemsAGuardar = incluirItems && items.length > 0 ? items : null
+    const { data: presupuestoCreado, error } = await supabase.from('presupuestos').insert({
+      cliente_id: cliente?.id ?? null,
+      cliente_nombre: obra.cliente || obra.nombre,
+      tipo: 'externo',
+      estado: 'convertido',
+      total: montoNum,
+      archivo_url: archivoUrl || null,
+      items: itemsAGuardar,
+    }).select('id').single()
+    if (error || !presupuestoCreado) {
+      setGuardando(false)
+      alert('No se pudo guardar el presupuesto. Intenta de nuevo.')
+      return
+    }
+
+    await supabase.from('obras').update({ presupuesto_id: presupuestoCreado.id, presupuesto_total: montoNum }).eq('id', obra.id)
+    if (itemsAGuardar) await copiarItemsAObra(obra.id, { tipo: 'externo', items: itemsAGuardar, etapas: null })
+
+    setGuardando(false)
+    setAbierto(false)
+    setArchivoUrl('')
+    setMonto('')
+    setItems([])
+    onGuardado()
+  }
+
+  if (!abierto) {
+    return (
+      <button onClick={() => setAbierto(true)} className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}>
+        + Cargar presupuesto (IA)
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ padding: 12, background: 'var(--surface-alt)', borderRadius: 8, marginTop: 8 }}>
+      <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Cargar presupuesto de esta obra</p>
+      <input
+        type="file" accept="image/*,.pdf" disabled={subiendo}
+        onChange={e => { const f = e.target.files?.[0]; if (f) subir(f) }}
+        style={{ fontSize: 13, marginBottom: 8 }}
+      />
+      {subiendo && <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>Subiendo y leyendo con IA...</p>}
+      <div className="field" style={{ maxWidth: 200, marginBottom: 8 }}>
+        <label>Monto total</label>
+        <input type="number" min="0" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" />
+      </div>
+      {items.length > 0 && (
+        <div style={{ marginBottom: 10, padding: 10, background: 'var(--white)', borderRadius: 8 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer' }}>
+            <input type="checkbox" checked={incluirItems} onChange={e => setIncluirItems(e.target.checked)} />
+            <span style={{ fontSize: 12, fontWeight: 700 }}>La IA encontró {items.length} ítem{items.length !== 1 ? 's' : ''} — incluirlos en Avance de obra</span>
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, opacity: incluirItems ? 1 : 0.5 }}>
+            {items.map(it => (
+              <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, gap: 8 }}>
+                <span>{it.description} ({it.quantity} × {fmtMoney(it.price)})</span>
+                <span style={{ flexShrink: 0 }}>{fmtMoney(it.total)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={guardar} disabled={guardando || subiendo} className="btn btn-primary" style={{ fontSize: 12, padding: '7px 14px' }}>
+          {guardando ? 'Guardando...' : 'Guardar y vincular a esta obra'}
+        </button>
+        <button onClick={() => setAbierto(false)} className="btn btn-secondary" style={{ fontSize: 12, padding: '7px 14px' }}>Cancelar</button>
+      </div>
+    </div>
+  )
+}
+
 export function StatTile({ label, valor, tono = 'neutral' }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' | 'alerta' }) {
   const color = tono === 'positivo' ? 'var(--success)' : tono === 'negativo' ? 'var(--danger)' : tono === 'alerta' ? 'var(--primary)' : 'var(--text)'
   return (
@@ -465,7 +594,7 @@ export function PanelObras() {
     return {
       obra, obraId: maestro?.id, activa, estadoObra,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
-      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
+      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
   })
 
@@ -715,6 +844,9 @@ export function PanelObras() {
                             <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
                           )}
                           <EditableCliente valor={o.cliente} onGuardar={cliente => guardarCliente(o.obraId as string, cliente)} />
+                          {!o.presupuestoId && (
+                            <CargarPresupuestoObra obra={{ id: o.obraId as string, nombre: o.obra, cliente: o.cliente }} onGuardado={cargar} />
+                          )}
                         </>
                       ) : (
                         <span style={{ color: 'var(--muted)' }}>Sin registro en la tabla de obras</span>
@@ -3073,6 +3205,7 @@ export function HistorialObraModal({
 export function PanelTrabajadores() {
   const [trabajadores, setTrabajadores] = useState<Trabajador[]>([])
   const [comprobantes, setComprobantes] = useState<PagoSemanalComprobante[]>([])
+  const [obras, setObras] = useState<{ id: string; nombre: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [verArchivados, setVerArchivados] = useState(false)
   const [mostrarForm, setMostrarForm] = useState(false)
@@ -3082,16 +3215,26 @@ export function PanelTrabajadores() {
   const [guardando, setGuardando] = useState(false)
 
   const cargar = useCallback(async () => {
-    const [{ data: t }, { data: c }] = await Promise.all([
+    const [{ data: t }, { data: c }, { data: o }] = await Promise.all([
       supabase.from('trabajadores').select('*').order('nombre'),
       supabase.from('pago_semanal_comprobantes').select('*'),
+      supabase.from('obras').select('id, nombre').eq('estado_obra', 'en_curso').order('nombre'),
     ])
     setTrabajadores((t as Trabajador[]) || [])
     setComprobantes((c as PagoSemanalComprobante[]) || [])
+    setObras((o as { id: string; nombre: string }[]) || [])
     setLoading(false)
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
+
+  // Restringe el link de /obra-fotos de este trabajador a una sola obra en vez de
+  // dejarle elegir entre todas las que están en curso -- ver conversación 28/08/2026.
+  async function asignarObra(t: Trabajador, obraId: string) {
+    const { error } = await supabase.from('trabajadores').update({ obra_asignada_id: obraId || null }).eq('id', t.id)
+    if (error) { alert('No se pudo guardar. Intenta de nuevo.'); return }
+    cargar()
+  }
 
   async function agregarTrabajador() {
     if (!nuevoNombre.trim()) { alert('Completa el nombre.'); return }
@@ -3190,7 +3333,7 @@ export function PanelTrabajadores() {
                     <p style={{ fontWeight: 700, fontSize: 15 }}>{fmtMoney(totalPagadoPorNombre.get(t.nombre) || 0)}</p>
                   </div>
                 </div>
-                <div style={{ marginTop: 10 }}>
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                   {activo ? (
                     <button onClick={() => archivar(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--danger)', fontWeight: 600, padding: 0 }}>
                       Archivar
@@ -3200,6 +3343,17 @@ export function PanelTrabajadores() {
                       Reactivar
                     </button>
                   )}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', marginLeft: 'auto' }}>
+                    Obra asignada
+                    <select
+                      value={t.obra_asignada_id || ''}
+                      onChange={e => asignarObra(t, e.target.value)}
+                      style={{ fontSize: 12, padding: '4px 8px', width: 'auto' }}
+                    >
+                      <option value="">Sin asignar (elige él)</option>
+                      {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+                    </select>
+                  </label>
                 </div>
               </div>
             )

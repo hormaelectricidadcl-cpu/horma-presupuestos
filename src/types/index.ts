@@ -274,6 +274,7 @@ export interface Trabajador {
   tarifa_diaria: number
   viatico_diario: number
   activo: boolean
+  obra_asignada_id: string | null
 }
 
 export interface CuentaPorCobrar {

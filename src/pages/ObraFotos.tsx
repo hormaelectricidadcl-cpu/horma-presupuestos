@@ -43,6 +43,7 @@ export default function ObraFotos({ token }: Props) {
 
   const [obras, setObras] = useState<ObraSimple[]>([])
   const [obraId, setObraId] = useState('')
+  const [obraAsignada, setObraAsignada] = useState<ObraSimple | null>(null)
   const [vista, setVista] = useState<'fotos' | 'avance'>('fotos')
   const [momento, setMomento] = useState<Momento>('durante')
   const [autorizado, setAutorizado] = useState(false)
@@ -52,8 +53,21 @@ export default function ObraFotos({ token }: Props) {
 
   useEffect(() => {
     if (!trabajador) return
-    supabase.from('obras').select('id, nombre').eq('estado_obra', 'en_curso').order('nombre').then(({ data }) => {
-      setObras((data as ObraSimple[]) || [])
+    // Si Alexandra/Gustavo le asignaron una obra específica a este trabajador (desde la
+    // card de Trabajadores), su link queda fijo a esa obra -- sin desplegable, sin ver
+    // las demás. Si no tiene asignación (obra_asignada_id null), sigue viendo todas las
+    // obras en curso como antes, para no dejarlo sin poder subir nada.
+    supabase.from('trabajadores').select('obra_asignada_id').eq('nombre', trabajador).maybeSingle().then(({ data }) => {
+      const asignadaId = data?.obra_asignada_id as string | null | undefined
+      if (asignadaId) {
+        supabase.from('obras').select('id, nombre').eq('id', asignadaId).maybeSingle().then(({ data: obra }) => {
+          if (obra) { setObraAsignada(obra as ObraSimple); setObraId((obra as ObraSimple).id) }
+        })
+      } else {
+        supabase.from('obras').select('id, nombre').eq('estado_obra', 'en_curso').order('nombre').then(({ data: lista }) => {
+          setObras((lista as ObraSimple[]) || [])
+        })
+      }
     })
   }, [trabajador])
 
@@ -131,11 +145,17 @@ export default function ObraFotos({ token }: Props) {
         </div>
 
         <div className="field" style={{ marginBottom: 16 }}>
-          <label>¿En qué obra estás?</label>
-          <select value={obraId} onChange={e => setObraId(e.target.value)} style={{ fontSize: 16 }}>
-            <option value="">Selecciona una obra...</option>
-            {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-          </select>
+          <label>{obraAsignada ? 'Tu obra' : '¿En qué obra estás?'}</label>
+          {obraAsignada ? (
+            <div style={{ padding: '10px 14px', background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: 16, fontWeight: 700 }}>
+              {obraAsignada.nombre}
+            </div>
+          ) : (
+            <select value={obraId} onChange={e => setObraId(e.target.value)} style={{ fontSize: 16 }}>
+              <option value="">Selecciona una obra...</option>
+              {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+            </select>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
