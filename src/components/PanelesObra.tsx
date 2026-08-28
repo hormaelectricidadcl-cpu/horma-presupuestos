@@ -3677,7 +3677,7 @@ export function PanelPresupuestos() {
             {archivoExternoUrl && !subiendoArchivo && <p style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>Archivo subido.</p>}
 
             {itemsExterno.length > 0 && (
-              <div style={{ marginTop: 12, padding: 12, background: 'var(--bg)', borderRadius: 8 }}>
+              <div style={{ marginTop: 12, padding: 12, background: 'var(--surface-alt)', borderRadius: 8 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}>
                   <input type="checkbox" checked={incluirItemsExterno} onChange={e => setIncluirItemsExterno(e.target.checked)} />
                   <span style={{ fontSize: 12, fontWeight: 700 }}>
