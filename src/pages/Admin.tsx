@@ -5,6 +5,7 @@ import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrab
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
+import { NavIcon, type NavIconName } from '../components/NavIcon'
 import type { Pendiente, NuevoPendiente, TipoPendiente, ItemPresupuesto, AccionPendiente, Destinatario } from '../types'
 
 
@@ -1336,22 +1337,22 @@ export default function Admin() {
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
   const presupuestoToken = import.meta.env.VITE_PRESUPUESTO_TOKEN as string
 
-  const SECCIONES: { key: SeccionAdmin; label: string; color: string }[] = [
-    { key: 'activos', label: 'Activos', color: 'var(--primary)' },
-    { key: 'respondidos_gustavo', label: 'Gustavo', color: '#0284c7' },
-    { key: 'clientes', label: 'Clientes', color: '#7c3aed' },
-    { key: 'presupuestos', label: 'Presupuestos', color: '#059669' },
-    { key: 'boletas', label: 'Boletas', color: '#0ea5e9' },
-    { key: 'facturas', label: 'Facturas', color: '#1d4ed8' },
-    { key: 'obras', label: 'Obras', color: '#c1440e' },
-    { key: 'calendario', label: 'Calendario', color: '#7c3aed' },
-    { key: 'stock', label: 'Stock', color: '#0891b2' },
-    { key: 'pagos', label: 'Pago semanal', color: '#e67e22' },
-    { key: 'historial_pagos', label: 'Historial de pagos', color: '#b45309' },
-    { key: 'trabajadores', label: 'Trabajadores', color: '#4d7c0f' },
-    { key: 'resultados', label: 'Estado de resultados', color: '#14213D' },
-    { key: 'banco_contenido', label: 'Banco de contenido', color: '#0d9488' },
-    { key: 'ideas', label: 'Ideas de contenido', color: '#db2777' },
+  const SECCIONES: { key: SeccionAdmin; label: string; icon: NavIconName }[] = [
+    { key: 'activos', label: 'Activos', icon: 'tareas' },
+    { key: 'respondidos_gustavo', label: 'Gustavo', icon: 'gustavo' },
+    { key: 'clientes', label: 'Clientes', icon: 'clientes' },
+    { key: 'presupuestos', label: 'Presupuestos', icon: 'presupuestos' },
+    { key: 'boletas', label: 'Boletas', icon: 'boletas' },
+    { key: 'facturas', label: 'Facturas', icon: 'facturas' },
+    { key: 'obras', label: 'Obras', icon: 'obras' },
+    { key: 'calendario', label: 'Calendario', icon: 'calendario' },
+    { key: 'stock', label: 'Stock', icon: 'stock' },
+    { key: 'pagos', label: 'Pago semanal', icon: 'pago' },
+    { key: 'historial_pagos', label: 'Historial de pagos', icon: 'historial' },
+    { key: 'trabajadores', label: 'Trabajadores', icon: 'trabajadores' },
+    { key: 'resultados', label: 'Estado de resultados', icon: 'resultados' },
+    { key: 'banco_contenido', label: 'Banco de contenido', icon: 'banco_contenido' },
+    { key: 'ideas', label: 'Ideas de contenido', icon: 'ideas' },
   ]
   const seccionActual = SECCIONES.find(s => s.key === seccion)
 
@@ -1397,21 +1398,18 @@ export default function Admin() {
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '1.5rem 1rem' }}>
       {/* Header */}
       <div style={{
-        background: 'var(--secondary)', borderRadius: 16, padding: '18px 20px', marginBottom: '1.5rem',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+        padding: '10px 2px 22px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 40, height: 40, background: 'var(--primary)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fff', fontSize: 18 }}>H</div>
-          <div>
-            <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 2 }}>Horma Grup</p>
-            <h1 style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.2, color: '#fff' }}>Pendientes</h1>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Horma Electricidad</p>
-          </div>
+        <div>
+          <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 8 }}>Horma Grup — Admin</p>
+          <h1 style={{ fontSize: 32, fontStyle: 'italic', color: 'var(--text-inverse)', lineHeight: 1.1 }}>Hola, Alexandra</h1>
         </div>
         <button className="btn btn-primary" onClick={() => { setClienteInicial(''); setShowForm(x => !x) }}>
           {showForm ? '✕ Cancelar' : '+ Nuevo pendiente'}
         </button>
       </div>
+      <div style={{ height: 1, background: 'var(--border-inverse)', marginBottom: '1.25rem' }} />
 
       {/* Quick notes */}
       <NotasRapidas autor="alexandra" />
@@ -1429,7 +1427,7 @@ export default function Admin() {
 
       {seccion === null ? (
         /* Home: grilla de cards */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10, marginBottom: '1.25rem' }}>
           {SECCIONES.map(s => {
             const stat = s.key === 'activos' ? activos.length : s.key === 'respondidos_gustavo' ? respondidosGustavo.length : null
             return (
@@ -1438,15 +1436,17 @@ export default function Admin() {
                 onClick={() => setSeccion(s.key)}
                 className="card"
                 style={{
-                  padding: '14px 14px', border: 'none', cursor: 'pointer',
-                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: stat != null ? 2 : 10,
-                  textAlign: 'left', borderTop: `3px solid ${s.color}`,
+                  padding: '18px 16px', border: 'none', cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: stat != null ? 6 : 16,
+                  textAlign: 'left',
                 }}
               >
-                {stat != null && (
-                  <span style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{stat}</span>
+                {stat != null ? (
+                  <span className="font-display" style={{ fontSize: 26, fontWeight: 800, color: 'var(--text)' }}>{stat}</span>
+                ) : (
+                  <NavIcon name={s.icon} color="#14213D" />
                 )}
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{s.label}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{s.label}</span>
                 {s.key === 'activos' && vencidos.length > 0 && (
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--danger)' }}>{vencidos.length} vencido{vencidos.length !== 1 ? 's' : ''}</span>
                 )}
@@ -1460,12 +1460,12 @@ export default function Admin() {
       ) : (
         <div>
           {/* Volver */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.1rem' }}>
             <button
               onClick={() => setSeccion(null)}
-              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}
+              style={{ background: 'none', border: '1px solid var(--border-inverse)', borderRadius: 20, padding: '7px 13px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--muted-inverse)' }}
             >← Volver</button>
-            <h2 style={{ fontSize: 16, fontWeight: 800, color: seccionActual?.color }}>{seccionActual?.label}</h2>
+            <h2 className="font-display" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--primary)' }}>{seccionActual?.label}</h2>
           </div>
 
           {loading ? (
