@@ -208,6 +208,15 @@ export default function Reporte({ token, embedded = false }: Props) {
     cargarDia(fecha)
   }, [tokenValido, fecha, cargarDia])
 
+  // El cartel de "guardado" quedaba pegado abajo, cerca del botón -- en el celular, si ya
+  // se había bajado hasta ahí para tocar "Guardar", no había forma de perderlo, pero si
+  // alguien mira hacia otro lado un segundo se lo pierde igual y el resto de la pantalla
+  // no cambia (correctamente: muestra lo mismo que se guardó). Para que sea imposible de
+  // no ver, al guardar se sube la pantalla arriba de todo, donde está el cartel grande.
+  useEffect(() => {
+    if (saved) window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [saved])
+
   useEffect(() => {
     if (!tokenValido) return
     supabase.from('obras').select('nombre').eq('activa', true).order('nombre').then(({ data }) => {
@@ -668,7 +677,7 @@ export default function Reporte({ token, embedded = false }: Props) {
 
     setSaving(false)
     setSaved(true)
-    setTimeout(() => setSaved(false), 5000)
+    setTimeout(() => setSaved(false), 7000)
     // OJO -- se probó dejar el formulario en blanco tras guardar (pedido inicial de
     // Alexandra) pero se revirtió: como el guardado borra TODAS las compras/cobros/etc. del
     // día y reinserta solo lo que hay en el formulario, un formulario vacío en el segundo
@@ -697,6 +706,16 @@ export default function Reporte({ token, embedded = false }: Props) {
   return (
     <div className={embedded ? undefined : 'pendientes'}>
       <div style={{ maxWidth: 560, margin: '0 auto', padding: embedded ? 0 : '1.25rem 14px 4rem' }}>
+        {saved && (
+          <div style={{ padding: '16px 18px', background: '#1f6b3f', borderRadius: 12, marginBottom: '1.25rem', textAlign: 'center' }}>
+            <p style={{ fontSize: 16, color: '#fff', fontWeight: 800 }}>
+              ✓ Reporte guardado correctamente
+            </p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
+              Todo lo que ves abajo es justo lo que quedó guardado. Para agregar otra boleta o compra, tocá "+ Agregar compra" más abajo.
+            </p>
+          </div>
+        )}
         {/* Header */}
         {!embedded && (
           <div style={{
@@ -1168,14 +1187,6 @@ export default function Reporte({ token, embedded = false }: Props) {
 
             {error && (
               <p style={{ color: 'var(--danger)', fontSize: 14, fontWeight: 600, marginBottom: 12, textAlign: 'center' }}>{error}</p>
-            )}
-
-            {saved && (
-              <div style={{ padding: '12px 16px', background: '#eaf4ee', border: '1px solid #7fb894', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>
-                <p style={{ fontSize: 14, color: '#1f6b3f', fontWeight: 700 }}>
-                  ✓ Reporte guardado correctamente. Para cargar otra boleta o compra, tocá "+ Agregar compra" abajo — no hace falta volver a tocar "Guardar" de nuevo por esto.
-                </p>
-              </div>
             )}
 
             <button
