@@ -25,12 +25,16 @@ Reglas obligatorias:
 - Formato exacto:
 
 {
-  "monto": 500000
+  "monto": 500000,
+  "items": [
+    {"descripcion": "Instalación de tablero de distribución", "cantidad": 1, "precio_unitario": 100000}
+  ]
 }
 
 - "monto" es el TOTAL final del presupuesto completo (con IVA incluido si el documento lo muestra así), nunca un subtotal ni el valor de un ítem individual. Debe ser un número, sin puntos de miles ni símbolo de moneda.
 - Si el documento tiene varias secciones o etapas con subtotales, "monto" es la suma general / el total final del presupuesto completo.
-- Si no se puede leer el monto total con claridad en el documento, usa null.`
+- Si no se puede leer el monto total con claridad en el documento, usa null.
+- "items" es el detalle línea por línea SOLO si el documento realmente lo muestra así (una tabla o lista con ítems, cantidades y precios). Cada ítem: "cantidad" entero (1 si no se especifica), "precio_unitario" el precio de una unidad (no el total de la línea). No inventes ítems ni los inferís de una sola cifra total -- si el documento es solo un monto global sin desglose, devuelve "items": [].`
 
   // El presupuesto externo puede subirse como PDF o como foto -- la Responses API de
   // OpenAI necesita un content type distinto para cada caso.
@@ -72,8 +76,24 @@ Reglas obligatorias:
 
     const resultado = JSON.parse(textoLimpio)
 
+    const items = Array.isArray(resultado.items)
+      ? resultado.items
+          .map(it => {
+            const cantidad = Math.max(1, Math.round(Number(it.cantidad) || 1))
+            const precioUnitario = Math.round(Number(it.precio_unitario) || 0)
+            return {
+              descripcion: String(it.descripcion || '').trim(),
+              cantidad,
+              precio_unitario: precioUnitario,
+              total: cantidad * precioUnitario,
+            }
+          })
+          .filter(it => it.descripcion && it.precio_unitario > 0)
+      : []
+
     const normalizado = {
       monto: Number(resultado.monto) > 0 ? Number(resultado.monto) : null,
+      items,
     }
 
     return new Response(JSON.stringify(normalizado), { headers: { 'Content-Type': 'application/json' } })

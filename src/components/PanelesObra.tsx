@@ -13,23 +13,24 @@ export function fmtMoney(n: number) {
   return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString('es-CL')}`
 }
 
-// Copia el detalle línea por línea de un presupuesto (simple o por etapas) a obra_items,
-// al momento de convertirlo en obra -- así "Avance de obra" tiene contra qué medir.
-// Los presupuestos "externos" (PDF/foto, sin ítems) no generan filas: la obra queda igual,
-// solo que sin esa card.
+// Copia el detalle línea por línea de un presupuesto (simple, por etapas, o externo con
+// desglose leído por IA) a obra_items, al momento de convertirlo en obra -- así "Avance
+// de obra" tiene contra qué medir. Los presupuestos "externos" sin desglose (la IA solo
+// pudo leer el monto total, o Alexandra descartó los ítems al guardar) no generan filas:
+// la obra queda igual, solo que sin esa card -- se pueden cargar a mano desde ahí.
 //
 // Si el presupuesto era "por etapas", cada etapa se convierte además en una fila de
 // obra_fases (sin fechas todavía -- esas se cargan a mano en "Avance de obra") para que
-// ya arranque con la agenda armada. Si era "simple", no se crea ninguna fase automática
-// -- decisión tomada con Alexandra el 28/08: las agrupa a mano ella/Gustavo desde el
-// panel, porque un presupuesto simple no trae ninguna estructura de fases de la que partir.
+// ya arranque con la agenda armada. Si era "simple" o "externo", no se crea ninguna fase
+// automática -- decisión tomada con Alexandra el 28/08: las agrupa a mano ella/Gustavo
+// desde el panel, porque esos no traen ninguna estructura de fases de la que partir.
 export async function copiarItemsAObra(
   obraId: string,
   presupuesto: { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null }
 ) {
   const filas: Omit<ObraItem, 'id' | 'created_at'>[] = []
 
-  if (presupuesto.tipo === 'simple' && presupuesto.items) {
+  if (presupuesto.tipo !== 'etapas' && presupuesto.items) {
     presupuesto.items.forEach((it, idx) => {
       filas.push({
         obra_id: obraId,
@@ -3448,6 +3449,8 @@ export function PanelPresupuestos() {
   const [archivoExternoUrl, setArchivoExternoUrl] = useState('')
   const [subiendoArchivo, setSubiendoArchivo] = useState(false)
   const [guardandoExterno, setGuardandoExterno] = useState(false)
+  const [itemsExterno, setItemsExterno] = useState<PresupuestoItemSimple[]>([])
+  const [incluirItemsExterno, setIncluirItemsExterno] = useState(true)
 
   const cargar = useCallback(async () => {
     const { data } = await supabase
@@ -3549,8 +3552,9 @@ export function PanelPresupuestos() {
       }
       const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
       setArchivoExternoUrl(urlData.publicUrl)
-      // La IA completa el monto a partir del PDF/foto -- revisable antes de guardar, la
-      // carga manual del monto sigue disponible si falla o si hace falta corregirlo.
+      // La IA completa el monto (y el detalle de ítems, si el documento lo muestra) a
+      // partir del PDF/foto -- todo revisable antes de guardar, la carga manual del
+      // monto sigue disponible si falla o si hace falta corregirlo.
       try {
         const res = await fetch('/api/parse-presupuesto-externo', {
           method: 'POST',
@@ -3560,6 +3564,17 @@ export function PanelPresupuestos() {
         const resultado = await res.json()
         if (!res.ok) throw new Error(resultado.error || 'error desconocido')
         if (resultado.monto) setMontoExterno(String(resultado.monto))
+        if (Array.isArray(resultado.items) && resultado.items.length > 0) {
+          setItemsExterno(resultado.items.map((it: { descripcion: string; cantidad: number; precio_unitario: number; total: number }, idx: number) => ({
+            id: idx,
+            categoria: '',
+            description: it.descripcion,
+            quantity: it.cantidad,
+            price: it.precio_unitario,
+            total: it.total,
+          })))
+          setIncluirItemsExterno(true)
+        }
       } catch (err) {
         alert('El archivo se guardó, pero la IA no pudo leer el monto (' + String(err) + '). Complétalo a mano.')
       }
@@ -3587,6 +3602,7 @@ export function PanelPresupuestos() {
       estado: estadoExterno,
       total: monto,
       archivo_url: archivoExternoUrl || null,
+      items: incluirItemsExterno && itemsExterno.length > 0 ? itemsExterno : null,
     })
     setGuardandoExterno(false)
     if (error) {
@@ -3598,6 +3614,8 @@ export function PanelPresupuestos() {
     setMontoExterno('')
     setEstadoExterno('enviado')
     setArchivoExternoUrl('')
+    setItemsExterno([])
+    setIncluirItemsExterno(true)
     cargar()
   }
 
@@ -3657,6 +3675,28 @@ export function PanelPresupuestos() {
             <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>La IA completa el campo "Monto total" de arriba al subir el archivo — revísalo antes de guardar.</p>
             {subiendoArchivo && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Subiendo y leyendo el monto...</p>}
             {archivoExternoUrl && !subiendoArchivo && <p style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>Archivo subido.</p>}
+
+            {itemsExterno.length > 0 && (
+              <div style={{ marginTop: 12, padding: 12, background: 'var(--bg)', borderRadius: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={incluirItemsExterno} onChange={e => setIncluirItemsExterno(e.target.checked)} />
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>
+                    La IA también encontró {itemsExterno.length} ítem{itemsExterno.length !== 1 ? 's' : ''} con desglose — incluirlos (se van a poder usar en "Avance de obra" si esto se convierte en obra)
+                  </span>
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, opacity: incluirItemsExterno ? 1 : 0.5 }}>
+                  {itemsExterno.map(it => (
+                    <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, gap: 8 }}>
+                      <span>{it.description} ({it.quantity} × {fmtMoney(it.price)})</span>
+                      <span style={{ flexShrink: 0 }}>{fmtMoney(it.total)}</span>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+                  Revisa que sea correcto — si la IA se equivocó, destilda la casilla y el presupuesto se guarda solo con el monto total, como antes.
+                </p>
+              </div>
+            )}
           </div>
           <button
             className="btn btn-primary"
