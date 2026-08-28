@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador, ObraItem, PresupuestoItemSimple, PresupuestoEtapa } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -11,6 +11,53 @@ import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSu
 export function fmtMoney(n: number) {
   const rounded = Math.round(n)
   return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString('es-CL')}`
+}
+
+// Copia el detalle línea por línea de un presupuesto (simple o por etapas) a obra_items,
+// al momento de convertirlo en obra -- así "Avance de obra" tiene contra qué medir.
+// Los presupuestos "externos" (PDF/foto, sin ítems) no generan filas: la obra queda igual,
+// solo que sin esa card.
+export async function copiarItemsAObra(
+  obraId: string,
+  presupuesto: { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null }
+) {
+  const filas: Omit<ObraItem, 'id' | 'created_at'>[] = []
+
+  if (presupuesto.tipo === 'simple' && presupuesto.items) {
+    presupuesto.items.forEach((it, idx) => {
+      filas.push({
+        obra_id: obraId,
+        fase: null,
+        descripcion: it.description,
+        categoria: it.categoria || null,
+        cantidad: it.quantity,
+        precio_unitario: it.price,
+        total: it.total,
+        completado: false,
+        orden: idx,
+      })
+    })
+  } else if (presupuesto.tipo === 'etapas' && presupuesto.etapas) {
+    let orden = 0
+    presupuesto.etapas.forEach(etapa => {
+      etapa.items.forEach(it => {
+        filas.push({
+          obra_id: obraId,
+          fase: etapa.nombre,
+          descripcion: it.descripcion,
+          categoria: it.tipo,
+          cantidad: it.cantidad,
+          precio_unitario: it.precioUnitario,
+          total: it.total,
+          completado: false,
+          orden: orden++,
+        })
+      })
+    })
+  }
+
+  if (filas.length === 0) return
+  await supabase.from('obra_items').insert(filas)
 }
 
 export function StatTile({ label, valor, tono = 'neutral' }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' | 'alerta' }) {
@@ -138,6 +185,7 @@ export function PanelObras() {
   const [presupuestosAceptados, setPresupuestosAceptados] = useState<PresupuestoGuardado[]>([])
   const [mostrarNuevaCuentaSuelta, setMostrarNuevaCuentaSuelta] = useState(false)
   const [nuevaCuentaSuelta, setNuevaCuentaSuelta] = useState({ pagador: '', concepto: '', total_presupuesto: '' })
+  const [avanceAbierto, setAvanceAbierto] = useState<string | null>(null)
 
   useEffect(() => {
     if (!localStorage.getItem('horma_guia_obras_vista')) {
@@ -235,15 +283,19 @@ export function PanelObras() {
         alert('Ese presupuesto ya no está disponible (puede que otra obra ya lo haya usado). Recarga la lista.')
         return
       }
-      const { error } = await supabase.from('obras').insert({
+      const { data: obraCreada, error } = await supabase.from('obras').insert({
         nombre: nuevaObra.nombre.trim(),
         cliente: presupuesto.cliente_nombre,
         presupuesto_total: presupuesto.total,
         presupuesto_id: presupuesto.id,
-      })
+      }).select('id').single()
       if (error) {
         alert('No se pudo crear la obra. Puede que ya exista una con ese nombre.')
         return
+      }
+      if (obraCreada?.id) {
+        const { data: detalleCompleto } = await supabase.from('presupuestos').select('tipo, items, etapas').eq('id', presupuesto.id).single()
+        if (detalleCompleto) await copiarItemsAObra(obraCreada.id, detalleCompleto as { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null })
       }
       await supabase.from('presupuestos').update({ estado: 'convertido' }).eq('id', presupuesto.id)
     } else {
@@ -581,6 +633,15 @@ export function PanelObras() {
                       </button>
                       {o.obraId && (
                         <button
+                          className="btn btn-secondary"
+                          onClick={() => setAvanceAbierto(a => a === o.obraId ? null : (o.obraId as string))}
+                          style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
+                        >
+                          {avanceAbierto === o.obraId ? '▲' : '▾'} Avance de obra
+                        </button>
+                      )}
+                      {o.obraId && (
+                        <button
                           className="btn btn-danger"
                           onClick={() => borrarObra(o.obraId as string, o.obra)}
                           style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
@@ -589,6 +650,11 @@ export function PanelObras() {
                         </button>
                       )}
                     </div>
+                    {o.obraId && avanceAbierto === o.obraId && (
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: 12 }}>
+                        <PanelAvanceObra obraId={o.obraId} />
+                      </div>
+                    )}
                     {o.obraId && (
                       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)' }}>
@@ -697,6 +763,96 @@ export function PanelObras() {
         />
       )}
     </>
+  )
+}
+
+/* ─── Avance de obra — checklist de los ítems del presupuesto que originó la obra ── */
+function ItemAvanceRow({ item, onToggle }: { item: ObraItem; onToggle: () => void }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--surface-alt)', borderRadius: 8, cursor: 'pointer' }}>
+      <input type="checkbox" checked={item.completado} onChange={onToggle} />
+      <span style={{ flex: 1, fontSize: 13, textDecoration: item.completado ? 'line-through' : 'none', color: item.completado ? 'var(--muted)' : 'var(--text)' }}>
+        {item.descripcion}
+      </span>
+      <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtMoney(item.total)}</span>
+    </label>
+  )
+}
+
+export function PanelAvanceObra({ obraId }: { obraId: string }) {
+  const [items, setItems] = useState<ObraItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('obra_items').select('*').eq('obra_id', obraId).order('orden')
+    setItems((data as ObraItem[]) || [])
+    setLoading(false)
+  }, [obraId])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function toggle(item: ObraItem) {
+    const nuevoValor = !item.completado
+    setItems(prev => prev.map(it => it.id === item.id ? { ...it, completado: nuevoValor } : it))
+    const { error } = await supabase.from('obra_items').update({ completado: nuevoValor }).eq('id', item.id)
+    if (error) {
+      alert('No se pudo actualizar. Intenta de nuevo.')
+      cargar()
+    }
+  }
+
+  if (loading) return <div className="spinner" style={{ margin: '16px auto' }} />
+
+  if (items.length === 0) {
+    return (
+      <p style={{ fontSize: 13, color: 'var(--muted)', padding: '4px 0' }}>
+        Esta obra no tiene ítems de presupuesto para hacer seguimiento (viene de un presupuesto externo, o se creó sin uno vinculado).
+      </p>
+    )
+  }
+
+  const totalMonto = items.reduce((s, it) => s + it.total, 0)
+  const montoCompletado = items.filter(it => it.completado).reduce((s, it) => s + it.total, 0)
+  const pct = totalMonto > 0 ? Math.round((montoCompletado / totalMonto) * 100) : 0
+  const colorPct = pct === 100 ? 'var(--success)' : 'var(--primary)'
+
+  const fases = Array.from(new Set(items.map(it => it.fase || '')))
+  const hayFases = fases.some(f => f !== '')
+
+  const grupos = hayFases
+    ? fases.map(fase => ({ fase, items: items.filter(it => (it.fase || '') === fase) }))
+    : [{ fase: '', items }]
+
+  return (
+    <div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>Avance de obra</span>
+          <span className="font-display" style={{ fontSize: 15, fontWeight: 800, color: colorPct }}>{pct}%</span>
+        </div>
+        <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: colorPct, transition: 'width 0.2s' }} />
+        </div>
+        <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{fmtMoney(montoCompletado)} de {fmtMoney(totalMonto)} completado</p>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {grupos.map(g => (
+          <div key={g.fase}>
+            {g.fase && (
+              <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                {g.fase}
+              </p>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {g.items.map(it => (
+                <ItemAvanceRow key={it.id} item={it} onToggle={() => toggle(it)} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -2895,16 +3051,22 @@ export function PanelPresupuestos() {
   async function confirmarConvertir(p: PresupuestoGuardado) {
     if (!nombreObraNueva.trim()) { alert('Completa el nombre de la obra.'); return }
     setConvirtiendo(true)
-    const { error: errorObra } = await supabase.from('obras').insert({
+    const { data: obraCreada, error: errorObra } = await supabase.from('obras').insert({
       nombre: nombreObraNueva.trim(),
       cliente: p.cliente_nombre,
       presupuesto_total: p.total,
       presupuesto_id: p.id,
-    })
+    }).select('id').single()
     if (errorObra) {
       setConvirtiendo(false)
       alert('No se pudo crear la obra. Puede que ya exista una con ese nombre.')
       return
+    }
+    // El detalle (items/etapas) no viene en la lista liviana de presupuestos -- se busca
+    // recién acá, solo cuando hace falta, para no cargar ese JSON en cada fila de la lista.
+    if (obraCreada?.id) {
+      const { data: detalleCompleto } = await supabase.from('presupuestos').select('tipo, items, etapas').eq('id', p.id).single()
+      if (detalleCompleto) await copiarItemsAObra(obraCreada.id, detalleCompleto as { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null })
     }
     await supabase.from('presupuestos').update({ estado: 'convertido' }).eq('id', p.id)
     setPresupuestos(prev => prev.map(x => x.id === p.id ? { ...x, estado: 'convertido' } : x))

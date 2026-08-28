@@ -182,6 +182,20 @@ export interface PresupuestoDetalle extends PresupuestoGuardado {
   archivo_url: string | null
 }
 
+export interface ObraItem {
+  id: string
+  created_at: string
+  obra_id: string
+  fase: string | null
+  descripcion: string
+  categoria: string | null
+  cantidad: number
+  precio_unitario: number
+  total: number
+  completado: boolean
+  orden: number
+}
+
 export interface EventoCalendario {
   id: string
   created_at: string
