@@ -55,7 +55,7 @@ export function HiloPendiente({ pendienteId, autor, respuestaLegado }: {
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
         {respuestaLegado && mensajes.length === 0 && (
-          <div style={{ alignSelf: 'flex-start', maxWidth: '85%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px' }}>
+          <div style={{ alignSelf: 'flex-start', maxWidth: '85%', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px' }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 3 }}>Respuesta anterior</p>
             <p style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{respuestaLegado}</p>
           </div>
@@ -71,7 +71,7 @@ export function HiloPendiente({ pendienteId, autor, respuestaLegado }: {
                 style={{
                   alignSelf: esPropio ? 'flex-end' : 'flex-start',
                   maxWidth: '85%',
-                  background: esPropio ? 'var(--primary)' : 'var(--bg)',
+                  background: esPropio ? 'var(--primary)' : 'var(--surface-alt)',
                   color: esPropio ? '#fff' : 'var(--text)',
                   border: esPropio ? 'none' : '1px solid var(--border)',
                   borderRadius: 10,

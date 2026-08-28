@@ -291,7 +291,7 @@ function HistorialModal({
                       {p.estado === 'respondido' ? '✓' : '•'}
                     </div>
 
-                    <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius-sm)', padding: '12px 14px' }}>
+                    <div style={{ background: 'var(--surface-alt)', borderRadius: 'var(--radius-sm)', padding: '12px 14px' }}>
                       {/* meta */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                         <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtFecha(p.created_at)}</span>
@@ -716,7 +716,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
   }
 
   return (
-    <form onSubmit={submit} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, padding: '14px', background: 'var(--bg)', borderRadius: 'var(--radius-sm)' }}>
+    <form onSubmit={submit} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, padding: '14px', background: 'var(--surface-alt)', borderRadius: 'var(--radius-sm)' }}>
       <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 2 }}>Editar pendiente</p>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <div className="field">
@@ -960,7 +960,7 @@ function PendienteCard({
             style={{
               padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700,
               border: `1.5px solid ${revisado ? 'var(--success)' : 'var(--border)'}`,
-              background: revisado ? '#dcfce7' : 'var(--bg)',
+              background: revisado ? '#dcfce7' : 'var(--surface-alt)',
               color: revisado ? 'var(--success)' : 'var(--muted)',
               cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
             }}
@@ -1112,7 +1112,7 @@ function PendienteCard({
                           </div>
                           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
                             <thead>
-                              <tr style={{ background: 'var(--bg)' }}>
+                              <tr style={{ background: 'var(--surface-alt)' }}>
                                 {['Categoría', 'Descripción', 'Cant.', 'P. Unit.', 'Total'].map(h => (
                                   <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--secondary)' }}>{h}</th>
                                 ))}

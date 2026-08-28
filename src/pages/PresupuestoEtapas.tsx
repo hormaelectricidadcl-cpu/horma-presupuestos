@@ -339,19 +339,19 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
             fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
           }}>H</div>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#1a1a1a' }}>Presupuesto Itemizado por Etapas</h1>
-            <p style={{ fontSize: 13, color: '#615e5b', fontWeight: 500 }}>Horma Grup — Estándar de Ingeniería</p>
+            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: 'var(--text-inverse)' }}>Presupuesto Itemizado por Etapas</h1>
+            <p style={{ fontSize: 13, color: 'var(--muted-inverse)', fontWeight: 500 }}>Horma Grup — Estándar de Ingeniería</p>
           </div>
           {!embedded && (
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: '#93918e' }}>{session.user.email}</span>
+              <span style={{ fontSize: 12, color: 'var(--muted-inverse)' }}>{session.user.email}</span>
               <button
                 onClick={handleLogout}
-                style={{ fontSize: 12, color: '#615e5b', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+                style={{ fontSize: 12, color: 'var(--muted-inverse)', background: 'none', border: '1px solid var(--border-inverse)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
               >
                 Salir
               </button>
-              <a href="/admin" style={{ fontSize: 13, color: '#615e5b', textDecoration: 'none', fontWeight: 600 }}>← Admin</a>
+              <a href="/admin" style={{ fontSize: 13, color: 'var(--text-inverse)', textDecoration: 'none', fontWeight: 600 }}>← Admin</a>
             </div>
           )}
         </div>
@@ -486,14 +486,14 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
         {/* Phase cards */}
         <div style={{ marginBottom: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#615e5b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted-inverse)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Etapas de obra
               {procesado && <span style={{ marginLeft: 8, color: '#16a34a', fontWeight: 700, fontSize: 11 }}>✓ IA procesó los datos</span>}
             </p>
             {procesado && (
               <button
                 onClick={limpiar}
-                style={{ background: 'none', border: 'none', fontSize: 12, color: '#615e5b', cursor: 'pointer', fontWeight: 600 }}
+                style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--muted-inverse)', cursor: 'pointer', fontWeight: 600 }}
               >↺ Limpiar</button>
             )}
           </div>
@@ -714,7 +714,7 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
           )}
         </div>
 
-        <p style={{ textAlign: 'center', fontSize: 12, color: '#93918e' }}>
+        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted-inverse)' }}>
           Procesá el texto o JSON con IA para ver el desglose ítem a ítem antes de generar el PDF.
         </p>
       </div>

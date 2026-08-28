@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
@@ -14,9 +14,9 @@ export function fmtMoney(n: number) {
 }
 
 export function StatTile({ label, valor, tono = 'neutral' }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' | 'alerta' }) {
-  const color = tono === 'positivo' ? 'var(--success)' : tono === 'negativo' ? 'var(--danger)' : tono === 'alerta' ? 'var(--warning)' : 'var(--secondary)'
+  const color = tono === 'positivo' ? 'var(--success)' : tono === 'negativo' ? 'var(--danger)' : tono === 'alerta' ? 'var(--primary)' : 'var(--text)'
   return (
-    <div style={{ padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, minWidth: 100 }}>
+    <div style={{ padding: '14px 16px', background: 'var(--surface)', borderRadius: 14, minWidth: 100, boxShadow: 'var(--shadow)' }}>
       <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
         {label}
       </p>
@@ -920,7 +920,7 @@ export function PanelEstadoResultados() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
                 {gastosFijos.map(g => (
-                  <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13, opacity: g.activo ? 1 : 0.5 }}>
+                  <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13, opacity: g.activo ? 1 : 0.5 }}>
                     <span style={{ flex: 1 }}>{g.concepto}{g.categoria ? ` · ${g.categoria}` : ''}</span>
                     <span style={{ color: 'var(--muted)', fontSize: 12 }}>{g.vigente_desde ? `desde ${g.vigente_desde.slice(0, 7)}` : 'desde siempre'}</span>
                     <span style={{ fontWeight: 700 }}>{fmtMoney(g.monto_mensual)}</span>
@@ -969,7 +969,7 @@ export function PanelEstadoResultados() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
                 {gastosVariables.filter(g => delMes(g.fecha)).sort((a, b) => b.fecha.localeCompare(a.fecha)).map(g => (
-                  <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                     <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{g.fecha.split('-').reverse().join('/')}</span>
                     <span style={{ flex: 1 }}>{g.descripcion}{g.categoria ? ` · ${g.categoria}` : ''}</span>
                     <span style={{ fontWeight: 700 }}>{fmtMoney(g.monto)}</span>
@@ -1003,11 +1003,11 @@ export function PanelEstadoResultados() {
         )}
       </div>
 
-      <div className="card" style={{ padding: '20px 24px', borderTop: `4px solid ${resultado >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
+      <div className="card" style={{ padding: '22px 24px', boxShadow: 'var(--shadow-md)' }}>
         <p className="font-display" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 6 }}>
           {obraFiltro ? `Utilidad operativa (sin gastos generales) — ${obraFiltro}` : 'Resultado del mes'}
         </p>
-        <p className="font-display" style={{ fontSize: 32, fontWeight: 700, color: resultado >= 0 ? 'var(--success)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+        <p className="font-display" style={{ fontSize: 34, fontWeight: 800, color: resultado >= 0 ? 'var(--success)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
           {fmtMoney(resultado)}
         </p>
       </div>
@@ -1438,7 +1438,7 @@ function DetalleAjustesAdelantos({ fila, semanaKey, onGuardado }: { fila: FilaPa
       </div>
 
       {formAbierto === 'ajuste' && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', background: 'var(--bg)', padding: 8, borderRadius: 8 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', background: 'var(--surface-alt)', padding: 8, borderRadius: 8 }}>
           <div className="field" style={{ maxWidth: 140 }}>
             <label>Monto (+/-)</label>
             <input type="number" value={montoAjuste} onChange={e => setMontoAjuste(e.target.value)} placeholder="Ej: 50000 o -20000" />
@@ -1454,7 +1454,7 @@ function DetalleAjustesAdelantos({ fila, semanaKey, onGuardado }: { fila: FilaPa
       )}
 
       {formAbierto === 'adelanto' && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', background: 'var(--bg)', padding: 8, borderRadius: 8 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', background: 'var(--surface-alt)', padding: 8, borderRadius: 8 }}>
           <div className="field" style={{ maxWidth: 120 }}>
             <label>Monto</label>
             <input type="number" value={montoAdelanto} onChange={e => setMontoAdelanto(e.target.value)} placeholder="Ej: 100000" />
@@ -1539,7 +1539,7 @@ export function PanelPagoSemanal() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--secondary)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--text-inverse)' }}>
           Semana:
           <select
             value={semana.key}
@@ -1557,7 +1557,7 @@ export function PanelPagoSemanal() {
         </label>
         <button
           onClick={cargar}
-          style={{ padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--white)', cursor: 'pointer', color: 'var(--muted)' }}
+          style={{ padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid var(--border-inverse)', background: 'transparent', cursor: 'pointer', color: 'var(--muted-inverse)' }}
         >↻ Actualizar</button>
       </div>
 
@@ -1566,84 +1566,82 @@ export function PanelPagoSemanal() {
       </div>
 
       {filas.length === 0 ? (
-        <p style={{ color: 'var(--muted)', fontSize: 14 }}>Nadie tiene actividad reportada esa semana.</p>
+        <p style={{ color: 'var(--muted-inverse)', fontSize: 14 }}>Nadie tiene actividad reportada esa semana.</p>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                <th style={{ textAlign: 'left', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Nombre</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Días</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ganado</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Viático</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ajustes</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Adelantos</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Neto</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Comprobante</th>
-                <th style={{ padding: '8px 10px' }} />
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map(f => {
-                const comprobantesFila = comprobantes
-                  .filter(c => c.trabajador === f.trabajador && c.semana_key === semana.key)
-                  .sort((a, b) => b.created_at.localeCompare(a.created_at))
-                const ultimoComprobante = comprobantesFila[0] || null
-                const abierta = expandido === f.trabajador
-                return (
-                  <Fragment key={f.trabajador}>
-                    <tr style={{ borderBottom: abierta ? 'none' : '1px solid var(--border)' }}>
-                      <td style={{ padding: '10px', fontWeight: 700 }}>
-                        {f.trabajador}
-                        {f.sueldoFijo && (
-                          <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, color: 'var(--muted)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px' }}>
-                            Sueldo fijo
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filas.map(f => {
+            const comprobantesFila = comprobantes
+              .filter(c => c.trabajador === f.trabajador && c.semana_key === semana.key)
+              .sort((a, b) => b.created_at.localeCompare(a.created_at))
+            const ultimoComprobante = comprobantesFila[0] || null
+            const abierta = expandido === f.trabajador
+            return (
+              <div key={f.trabajador} className="card" style={{ padding: '16px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>{f.trabajador}</span>
+                      {f.sueldoFijo && (
+                        <span className="font-display" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--muted)', background: 'var(--surface-alt)', borderRadius: 5, padding: '2px 6px' }}>
+                          Sueldo fijo
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {f.sueldoFijo
+                        ? 'Solo viático/ajustes esta semana'
+                        : `${f.dias} día${f.dias !== 1 ? 's' : ''}${f.ganado ? ` · ganado ${fmtMoney(f.ganado)}` : ''}${f.viatico > 0 ? ' · viático incluido' : ''}`}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <p className="font-display" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 2 }}>Neto</p>
+                    <p className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(f.neto)}</p>
+                  </div>
+                </div>
+
+                {(f.totalAjustes !== 0 || f.totalAdelantosQueRestan > 0 || ultimoComprobante) && (
+                  <>
+                    <div style={{ height: 1, background: 'var(--border)', margin: '12px 0 10px' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12.5, fontWeight: 700 }}>
+                        {f.totalAjustes !== 0 && (
+                          <span style={{ color: f.totalAjustes >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                            Ajustes {f.totalAjustes > 0 ? '+' : ''}{fmtMoney(f.totalAjustes)}
                           </span>
                         )}
-                      </td>
-                      <td style={{ padding: '10px', textAlign: 'right' }}>{f.dias}</td>
-                      <td style={{ padding: '10px', textAlign: 'right' }}>{f.sueldoFijo ? '—' : fmtMoney(f.ganado)}</td>
-                      <td style={{ padding: '10px', textAlign: 'right' }}>{f.viatico > 0 ? fmtMoney(f.viatico) : '—'}</td>
-                      <td style={{ padding: '10px', textAlign: 'right', color: f.totalAjustes >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                        {f.totalAjustes !== 0 ? `${f.totalAjustes > 0 ? '+' : ''}${fmtMoney(f.totalAjustes)}` : '—'}
-                      </td>
-                      <td style={{ padding: '10px', textAlign: 'right', color: 'var(--danger)' }}>
-                        {f.totalAdelantosQueRestan > 0 ? `-${fmtMoney(f.totalAdelantosQueRestan)}` : '—'}
-                      </td>
-                      <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: 'var(--secondary)' }}>{fmtMoney(f.neto)}</td>
-                      <td style={{ padding: '10px', textAlign: 'right' }}>
-                        <ComprobanteCelda
-                          trabajador={f.trabajador}
-                          semanaKey={semana.key}
-                          montoCalculado={f.neto}
-                          comprobante={ultimoComprobante}
-                          onSubido={cargar}
-                        />
-                      </td>
-                      <td style={{ padding: '10px', textAlign: 'right' }}>
-                        <button
-                          onClick={() => setExpandido(abierta ? null : f.trabajador)}
-                          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}
-                        >{abierta ? '▲' : '▾'} Ajustar/Adelanto</button>
-                      </td>
-                    </tr>
-                    {abierta && (
-                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td colSpan={9} style={{ padding: '4px 10px 14px' }}>
-                          <DetalleAjustesAdelantos fila={f} semanaKey={semana.key} onGuardado={cargar} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                )
-              })}
-            </tbody>
-          </table>
+                        {f.totalAdelantosQueRestan > 0 && (
+                          <span style={{ color: 'var(--danger)' }}>Adelanto -{fmtMoney(f.totalAdelantosQueRestan)}</span>
+                        )}
+                      </div>
+                      <ComprobanteCelda
+                        trabajador={f.trabajador}
+                        semanaKey={semana.key}
+                        montoCalculado={f.neto}
+                        comprobante={ultimoComprobante}
+                        onSubido={cargar}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <button
+                  onClick={() => setExpandido(abierta ? null : f.trabajador)}
+                  style={{ marginTop: 12, background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }}
+                >{abierta ? '▲' : '▾'} Ajustar/Adelanto</button>
+
+                {abierta && (
+                  <div style={{ marginTop: 12 }}>
+                    <DetalleAjustesAdelantos fila={f} semanaKey={semana.key} onGuardado={cargar} />
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
       {haySueldoFijo && (
-        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
+        <p style={{ fontSize: 12, color: 'var(--muted-inverse)', marginTop: 14 }}>
           Los trabajadores marcados "Sueldo fijo" tienen mensualidad fija (ver Gastos Fijos en Estado de Resultados) — acá solo se refleja su viático de esa semana más los ajustes que corresponda, no un cálculo por día. Sus adelantos se ven en "Historial de pagos".
         </p>
       )}
@@ -1660,7 +1658,7 @@ function FilaSemanaHistorial({ fila, semanaKey, semanaLabel, comprobante, onSubi
   onSubido: () => void
 }) {
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+    <div className="card" style={{ padding: '12px 14px', marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 700, fontSize: 13 }}>{semanaLabel}</span>
         <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--secondary)' }}>Neto {fmtMoney(fila.neto)}</span>
@@ -1745,7 +1743,7 @@ export function PanelHistorialPagos() {
   const comprobantesTrabajador = comprobantes.filter(c => c.trabajador === trabajador.nombre)
 
   const selector = (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--secondary)', marginBottom: 18 }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--text-inverse)', marginBottom: 18 }}>
       Trabajador:
       <select
         value={trabajador.nombre}
@@ -1910,7 +1908,7 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
           <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trabajadores por día</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
             {diariosObra.map(d => (
-              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                 <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
                 <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
                 <span style={{ color: 'var(--muted)' }}>{d.fraccion_jornada === 1 ? 'Día completo' : 'Medio día'}</span>
@@ -1926,7 +1924,7 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
           <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pagos a trabajadores</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
             {pagosTrabajadores.map(d => (
-              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                 <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
                 <span style={{ fontWeight: 600, flex: 1 }}>{d.trabajador}</span>
                 <span style={{ fontSize: 11, fontWeight: 600, color: d.tipo_pago === 'pago_semanal' ? 'var(--success)' : 'var(--warning)' }}>
@@ -1944,7 +1942,7 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
           <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compras</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
             {comprasObra.map(c => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
                 <span style={{ flex: 1 }}>{c.descripcion}</span>
                 {c.pagado_por && (
@@ -1973,7 +1971,7 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
           <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subcontratos</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
             {subcontratosObra.map(s => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                 <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{s.fecha.split('-').reverse().join('/')}</span>
                 <span style={{ flex: 1 }}>{s.subcontrato}</span>
                 <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(s.monto)}</span>
@@ -1988,7 +1986,7 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
           <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cobros</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {cobrosObra.map(c => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                 <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
                 <span style={{ flex: 1 }}>{c.cliente}</span>
                 <span style={{ fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(c.monto)}</span>
@@ -2015,12 +2013,12 @@ function PeriodoRow({ periodo, tarifas, onMarcarReembolsado }: { periodo: Period
   const cobrado = periodo.cobros.reduce((s, c) => s + c.monto, 0)
 
   return (
-    <div style={{ marginBottom: 10, border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+    <div style={{ marginBottom: 10, background: 'var(--surface)', borderRadius: 10, overflow: 'hidden' }}>
       <button
         onClick={() => setAbierto(a => !a)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-          background: periodo.enCurso ? '#fff8f0' : 'var(--bg)', border: 'none', cursor: 'pointer', textAlign: 'left',
+          background: periodo.enCurso ? '#fff8f0' : 'var(--surface-alt)', border: 'none', cursor: 'pointer', textAlign: 'left',
         }}
       >
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)' }}>{periodo.label}</span>
@@ -2087,7 +2085,7 @@ function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEli
       {abonosCuenta.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
           {abonosCuenta.map(a => (
-            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
               <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{a.fecha.split('-').reverse().join('/')}</span>
               <span style={{ flex: 1, fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(a.monto)}</span>
               {a.comprobante_url && (
@@ -2232,9 +2230,9 @@ function GaleriaObra({ obraId }: { obraId: string }) {
                 {m.tipo === 'foto' ? (
                   <img src={m.url} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
                 ) : m.tipo === 'video' ? (
-                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Video</div>
+                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-alt)', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Video</div>
                 ) : (
-                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Archivo</div>
+                  <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-alt)', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Archivo</div>
                 )}
               </a>
               <button
@@ -2620,7 +2618,7 @@ export function PanelBoletas() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--secondary)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--text-inverse)' }}>
           Mes:
           <select
             value={periodo.key}
@@ -4016,7 +4014,7 @@ export function PanelBancoContenido() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--secondary)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--text-inverse)' }}>
           Obra:
           <select
             value={obraFiltro}
@@ -4100,9 +4098,9 @@ export function PanelBancoContenido() {
                 {m.tipo === 'foto' ? (
                   <img src={m.url} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
                 ) : m.tipo === 'video' ? (
-                  <div style={{ width: '100%', height: 120, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Video</div>
+                  <div style={{ width: '100%', height: 120, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-alt)', fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Video</div>
                 ) : (
-                  <div style={{ width: '100%', height: 120, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Archivo</div>
+                  <div style={{ width: '100%', height: 120, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-alt)', fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Archivo</div>
                 )}
               </a>
               <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>

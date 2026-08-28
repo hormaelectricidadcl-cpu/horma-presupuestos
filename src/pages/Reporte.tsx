@@ -745,7 +745,7 @@ export default function Reporte({ token, embedded = false }: Props) {
                     {t.presente && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {esFabriel && (
-                          <p style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--bg)', padding: '6px 10px', borderRadius: 8 }}>
+                          <p style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--surface-alt)', padding: '6px 10px', borderRadius: 8 }}>
                             Fabriel tiene sueldo fijo mensual + bono. Aquí solo registra asistencia y viático, no ingreses un monto de sueldo del día.
                           </p>
                         )}

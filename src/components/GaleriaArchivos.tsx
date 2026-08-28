@@ -58,7 +58,7 @@ export function GaleriaArchivos({ urls }: { urls: string[] | null | undefined })
               onClick={() => setAbierto(i)}
               style={{
                 width: 56, height: 56, borderRadius: 8, border: '1px solid var(--border)',
-                overflow: 'hidden', padding: 0, cursor: 'pointer', background: 'var(--bg)',
+                overflow: 'hidden', padding: 0, cursor: 'pointer', background: 'var(--surface-alt)',
                 flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase',
               }}

@@ -197,7 +197,7 @@ function IrazuCard({ p, onRespondido }: { p: Pendiente; onRespondido: () => void
                 style={{
                   width: '100%', padding: '14px',
                   borderRadius: 12, border: '2px dashed var(--border)',
-                  background: 'var(--bg)', fontSize: 15, fontWeight: 600,
+                  background: 'var(--surface-alt)', fontSize: 15, fontWeight: 600,
                   color: 'var(--secondary)', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                 }}

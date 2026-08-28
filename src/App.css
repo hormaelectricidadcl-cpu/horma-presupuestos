@@ -3,8 +3,8 @@
   margin: 0 auto;
   padding: 32px 20px 60px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: var(--bg, #f5f5f0);
-  color: var(--text, #14213d);
+  background-color: var(--bg, #10182C);
+  color: var(--text-inverse, #FBFAF7);
 }
 
 /* ── Header ── */
@@ -26,7 +26,7 @@
 .app-header h1 {
   font-size: 28px;
   font-weight: 800;
-  color: var(--secondary, #14213d);
+  color: var(--text-inverse, #FBFAF7);
   margin: 0;
   font-family: var(--font-display, inherit);
   letter-spacing: 0.2px;
@@ -36,10 +36,10 @@
 .card {
   margin-bottom: 18px;
   padding: 20px;
-  border: 1px solid var(--border, #e0dedd);
-  border-radius: var(--radius, 12px);
-  background-color: white;
-  box-shadow: var(--shadow, 0 2px 8px rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius, 16px);
+  background-color: var(--surface, #FBFAF7);
+  color: var(--text, #14213d);
+  box-shadow: var(--shadow, 0 14px 28px -12px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.18));
 }
 
 .card h2 {
@@ -119,8 +119,8 @@ textarea:focus {
   display: flex;
   gap: 4px;
   margin-bottom: 16px;
-  background: var(--bg, #f5f5f0);
-  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-alt, #F3EFE7);
+  border-radius: var(--radius-sm, 10px);
   padding: 4px;
 }
 

@@ -5,6 +5,7 @@ import Presupuesto from './Presupuesto'
 import PresupuestoEtapas from './PresupuestoEtapas'
 import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
+import { NavIcon, type NavIconName } from '../components/NavIcon'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
 import type { Pendiente, TipoPendiente } from '../types'
@@ -119,7 +120,7 @@ function HistorialCliente({ clienteNombre, excluirId }: { clienteNombre: string;
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {historial.map(h => (
         <div key={h.id} style={{
-          background: 'var(--bg)', borderRadius: 10, padding: '10px 12px',
+          background: 'var(--surface-alt)', borderRadius: 10, padding: '10px 12px',
           borderLeft: `3px solid ${h.estado === 'respondido' ? 'var(--success)' : 'var(--primary)'}`,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
@@ -290,7 +291,9 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
   if (done) {
     return (
       <div className="card" style={{ marginBottom: 16, textAlign: 'center', padding: '2.5rem 1rem' }}>
-        <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2E7D46" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 10px' }}>
+          <circle cx="12" cy="12" r="9" /><path d="M8.3 12.4l2.5 2.5 4.6-5.2" />
+        </svg>
         <p style={{ fontWeight: 700, fontSize: 16 }}>¡Enviado!</p>
       </div>
     )
@@ -308,15 +311,12 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
   ]
 
   return (
-    <div className="card" style={{
-      marginBottom: 16,
-      borderTop: `4px solid ${dl.urgent ? 'var(--danger)' : 'var(--primary)'}`,
-    }}>
+    <div className="card" style={{ marginBottom: 16 }}>
       {/* ── Always-visible header ── */}
       <div style={{ padding: '18px 16px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
           <div>
-            <h2 style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.2 }}>{p.cliente_nombre}</h2>
+            <h2 style={{ fontSize: 22, fontStyle: 'italic', lineHeight: 1.2 }}>{p.cliente_nombre}</h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
               <span style={{ fontSize: 18 }}>{TIPO_EMOJI[p.tipo]}</span>
               <span style={{ fontWeight: 600, color: 'var(--secondary)', fontSize: 15 }}>{TIPO_LABELS[p.tipo]}</span>
@@ -331,16 +331,22 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
 
         {/* Mensaje del cliente */}
         {p.mensaje_cliente && (
-          <div style={{ marginBottom: 8, padding: '10px 12px', background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #38bdf8' }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cliente</p>
+          <div style={{ marginBottom: 8, padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--secondary)', display: 'inline-block' }} />
+              <span className="font-display" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Cliente</span>
+            </div>
             <p style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{p.mensaje_cliente}</p>
           </div>
         )}
 
         {/* Instrucción de Alexandra */}
         {p.descripcion && (
-          <div style={{ marginBottom: 8, padding: '10px 12px', background: '#fefce8', borderRadius: 8, borderLeft: '3px solid #eab308' }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#854d0e', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Alexandra</p>
+          <div style={{ marginBottom: 8, padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--primary)', display: 'inline-block' }} />
+              <span className="font-display" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Alexandra</span>
+            </div>
             <p style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{p.descripcion}</p>
           </div>
         )}
@@ -352,22 +358,23 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
             target="_blank"
             rel="noreferrer"
             style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '9px 12px', background: '#f0fdf4',
-              borderRadius: 8, borderLeft: '3px solid #22c55e',
-              textDecoration: 'none', color: '#15803d',
-              fontSize: 14, fontWeight: 600,
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '11px 14px', border: '1px solid var(--border)',
+              borderRadius: 12, textDecoration: 'none', color: 'var(--text)',
+              fontSize: 13.5, fontWeight: 600,
             }}
           >
-            <span style={{ fontSize: 18 }}></span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14213D" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <path d="M12 21s7-6.4 7-11.5A7 7 0 105 9.5C5 14.6 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.4" />
+            </svg>
             {p.direccion}
-            <span style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.7 }}>Ver en Maps →</span>
+            <span className="font-display" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>Maps</span>
           </a>
         )}
       </div>
 
       {/* ── Tab nav ── */}
-      <div style={{ display: 'flex', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
         {CARD_TABS.map(t => (
           <button
             key={t.key}
@@ -422,7 +429,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
                   style={{
                     width: '100%', padding: '16px', borderRadius: 12,
                     border: `2px solid ${grabando ? 'var(--danger)' : 'var(--border)'}`,
-                    background: grabando ? '#fff5f5' : 'var(--bg)',
+                    background: grabando ? '#fff5f5' : 'var(--surface-alt)',
                     fontSize: 16, fontWeight: 700,
                     color: grabando ? 'var(--danger)' : 'var(--secondary)',
                     cursor: 'pointer',
@@ -495,23 +502,23 @@ export default function Gustavo({ token }: Props) {
 
   const tokenValido = token === GUSTAVO_TOKEN
 
-  const SECCIONES: { key: SeccionGustavo; label: string; color: string }[] = [
-    { key: 'reporte', label: 'Reporte diario', color: 'var(--primary)' },
-    { key: 'calendario', label: 'Calendario', color: '#7c3aed' },
-    { key: 'obras', label: 'Obras', color: '#c1440e' },
-    { key: 'pagos', label: 'Pago semanal', color: '#e67e22' },
-    { key: 'historial_pagos', label: 'Historial de pagos', color: '#b45309' },
-    { key: 'trabajadores', label: 'Trabajadores', color: '#4d7c0f' },
-    { key: 'boletas', label: 'Boletas', color: '#0ea5e9' },
-    { key: 'facturas', label: 'Facturas', color: '#1d4ed8' },
-    { key: 'presupuestos', label: 'Mis presupuestos', color: '#059669' },
-    { key: 'presupuestador', label: 'Hacer presupuesto', color: '#e69a21' },
-    { key: 'ideas', label: 'Ideas de contenido', color: '#db2777' },
-    { key: 'pendientes', label: 'Mis tareas', color: '#dc2626' },
-    { key: 'notas', label: 'Mis notas', color: '#0284c7' },
-    { key: 'clientes', label: 'Clientes', color: '#0d9488' },
-    { key: 'stock', label: 'Stock', color: '#0891b2' },
-    { key: 'resultados', label: 'Estado de resultados', color: '#14213D' },
+  const SECCIONES: { key: SeccionGustavo; label: string; icon: NavIconName; destacado?: boolean }[] = [
+    { key: 'pendientes', label: 'Mis tareas', icon: 'tareas' },
+    { key: 'reporte', label: 'Reporte diario', icon: 'reporte' },
+    { key: 'calendario', label: 'Calendario', icon: 'calendario' },
+    { key: 'obras', label: 'Obras', icon: 'obras' },
+    { key: 'pagos', label: 'Pago semanal', icon: 'pago' },
+    { key: 'historial_pagos', label: 'Historial de pagos', icon: 'historial' },
+    { key: 'trabajadores', label: 'Trabajadores', icon: 'trabajadores' },
+    { key: 'boletas', label: 'Boletas', icon: 'boletas' },
+    { key: 'facturas', label: 'Facturas', icon: 'facturas' },
+    { key: 'presupuestos', label: 'Mis presupuestos', icon: 'presupuestos' },
+    { key: 'presupuestador', label: 'Hacer presupuesto', icon: 'presupuestador', destacado: true },
+    { key: 'ideas', label: 'Ideas de contenido', icon: 'ideas' },
+    { key: 'notas', label: 'Mis notas', icon: 'notas' },
+    { key: 'clientes', label: 'Clientes', icon: 'clientes' },
+    { key: 'stock', label: 'Stock', icon: 'stock' },
+    { key: 'resultados', label: 'Estado de resultados', icon: 'resultados' },
   ]
   const seccionActual = SECCIONES.find(s => s.key === seccion)
 
@@ -540,9 +547,11 @@ export default function Gustavo({ token }: Props) {
         alignItems: 'center', justifyContent: 'center',
         padding: '2rem', textAlign: 'center',
       }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#FBFAF7" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 16 }}>
+          <rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" />
+        </svg>
         <h2 style={{ fontWeight: 700, marginBottom: 8 }}>Link inválido</h2>
-        <p style={{ color: 'var(--muted)', fontSize: 15 }}>Pídele a Alexandra que te mande el link por WhatsApp.</p>
+        <p style={{ color: 'var(--muted-inverse)', fontSize: 15 }}>Pídele a Alexandra que te mande el link por WhatsApp.</p>
       </div>
     )
   }
@@ -551,30 +560,20 @@ export default function Gustavo({ token }: Props) {
     <div className="pendientes">
       <div style={{ maxWidth: 500, margin: '0 auto', padding: '1.25rem 14px 3rem' }}>
         {/* Header */}
-        <div style={{
-          background: 'var(--secondary)', borderRadius: 16, padding: '18px 20px', marginBottom: '1.5rem',
-          display: 'flex', alignItems: 'center', gap: 12,
-        }}>
-          <div style={{
-            width: 44, height: 44,
-            background: 'var(--primary)', borderRadius: 12,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 800, color: '#fff', fontSize: 20, flexShrink: 0,
-          }}>H</div>
-          <div>
-            <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 2 }}>Horma Grup</p>
-            <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#fff' }}>Hola Gustavo</h1>
-            {!loading && seccion === null && (
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-                {pendientes.length === 0 ? 'Sin pendientes' : `${pendientes.length} pendiente${pendientes.length !== 1 ? 's' : ''} para responder`}
-              </p>
-            )}
-          </div>
+        <div style={{ padding: '10px 2px 24px', marginBottom: '1.25rem' }}>
+          <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 8 }}>Horma Grup</p>
+          <h1 style={{ fontSize: 32, fontStyle: 'italic', color: 'var(--text-inverse)', marginBottom: 6, lineHeight: 1.1 }}>Hola, Gustavo</h1>
+          {!loading && seccion === null && (
+            <p style={{ fontSize: 13, color: 'var(--muted-inverse)', marginBottom: 18 }}>
+              {pendientes.length === 0 ? 'Sin pendientes' : `${pendientes.length} pendiente${pendientes.length !== 1 ? 's' : ''} para responder`}
+            </p>
+          )}
+          <div style={{ height: 1, background: 'var(--border-inverse)' }} />
         </div>
 
         {seccion === null ? (
           /* Home: grilla de cards */
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
             {SECCIONES.map(s => {
               const badge = s.key === 'pendientes' ? pendientes.length : 0
               return (
@@ -583,19 +582,20 @@ export default function Gustavo({ token }: Props) {
                   onClick={() => setSeccion(s.key)}
                   className="card"
                   style={{
-                    position: 'relative', padding: '16px 12px', border: 'none', cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10,
-                    textAlign: 'left', borderTop: `3px solid ${s.color}`,
+                    position: 'relative', padding: '18px 16px', border: 'none', cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 16,
+                    textAlign: 'left', background: s.destacado ? 'var(--primary)' : 'var(--surface)',
                   }}
                 >
                   {badge > 0 && (
                     <span style={{
-                      position: 'absolute', top: 10, right: 10, minWidth: 20, height: 20, borderRadius: 10,
-                      background: 'var(--danger)', color: '#fff', fontSize: 11, fontWeight: 700,
+                      position: 'absolute', top: 14, right: 14, minWidth: 19, height: 19, borderRadius: 10,
+                      background: 'var(--primary)', color: '#fff', fontSize: 11, fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px',
                     }}>{badge}</span>
                   )}
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{s.label}</span>
+                  <NavIcon name={s.icon} color={s.destacado ? '#FBFAF7' : '#14213D'} />
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: s.destacado ? '#FBFAF7' : 'var(--text)' }}>{s.label}</span>
                 </button>
               )
             })}
@@ -603,12 +603,12 @@ export default function Gustavo({ token }: Props) {
         ) : (
           <div>
             {/* Volver */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.1rem' }}>
               <button
                 onClick={() => setSeccion(null)}
-                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}
+                style={{ background: 'none', border: '1px solid var(--border-inverse)', borderRadius: 20, padding: '7px 13px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--muted-inverse)' }}
               >← Volver</button>
-              <h2 style={{ fontSize: 16, fontWeight: 800, color: seccionActual?.color }}>{seccionActual?.label}</h2>
+              <h2 className="font-display" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--primary)' }}>{seccionActual?.label}</h2>
             </div>
 
             {seccion === 'notas' ? (
@@ -667,9 +667,11 @@ export default function Gustavo({ token }: Props) {
               <div className="spinner" />
             ) : pendientes.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '4rem 1rem' }}>
-                <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
+                <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#2E7D46" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 16px' }}>
+                  <circle cx="12" cy="12" r="9" /><path d="M8.3 12.4l2.5 2.5 4.6-5.2" />
+                </svg>
                 <h2 style={{ fontWeight: 800, fontSize: 22, marginBottom: 8 }}>Todo listo</h2>
-                <p style={{ color: 'var(--muted)', fontSize: 16 }}>No tienes pendientes por responder.</p>
+                <p style={{ color: 'var(--muted-inverse)', fontSize: 16 }}>No tienes pendientes por responder.</p>
               </div>
             ) : (
               pendientes.map(p => (
