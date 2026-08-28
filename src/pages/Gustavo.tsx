@@ -636,9 +636,9 @@ export default function Gustavo({ token }: Props) {
                   ))}
                 </div>
                 {modoPresupuestador === 'simple' ? (
-                  <Presupuesto token={PRESUPUESTO_TOKEN} />
+                  <Presupuesto token={PRESUPUESTO_TOKEN} onVolver={() => setSeccion(null)} />
                 ) : (
-                  <PresupuestoEtapas embedded />
+                  <PresupuestoEtapas embedded onVolver={() => setSeccion(null)} />
                 )}
               </div>
             ) : seccion === 'presupuestos' ? (

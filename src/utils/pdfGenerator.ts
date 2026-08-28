@@ -19,6 +19,14 @@ interface Client {
   address: string;
 }
 
+// Limpia el nombre del cliente para usarlo en el nombre del archivo del PDF
+// (sin tildes ni caracteres que Windows/iOS no aceptan en nombres de archivo).
+export function sanitizarNombreArchivo(nombre: string): string {
+  const combiningMarks = String.fromCharCode(0x0300) + '-' + String.fromCharCode(0x036f);
+  const sinTildes = nombre.trim().normalize('NFD').replace(new RegExp(`[${combiningMarks}]`, 'g'), '');
+  return sinTildes.replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/\s+/g, ' ');
+}
+
 export const generatePDF = (client: Client, items: Item[], porcentajeGastos: number = 10, referencia?: string) => {
   console.log('Generando PDF con:', items.length, 'items');
   console.log('Cliente:', client);
@@ -339,6 +347,7 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   const footerX = (pageWidth - footerWidth) / 2;
   doc.text(footerText, footerX, yPosition + 10);
 
-  // Save the PDF
-  doc.save('presupuesto.pdf');
+  // Save the PDF — nombre de archivo con el cliente para encontrarlo entre varios PDFs
+  const nombreArchivo = sanitizarNombreArchivo(client.name) || 'Cliente';
+  doc.save(`Presupuesto ${nombreArchivo} - ${getCurrentDate()}.pdf`);
 };

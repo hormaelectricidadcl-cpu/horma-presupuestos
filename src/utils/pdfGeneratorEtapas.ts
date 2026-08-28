@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import logoSrc from '../assets/Logo.PNG'
+import { sanitizarNombreArchivo } from './pdfGenerator'
 
 export interface Item {
   subNumero: string
@@ -377,5 +378,8 @@ export const generatePDFEtapas = async (
   const footer = '¡Gracias por confiar en nosotros!'
   doc.text(footer, (pageWidth - doc.getTextWidth(footer)) / 2, y)
 
-  doc.save('presupuesto-horma.pdf')
+  // Nombre de archivo con el cliente para encontrarlo entre varios PDFs
+  const nombreArchivo = sanitizarNombreArchivo(client.name) || 'Cliente'
+  const fechaArchivo = new Date().toLocaleDateString('es-CL').replace(/\//g, '-')
+  doc.save(`Presupuesto ${nombreArchivo} - ${fechaArchivo}.pdf`)
 }

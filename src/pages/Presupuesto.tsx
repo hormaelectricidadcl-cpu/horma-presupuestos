@@ -17,9 +17,10 @@ const PRESUPUESTO_TOKEN = import.meta.env.VITE_PRESUPUESTO_TOKEN as string;
 
 interface Props {
   token: string | null;
+  onVolver?: () => void;
 }
 
-const Presupuesto: React.FC<Props> = ({ token }) => {
+const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [clientData, setClientData] = useState<Client>({ name: '', rut: '', email: '', address: '' });
   const [overheadPercentage, setOverheadPercentage] = useState(10);
@@ -182,6 +183,20 @@ const Presupuesto: React.FC<Props> = ({ token }) => {
       <button className="btn-generate" onClick={handleGeneratePDF}>
         Generar PDF
       </button>
+
+      {onVolver && (
+        <button
+          type="button"
+          onClick={onVolver}
+          style={{
+            display: 'block', width: '100%', marginTop: 14, padding: '10px',
+            background: 'none', border: '1px solid var(--border-inverse, rgba(251,250,247,0.14))', borderRadius: 'var(--radius-sm, 10px)',
+            color: 'var(--muted-inverse, rgba(251,250,247,0.55))', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          ← Volver
+        </button>
+      )}
     </div>
   );
 };

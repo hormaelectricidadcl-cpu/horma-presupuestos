@@ -141,7 +141,7 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function PresupuestoEtapas({ embedded = false }: { embedded?: boolean } = {}) {
+export default function PresupuestoEtapas({ embedded = false, onVolver }: { embedded?: boolean; onVolver?: () => void } = {}) {
   // Auth
   const [session, setSession]   = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(!embedded)
@@ -198,11 +198,16 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
     if (!texto.trim()) { setError('Pegá el texto del presupuesto de Gustavo.'); return }
     setLoading(true)
     setError('')
+    // Timeout explícito: sin esto, en una conexión mala el pedido puede quedar
+    // colgado indefinidamente sin que la pantalla avise nada (parece "trabado").
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 45000)
     try {
       const res  = await fetch('/api/parse-etapas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ texto }),
+        signal: controller.signal,
       })
       const data = await res.json()
       if (!res.ok || !data.etapas) throw new Error(data.error || 'Error al procesar')
@@ -212,8 +217,13 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
       setProcesado(true)
       setGuardado(null)
     } catch (e) {
-      setError(String(e))
+      if (e instanceof Error && e.name === 'AbortError') {
+        setError('La IA tardó demasiado en responder (conexión lenta). Probá de nuevo.')
+      } else {
+        setError(String(e))
+      }
     } finally {
+      clearTimeout(timeoutId)
       setLoading(false)
     }
   }
@@ -282,34 +292,44 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
     // Guardar en Supabase — en la versión embebida (panel de Gustavo, sin login
     // real) se guarda igual que el resto de esa pantalla, con user_id: null
     // (mismo criterio de confianza que ya usa el presupuesto simple).
+    // Con try/catch explícito: en mobile con conexión inestable el fetch puede
+    // directamente fallar/lanzar (no solo devolver un error en la respuesta) --
+    // sin esto, el guardado fallaba en silencio y el PDF parecía "generado
+    // correctamente" aunque nunca llegara a "Mis presupuestos".
     if (embedded || session?.user?.id) {
-      const clientePayload: { nombre: string; telefono?: string; email?: string } = { nombre: client.name.trim() }
-      if (client.telefono?.trim()) clientePayload.telefono = client.telefono.trim()
-      if (client.email?.trim()) clientePayload.email = client.email.trim()
-      const { data: cliente } = await supabase
-        .from('clientes')
-        .upsert(clientePayload, { onConflict: 'nombre' })
-        .select('id')
-        .single()
+      try {
+        const clientePayload: { nombre: string; telefono?: string; email?: string } = { nombre: client.name.trim() }
+        if (client.telefono?.trim()) clientePayload.telefono = client.telefono.trim()
+        if (client.email?.trim()) clientePayload.email = client.email.trim()
+        const { data: cliente, error: clienteErr } = await supabase
+          .from('clientes')
+          .upsert(clientePayload, { onConflict: 'nombre' })
+          .select('id')
+          .single()
+        if (clienteErr) throw clienteErr
 
-      const { error: dbErr } = await supabase.from('presupuestos').insert({
-        user_id:          embedded ? null : session.user.id,
-        cliente_id:       cliente?.id ?? null,
-        cliente_nombre:   client.name,
-        cliente_telefono: client.telefono,
-        cliente_email:    client.email,
-        cliente_direccion: client.address,
-        estado: 'enviado',
-        referencia,
-        etapas,
-        gg_pct:    ggPct,
-        gg_amount: ggAmount,
-        subtotal,
-        iva,
-        total,
-      })
-      if (dbErr) setGuardadoError(true)
-      else setGuardado(referencia)
+        const { error: dbErr } = await supabase.from('presupuestos').insert({
+          user_id:          embedded ? null : session.user.id,
+          cliente_id:       cliente?.id ?? null,
+          cliente_nombre:   client.name,
+          cliente_telefono: client.telefono,
+          cliente_email:    client.email,
+          cliente_direccion: client.address,
+          estado: 'enviado',
+          referencia,
+          etapas,
+          gg_pct:    ggPct,
+          gg_amount: ggAmount,
+          subtotal,
+          iva,
+          total,
+        })
+        if (dbErr) throw dbErr
+        setGuardado(referencia)
+      } catch (e) {
+        console.error('Error al guardar presupuesto por etapas en Supabase:', e)
+        setGuardadoError(true)
+      }
     }
   }
 
@@ -414,11 +434,31 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
                   setTexto(e.target.value)
                   if (procesado) limpiar()
                 }}
+                disabled={loading}
                 placeholder={`Mano de obra\n75 Reemplazo de cable de centros eléctricos 13.000\nInstalación de tablero de distribución 100.000\n\nMateriales:\n50 ml Cable 2.5mm 800\nTablero de distribución con accesorios 120.000\n...`}
                 rows={9}
-                style={{ width: '100%', fontSize: 13, fontFamily: 'monospace', resize: 'vertical', lineHeight: 1.6 }}
+                style={{ width: '100%', fontSize: 13, fontFamily: 'monospace', resize: 'vertical', lineHeight: 1.6, opacity: loading ? 0.6 : 1 }}
               />
-              {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 6 }}>{error}</p>}
+              {loading && (
+                <div style={{
+                  marginTop: 10, padding: '10px 14px', borderRadius: 8,
+                  background: '#fef9ee', border: '1.5px solid #e69a21',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <div className="spinner" style={{ width: 16, height: 16, margin: 0 }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#8a5a00' }}>
+                    Procesando con IA — puede tardar unos segundos con conexión lenta, no cierres la pantalla...
+                  </span>
+                </div>
+              )}
+              {error && (
+                <div style={{
+                  marginTop: 10, padding: '10px 14px', borderRadius: 8,
+                  background: '#fef2f2', border: '1.5px solid var(--danger)',
+                }}>
+                  <p style={{ color: 'var(--danger)', fontSize: 13, fontWeight: 600 }}>{error}</p>
+                </div>
+              )}
               {totalNeto !== null && (
                 <div style={{
                   marginTop: 10, padding: '8px 14px', borderRadius: 8,
@@ -717,6 +757,20 @@ export default function PresupuestoEtapas({ embedded = false }: { embedded?: boo
         <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted-inverse)' }}>
           Procesá el texto o JSON con IA para ver el desglose ítem a ítem antes de generar el PDF.
         </p>
+
+        {onVolver && (
+          <button
+            type="button"
+            onClick={onVolver}
+            style={{
+              display: 'block', width: '100%', marginTop: 14, padding: '10px',
+              background: 'none', border: '1px solid var(--border-inverse)', borderRadius: 'var(--radius-sm)',
+              color: 'var(--muted-inverse)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            ← Volver
+          </button>
+        )}
       </div>
     </div>
   )
