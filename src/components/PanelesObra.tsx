@@ -976,7 +976,7 @@ function FaseEditorRow({ fase, onFecha, onBorrar }: {
   )
 }
 
-export function PanelAvanceObra({ obraId }: { obraId: string }) {
+export function PanelAvanceObra({ obraId, presupuestoTotal = null }: { obraId: string; presupuestoTotal?: number | null }) {
   const [items, setItems] = useState<ObraItem[]>([])
   const [fases, setFases] = useState<ObraFase[]>([])
   const [loading, setLoading] = useState(true)
@@ -1094,6 +1094,27 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
             <div style={{ height: '100%', width: `${pct}%`, background: colorPct, transition: 'width 0.2s' }} />
           </div>
           <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{fmtMoney(montoCompletado)} de {fmtMoney(totalMonto)} completado</p>
+        </div>
+      )}
+
+      {/* Si los ítems no suman lo mismo que el presupuesto de la obra, avisar en vez de
+          mostrar un % que en realidad está calculado contra una base incompleta -- pasa
+          seguido con presupuestos externos, donde la IA lee bien el total pero no siempre
+          encuentra el 100% del desglose (IVA, gastos generales, un ítem sin tabla, etc). */}
+      {presupuestoTotal != null && items.length > 0 && Math.abs(presupuestoTotal - totalMonto) > 1000 && (
+        <div style={{ marginBottom: 16, padding: 12, background: '#fef2e0', border: '1px solid #e8a33d', borderRadius: 8 }}>
+          <p style={{ fontSize: 12.5, fontWeight: 700, color: '#7a5210', marginBottom: 4 }}>
+            Los ítems no suman lo mismo que el presupuesto de la obra
+          </p>
+          <p style={{ fontSize: 12, color: '#7a5210', marginBottom: 8 }}>
+            Ítems: {fmtMoney(totalMonto)} · Presupuesto de la obra: {fmtMoney(presupuestoTotal)} · Diferencia sin desglosar: {fmtMoney(presupuestoTotal - totalMonto)}
+          </p>
+          <button
+            onClick={() => setNuevoItem(p => ({ ...p, descripcion: p.descripcion || 'Otros / sin desglosar', cantidad: '1', precio_unitario: String(Math.round(presupuestoTotal - totalMonto)) }))}
+            style={{ fontSize: 12, fontWeight: 700, color: '#7a5210', background: 'none', border: '1px solid #e8a33d', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}
+          >
+            Completar el formulario de abajo con la diferencia
+          </button>
         </div>
       )}
 
@@ -1311,7 +1332,7 @@ export function PanelAvanceObras() {
 
       {obraId && (
         <div className="card" style={{ padding: '18px 20px' }}>
-          <PanelAvanceObra obraId={obraId} />
+          <PanelAvanceObra obraId={obraId} presupuestoTotal={obras.find(o => o.id === obraId)?.presupuesto_total ?? null} />
         </div>
       )}
     </div>
