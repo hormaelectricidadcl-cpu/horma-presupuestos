@@ -1,17 +1,19 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 27/08/2026
+## Última actualización: 28/08/2026
 
 ## Para la próxima sesión — empezar acá
 
-0. **Los 11 puntos del "lote de 11 puntos" quedaron construidos y verificados el 27/08/2026, commiteados y pusheados a `main` (`75888db`).** Detalle completo de causa raíz y verificación en la sección "Sesión 27/08/2026" más abajo. **`sql/20260827_trabajadores_activo.sql` ya corrida por Alexandra el mismo día** — confirmado vía MCP que la columna `activo` existe y los 6 trabajadores reales quedaron en `true` por default (Archivar/Reactivar en la card de Trabajadores ya debería funcionar de punta a punta; falta probarlo con un caso real). Queda para la próxima sesión:
-   - Probar Archivar/Reactivar en la card de Trabajadores contra un trabajador real (ahora que la migración está corrida).
-   - Confirmar en producción que la IA lee bien el monto de comprobantes de abono y de presupuestos externos (dependen de Cloudflare Functions, no probables en local) — especial atención al caso PDF del presupuesto externo (usa `input_file`, sin poder verificar contra la API real de OpenAI desde acá).
-   - Confirmar en un iPhone real que el PDF ahora se puede seleccionar en "Cargar presupuesto externo".
-   - Convertir de nuevo el presupuesto real de "Gustavo Castillo" en obra (quedó a propósito sin tocar).
+0. **Pendiente de seguridad sin resolver, a decidir con Alexandra: el bucket de Storage `audio-notas` permite LISTAR todo su contenido con la clave pública (anon key), no solo leer un archivo si tenés el link.** Encontrado el 28/08 revisando una duda de Alexandra sobre una URL. Cualquiera que inspeccione el sitio (herramientas de desarrollador, trivial) puede sacar la anon key ya pública en el bundle y listar/descargar TODOS los archivos del bucket — comprobantes de pago, fotos de obra, boletas, presupuestos externos, no solo los que la app enlaza. Esto es además de que el bucket es `public=true` (lectura de un archivo puntual sin login, ya sabido y aceptado como parte del modelo de "link con token" de la app) — lo nuevo es que además se puede **listar** todo. Sin tocar todavía — falta que Alexandra decida si quiere restringir el `list` (mientras se mantiene la lectura pública de archivos puntuales, que sí hace falta para que la app funcione).
 
-1. **Leer este archivo primero** (regla del arnés, `CLAUDE.md`). El resumen completo del día está en las secciones "Sesión 26/08/2026 (continuación 2/3/4)" y "Sesión 27/08/2026" más abajo — esto es solo el punteo de qué falta.
+1. **Los 11 puntos del "lote de 11 puntos" (27/08) + seguimiento del 28/08 quedaron construidos y verificados, commiteados y pusheados a `main`.** Detalle completo en las secciones "Sesión 27/08/2026" y "Sesión 28/08/2026" más abajo. Queda para la próxima sesión:
+   - Decidir sobre el punto 0 de arriba (seguridad del bucket).
+   - Probar Archivar/Reactivar en la card de Trabajadores contra un trabajador real (la migración ya está corrida).
+   - Confirmar en producción que la IA lee bien el monto de comprobantes de abono y de presupuestos externos — especial atención al caso PDF del presupuesto externo (usa `input_file`, sin poder verificar contra la API real de OpenAI desde acá). **El caso foto/PDF de presupuesto externo ya se probó real el 28/08 y funcionó** (ver sección de hoy) — falta el de comprobante de abono.
+   - Confirmar en un iPhone real que el PDF ahora se puede seleccionar en "Cargar presupuesto externo".
+
+2. **Leer este archivo primero** (regla del arnés, `CLAUDE.md`). El resumen completo del día está en las secciones "Sesión 26/08/2026 (continuación 2/3/4)", "Sesión 27/08/2026" y "Sesión 28/08/2026" más abajo — esto es solo el punteo de qué falta.
 
 2. **Bloqueador activo — 2 migraciones de Supabase, confirmado vía MCP (solo lectura) que todavía NO están corridas** (a diferencia de las 4 migraciones de antes en el día, que Alexandra ya corrió y están verificadas: `clientes_facturacion`, `clientes_backfill_desde_pendientes`, `obra_media_contenido`, `ideas_contenido`):
    - `sql/20260826_ajustes_pago_semanal.sql`
@@ -30,6 +32,22 @@
 6. **Todo lo demás de hoy (26/08) quedó construido, verificado y pusheado a `main`** — sin nada suelto sin subir: link de Presupuesto en Admin, presupuestador embebido en Gustavo (bug de estilo corregido), boletas, presupuesto externo, nav a cards en Gustavo/Admin, ficha de cliente con facturación+marketing, comprobantes de pago semanal, banco de contenido geolocalizado, ideas de contenido, y ahora ajustes/adelantos/historial de pagos.
 
 7. **Pendientes de fondo, de sesiones anteriores, sin tocar hoy** (ver `progress/tareas.md` para el detalle completo) — el más importante sigue siendo **confirmar si Supabase tiene backups automáticos activos** (plan Pro vs Free), porque esta app maneja nómina real y nunca se confirmó. También: RLS deshabilitado en `notas_rapidas`/`tareas_clientes` (bajo riesgo, fácil de resolver), presupuesto real de "Doctora Eloísa (dirección 5843)" sin cargar, y la tabla `facturas` sin interfaz desde el 20/08 (ítem 4.4 del backlog, ahora más relevante porque hoy se sumaron campos de facturación a `clientes`).
+
+## Sesión 28/08/2026 — Seguimiento en vivo con Alexandra: diagnóstico de guardado, botón Borrar obra, hallazgo de seguridad
+
+1. **"Hacer presupuesto" (Simple) volvió a fallar en la primera prueba real de Alexandra — diagnosticado con logs reales de Supabase, no es un bug del código.** Revisando `edge_logs` (MCP `query_logs`) se confirmó que el POST a `presupuestos`/`clientes` **nunca llegó a Supabase** desde su celular (sí llegaron sus otras acciones, antes y después, desde el mismo dispositivo) — corte de conexión puntual, no una falla de guardado ni de RLS. Se simuló el insert exacto vía anon key para confirmar que la base de datos en sí funciona sin problema (insertó limpio). **Confirma que el aviso agregado el 27/08 está haciendo su trabajo:** antes hubiera dicho "generado correctamente" igual; ahora avisó que no se guardó, así que Alexandra supo reintentar en vez de creer que había quedado guardado.
+
+2. **Presupuesto externo con IA — probado con un caso real de Alexandra, funcionó de punta a punta.** Subió un PDF real, la IA leyó el monto ($7.356.580), lo aceptó y lo convirtió en obra sin problema — confirma que el fix del 27/08 (función `parse-presupuesto-externo.js`, camino `input_file` para PDF) funciona contra la API real de OpenAI en producción, cerrando la única duda que había quedado sin verificar. Dato de prueba ("Alexandra prueba": presupuesto, obra y cliente) borrado a pedido de ella — el PDF en Storage queda huérfano (mismo límite ya conocido, la anon key no puede borrar del bucket).
+
+3. **Faltaba un botón para borrar una obra — no existía ninguno en toda la pestaña Obras.** Confirmado que ninguna otra tabla que registra historial por obra (`reportes_diarios`, `reportes_compras`, `reportes_cobros`, `reportes_subcontratos`, `movimientos_stock`, `cuentas_por_cobrar`) tiene FK a `obras.id` — todas guardan el nombre como texto, así que borrar la fila de `obras` no borra ningún historial, solo saca la obra de esta pestaña (la única FK real es `obra_media`, que sí se borra en cascada — la galería de fotos). Se agregó botón "Borrar" junto a "Detalle" en cada tarjeta de obra, con confirmación explícita sobre qué se borra y qué no. Verificado en navegador con una obra de prueba real (creada, borrada con el botón, confirmado que desapareció de Supabase).
+
+4. **Hallazgo de seguridad, sin resolver todavía (ver punto 0 de arriba, "Para la próxima sesión").** A raíz de una duda de Alexandra sobre si la URL de un archivo subido exponía "la URL secreta de Supabase": la URL en sí no es un secreto (es la URL pública del proyecto, ya visible en el bundle de JS del sitio para cualquier visitante — no es un dato nuevo que se filtre). Pero revisando esto se confirmó algo real: el bucket `audio-notas` tiene `public=true` **y además permite `list`** con la anon key — cualquiera puede listar y descargar TODO el contenido del bucket (comprobantes de pago, fotos de obra, boletas, presupuestos), no solo abrir un link puntual que la app le compartió. Sin tocar nada — es una decisión de Alexandra si quiere restringir el `list` manteniendo la lectura pública de archivos puntuales (necesaria para que la app siga funcionando como está).
+
+**Verificación hecha, con qué se comparó:**
+- `tsc --noEmit` limpio.
+- Logs reales de Supabase (`query_logs`, `edge_logs`) para el diagnóstico del punto 1 — no se asumió, se confirmó con evidencia que el pedido nunca llegó.
+- Botón Borrar obra probado en navegador con una obra de prueba real, confirmado en Supabase antes y después.
+- Todos los datos de prueba de esta sesión (obra, presupuesto, cliente) borrados sin dejar rastro salvo el PDF huérfano ya mencionado (límite conocido de Storage).
 
 ## Sesión 27/08/2026 — Los 6 bugs del "lote de 11 puntos", diagnosticados y corregidos
 

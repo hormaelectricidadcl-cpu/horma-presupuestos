@@ -192,6 +192,20 @@ export function PanelObras() {
     cargar()
   }
 
+  // El historial de reportes (diarios, compras, cobros, subcontratos) guarda la obra por
+  // NOMBRE, no por FK -- borrar la fila de `obras` no borra ese historial, solo saca la
+  // obra de esta pestaña. Solo la galería de fotos (`obra_media`) tiene FK real y se borra
+  // en cascada.
+  async function borrarObra(obraId: string, nombre: string) {
+    if (!window.confirm(`¿Borrar la obra "${nombre}"? Se borra la fila de la obra y su galería de fotos. El historial de reportes diarios/compras/cobros que ya se cargó bajo ese nombre NO se borra (queda igual, solo deja de estar agrupado bajo esta obra). No se puede deshacer.`)) return
+    const { error } = await supabase.from('obras').delete().eq('id', obraId)
+    if (error) {
+      alert('No se pudo borrar. Intenta de nuevo.')
+      return
+    }
+    cargar()
+  }
+
   async function guardarFechaObra(obraId: string, campo: 'fecha_inicio' | 'fecha_fin' | 'garantia_hasta', valor: string) {
     await supabase.from('obras').update({ [campo]: valor || null }).eq('id', obraId)
     cargar()
@@ -565,6 +579,15 @@ export function PanelObras() {
                       >
                         Detalle
                       </button>
+                      {o.obraId && (
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => borrarObra(o.obraId as string, o.obra)}
+                          style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
+                        >
+                          Borrar
+                        </button>
+                      )}
                     </div>
                     {o.obraId && (
                       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
