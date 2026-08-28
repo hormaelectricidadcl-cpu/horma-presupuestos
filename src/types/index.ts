@@ -206,6 +206,21 @@ export interface ObraFase {
   fecha_fin: string | null
 }
 
+// Bitácora de avance diario -- append-only, ver progress/decisiones.md 2026-08-28.
+// `cantidad_completada` de ObraItem es un campo cacheado, mantenido por un trigger de
+// Postgres a partir de la suma de estos registros -- nunca se escribe directo desde el
+// frontend.
+export interface ObraAvanceRegistro {
+  id: string
+  created_at: string
+  obra_id: string
+  item_id: string
+  fecha: string
+  cantidad_avanzada: number
+  trabajador: string | null
+  nota: string | null
+}
+
 export interface EventoCalendario {
   id: string
   created_at: string

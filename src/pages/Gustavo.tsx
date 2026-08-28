@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
 import Presupuesto from './Presupuesto'
 import PresupuestoEtapas from './PresupuestoEtapas'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido, PanelAvanceObras } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido, PanelAvanceObras, PanelBancoContenido } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { NavIcon, type NavIconName } from '../components/NavIcon'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
@@ -496,7 +496,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas'
+  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas' | 'banco_contenido'
   const [seccion, setSeccion] = useState<SeccionGustavo | null>(null)
   const [modoPresupuestador, setModoPresupuestador] = useState<'simple' | 'etapas'>('simple')
 
@@ -516,6 +516,7 @@ export default function Gustavo({ token }: Props) {
     { key: 'presupuestos', label: 'Mis presupuestos', icon: 'presupuestos' },
     { key: 'presupuestador', label: 'Hacer presupuesto', icon: 'presupuestador', destacado: true },
     { key: 'ideas', label: 'Ideas de contenido', icon: 'ideas' },
+    { key: 'banco_contenido', label: 'Banco de contenido', icon: 'banco_contenido' },
     { key: 'notas', label: 'Mis notas', icon: 'notas' },
     { key: 'clientes', label: 'Clientes', icon: 'clientes' },
     { key: 'stock', label: 'Stock', icon: 'stock' },
@@ -664,6 +665,8 @@ export default function Gustavo({ token }: Props) {
               <PanelTrabajadores />
             ) : seccion === 'resultados' ? (
               <PanelEstadoResultados />
+            ) : seccion === 'banco_contenido' ? (
+              <PanelBancoContenido />
             ) : seccion === 'ideas' ? (
               <PanelIdeasContenido soloLectura />
             ) : loading ? (

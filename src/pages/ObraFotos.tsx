@@ -46,10 +46,15 @@ export default function ObraFotos({ token }: Props) {
   const [obraAsignada, setObraAsignada] = useState<ObraSimple | null>(null)
   const [vista, setVista] = useState<'fotos' | 'avance'>('fotos')
   const [momento, setMomento] = useState<Momento>('durante')
-  const [autorizado, setAutorizado] = useState(false)
   const [archivos, setArchivos] = useState<File[]>([])
   const [subiendo, setSubiendo] = useState(false)
   const [resultado, setResultado] = useState<{ ok: number; fallidos: number } | null>(null)
+  const [ubicacionOk, setUbicacionOk] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (!trabajador) return
+    pedirUbicacion().then(u => setUbicacionOk(u !== null))
+  }, [trabajador])
 
   useEffect(() => {
     if (!trabajador) return
@@ -110,7 +115,6 @@ export default function ObraFotos({ token }: Props) {
         tipo,
         subido_por: trabajador,
         momento,
-        autorizado_cliente: autorizado,
         lat: ubicacion?.lat ?? null,
         lng: ubicacion?.lng ?? null,
       })
@@ -195,15 +199,13 @@ export default function ObraFotos({ token }: Props) {
               </div>
             </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={autorizado}
-                onChange={e => setAutorizado(e.target.checked)}
-                style={{ width: 20, height: 20, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 14 }}>El cliente autorizó usar esto en redes</span>
-            </label>
+            {ubicacionOk === false && (
+              <div style={{ padding: '10px 14px', background: '#fef2e0', border: '1px solid #e8a33d', borderRadius: 8, marginBottom: 18 }}>
+                <p style={{ fontSize: 13, color: '#7a5210', fontWeight: 600 }}>
+                  Por favor activa la ubicación en tu teléfono antes de subir las fotos, así llegan con los datos de dónde fueron tomadas.
+                </p>
+              </div>
+            )}
 
             <div className="field" style={{ marginBottom: 20 }}>
               <label>Fotos o video</label>
@@ -243,7 +245,7 @@ export default function ObraFotos({ token }: Props) {
           </p>
         ) : (
           <div className="card" style={{ padding: 16 }}>
-            <PanelAvanceObraCampo obraId={obraId} />
+            <PanelAvanceObraCampo obraId={obraId} trabajador={trabajador} />
           </div>
         )}
       </div>

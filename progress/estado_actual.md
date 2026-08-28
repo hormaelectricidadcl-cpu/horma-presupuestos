@@ -1,9 +1,50 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 28/08/2026
+## Última actualización: 28/08/2026 (sesión adicional — Fase 1 de bitácora de avance construida + 3 fixes chicos)
 
 ## Para la próxima sesión — empezar acá
+
+**Lo más reciente (misma fecha, sesión aparte de la del rediseño):**
+- **Fase 1 de "Bitácora de avance diario por obra" — construida, bloqueada en una migración pendiente.** Ver detalle completo abajo, sección "Bitácora de avance diario — Fase 1 construida (28/08/2026)". Falta correr `sql/20260828_obra_avance_registros.sql`.
+- **3 fixes chicos, construidos y verificados en navegador (Vite local + Playwright), `tsc` limpio:**
+  1. Botón "+ Cargar presupuesto (IA)" ahora también aparece dentro de "Avance de obra" (antes solo estaba en la tarjeta de la pestaña Obras) cuando la obra no tiene ítems ni presupuesto vinculado — probado con la obra real "Camino turístico 11474, Lo Barnechea".
+  2. Sacado el checkbox "El cliente autorizó usar esto en redes" del formulario de subida de fotos de Fabriel/Misael (`/obra-fotos`) — a pedido explícito de Alexandra.
+  3. Agregado un aviso visible en `/obra-fotos` pidiendo activar la ubicación si el navegador no la tiene disponible, antes de subir fotos — antes fallaba en silencio (guardaba `lat`/`lng` en null sin avisar a nadie).
+  4. **Hallazgo real, no pedido explícitamente:** "Banco de contenido" (donde se descargan las fotos/videos subidos desde obra) solo existía en Admin — el resumen de la sesión del 26/08 decía que estaba "en Gustavo y Admin" pero el código nunca lo tenía en `Gustavo.tsx`. Agregado también ahí (nav + render), mismo componente `PanelBancoContenido`, verificado en navegador.
+- Nada de esto se commiteó/pusheó todavía (no se pidió) — queda en el working tree.
+
+### Bitácora de avance diario — Fase 1 construida (28/08/2026)
+
+Implementado siguiendo el plan ya aprobado en `progress/decisiones.md` 2026-08-28, sin rediseñar nada del diseño de datos ahí decidido.
+
+**Migración nueva, sin correr todavía:** `sql/20260828_obra_avance_registros.sql` — tabla `obra_avance_registros` (obra_id, item_id, fecha, cantidad_avanzada [delta], trabajador, nota), append-only, política `anon full access` (mismo patrón de siempre), más el trigger `trg_actualizar_cantidad_completada` (`AFTER INSERT OR DELETE`) que recalcula `obra_items.cantidad_completada = GREATEST(0, SUM(cantidad_avanzada))` para el ítem afectado — mismo mecanismo ya usado en el proyecto para `materiales.stock_actual` desde `movimientos_stock` (`sql/20260825_stock_materiales.sql`), pero recalculando con `SUM` completo en vez de sumar/restar a mano, para que un `DELETE` (corrección de un registro cargado por error) también quede bien sin lógica aparte.
+
+**Código (`src/components/PanelesObra.tsx`, `src/pages/ObraFotos.tsx`, `src/types/index.ts`):**
+1. `actualizarCantidad()` en `PanelAvanceObra` (gestión) y `PanelAvanceObraCampo` (campo) ya no hacen `UPDATE obra_items` directo — calculan el delta (`cantidad_nueva − cantidad_actual_completada`) e insertan una fila en `obra_avance_registros`. El estado local (`items`) se sigue actualizando optimista, igual que antes. Si el delta es 0 no se inserta nada (evita filas vacías cuando se toca un input sin cambiar el valor real).
+2. `PanelAvanceObraCampo` ahora recibe `trabajador` como prop obligatoria (antes solo `obraId`) — se pasa desde `ObraFotos.tsx` con la variable `trabajador` que ya resolvía el token (Fabriel/Misael). Se agregó un único `<input type="date">` arriba de la lista de ítems ("Fecha del avance", default hoy) — esa es la fecha que se manda en cada insert de esa visita, no hay selector por fila.
+3. `PanelAvanceObra` (gestión) ahora también trae `obra_avance_registros` de la obra en `cargar()` (degrada a `[]` sin romper nada si la tabla todavía no existe o falla la consulta). Se agregó `calcularAtrasoFase()` — deriva días de atraso/adelanto de cada fase comparando la bitácora contra `fase.fecha_fin` planificada, y se renderiza como badge (rojo "X días de atraso" / verde "X días de adelanto") al lado del nombre de cada fase en `FaseEditorRow`. Si la fase no tiene `fecha_fin`, o no tiene ningún registro de bitácora todavía, no se muestra nada (sin estado "sin datos" ruidoso, como pedía la tarea).
+   - **Simplificación de v1, a confirmar con Alexandra:** la "fecha real de fin" de una fase que ya está al 100% se toma como el `MAX(fecha)` de TODOS los registros de esa fase una vez completa — no se reconstruye día por día cuál registro puntual fue el que hizo que el último ítem cerrara. Para una fase que sigue en curso y ya pasó su `fecha_fin` planificada, se muestra el atraso acumulado a hoy (comparando contra la fecha de hoy, no contra un registro). Es la aproximación que el plan ya autorizaba explícitamente para esta primera vuelta.
+   - No se implementó "fecha real de inicio" como badge visible aparte (el plan la pedía como parte del cálculo, no quedó claro que debía mostrarse como texto independiente del badge de atraso/adelanto) — si Alexandra la quiere ver explícitamente, es un agregado chico.
+4. Tipo nuevo `ObraAvanceRegistro` en `src/types/index.ts`.
+5. **No se tocó nada de fase 2 (costo en plata) ni fase 3 (bono)** — fuera de alcance a propósito, como pedía la tarea.
+
+**Verificación:**
+- `tsc --noEmit` limpio (`node ../node_modules/typescript/bin/tsc --noEmit -p ..` desde `src/`).
+- **Confirmado contra Supabase real (MCP `supabase-horma`, solo lectura) antes de escribir código:** `obra_avance_registros` todavía no existe (`information_schema.tables` no la lista; sí lista `obra_items`, `obra_fases`, `trabajadores`).
+- **Simulación de insert con la anon key (mismo canal que el frontend, vía `curl`)** contra `obra_avance_registros`: falla con `PGRST205 — Could not find the table 'public.obra_avance_registros'`, el error exacto esperado — confirma que el código de guardado está listo y solo falta que Alexandra corra la migración.
+- **Navegador real (Vite local en el puerto 5174 + Playwright, cargado desde el npx cache):**
+  - `/obra-fotos?t=<token de Fabriel>`: saludo "Hola Fabriel" visible, selector de obra con las 4 obras reales, pestaña "Avance" muestra el selector "Fecha del avance" con default `2026-08-28` (hoy) y la lista de ítems de la obra real "Camino turístico 11474, Lo Barnechea". Se tildó un ítem: dispara el insert a `obra_avance_registros`, que falla en consola con 404/`PGRST205` (esperado, tabla no creada) sin romper la pantalla — el `alert()` de error se dispara (comportamiento esperado, no un fallo silencioso).
+  - `/g?t=<token de Gustavo>`: pestaña "Avance de obra" visible y clickeable, sección "Agenda" se sigue renderizando sin errores de página — confirma que la consulta nueva a `obra_avance_registros` que falla no rompe el resto del panel de gestión, solo deja sin badges de atraso (esperado, no hay bitácora real todavía).
+  - Sin datos de prueba insertados en ningún lado (todos los intentos de guardar fallaron por la migración pendiente).
+
+**Pendiente para Alexandra:**
+- Correr `sql/20260828_obra_avance_registros.sql` en el SQL Editor de Supabase.
+- Después de correrla, repetir la prueba de campo real (tildar un ítem desde `/obra-fotos` con una fecha elegida, confirmar en Supabase que `obra_avance_registros` tiene la fila y que `obra_items.cantidad_completada` se actualizó solo vía trigger) y cargar al menos una fase con `fecha_fin` vencida para ver el badge de atraso en `/g` → Avance de obra.
+- Confirmar si quiere ver "fecha real de inicio" de cada fase como dato visible aparte del badge de atraso/adelanto (no se agregó en esta vuelta, ver nota arriba).
+- Seguir sin tocar fase 2 (costo en plata) y fase 3 (bono) hasta hablarlo con ella — 4 preguntas de negocio abiertas, listadas en `decisiones.md` 2026-08-28.
+
+**Lo que ya estaba pendiente de la sesión del rediseño (28/08), sigue igual:**
 
 **Sesión larguísima el 28/08 (dos conversaciones seguidas)**: primero la de seguridad (punto 0, sigue sin tocar) y después una segunda mucho más larga de rediseño visual + una funcionalidad nueva grande ("Avance de obra" / carta Gantt). El detalle completo de la segunda está en la sección **"Sesión 28/08/2026 (continuación 2) — Rediseño premium + Avance de obra"** más abajo. Lo más urgente de esa parte para la próxima sesión:
 

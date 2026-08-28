@@ -12,6 +12,7 @@ Ya no hace falta el ítem viejo "Confirmar plan de Supabase (backups automático
 
 ## 🔲 Avance de obra (carta Gantt) — seguimiento pendiente, 28/08/2026
 Funcionalidad grande construida en la sesión del 28/08 (detalle completo en `estado_actual.md`, sección "Sesión 28/08/2026 (continuación 2)"). Pendiente real:
+- **Correr `sql/20260828_obra_avance_registros.sql`** (Fase 1 de la bitácora de avance diario, construida el 28/08 en la sesión adicional — ver `estado_actual.md`, sección "Bitácora de avance diario — Fase 1 construida") — sin esto, cargar avance desde `/obra-fotos` o desde el panel de gestión falla con "No se pudo actualizar" (degradado bien, no rompe nada) y no aparecen los badges de atraso/adelanto por fase.
 - **Correr `sql/20260828_trabajadores_obra_asignada.sql`** — sin esto, asignar obra a Fabriel/Misael desde Trabajadores falla (degradado bien, no rompe nada).
 - Confirmar con más casos reales que la IA de "presupuesto externo" lee bien el desglose de ítems (solo se probó con un PDF, salió perfecto — falta ver si es consistente).
 - Probar la vista semanal tipo Gantt con una obra real que tenga fases con fecha de inicio y fin cargadas de punta a punta (solo se probó con datos puntuales).

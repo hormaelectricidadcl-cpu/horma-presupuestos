@@ -1,6 +1,26 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-28 — Bitácora de avance diario reemplaza el UPDATE directo de cantidad_completada
+Alexandra pidió (viendo la vista de campo) que el avance quede fechado por día y por trabajador, para
+tres usos: detectar atraso real vs. planificado y su costo en sueldos pagados de más, respaldo para
+renegociar con clientes, y eventualmente bonos por terminar antes de lo estimado. Pidió explícitamente
+que los trabajadores (Fabriel/Misael) puedan cargar avance con fecha pero NUNCA vean comparaciones
+planificado-vs-real ni plata — eso es exclusivo de Gustavo/Alexandra.
+
+**Decisión:** tabla nueva `obra_avance_registros` (obra_id, item_id, fecha, cantidad_avanzada [delta],
+trabajador, nota) — append-only, corrección solo vía Gustavo/Alexandra insertando un ajuste. `obra_items.
+cantidad_completada` deja de escribirse directo desde el frontend: pasa a ser un campo cacheado, mantenido
+por un trigger de Postgres a partir de la suma de la bitácora (mismo mecanismo ya usado en el proyecto para
+`materiales.stock_actual` desde `movimientos_stock`) — así nunca puede desincronizarse del historial real.
+Fase 1: solo días de atraso/adelanto por fase (derivado de la bitácora vs. fechas planificadas de
+`obra_fases`/`obras`), visible solo en el panel de gestión. Fase 2 (costo en plata) y fase 3 (reglas de
+bono) quedan pendientes de definir con Alexandra — no son solo decisiones técnicas.
+
+**Regla para el futuro:** cuando el pedido es "necesito saber cuándo pasó algo, no solo el estado actual",
+la respuesta es una bitácora append-only con un trigger que deriva el campo cacheado que ya lee la UI —
+no reescribir toda la UI existente para leer un JOIN+SUM en cada render.
+
 ## 2026-08-27 — Eliminar un trabajador = archivar, nunca borrar la fila
 Al construir la card de Trabajadores (agregar/eliminar), se detectó que `pago_semanal_comprobantes`, `ajustes_pago_semanal` y `adelantos_trabajador` guardan al trabajador por **nombre** (texto), no por FK a `trabajadores.id`. Borrar la fila de `trabajadores` lo hubiera sacado también del selector de "Historial de pagos" (que lista trabajadores desde esa tabla) — su historial de pagos habría quedado inalcanzable desde la UI, aunque los datos siguieran en Supabase.
 

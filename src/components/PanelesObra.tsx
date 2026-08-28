@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador, ObraItem, ObraFase, PresupuestoItemSimple, PresupuestoEtapa } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador, ObraItem, ObraFase, ObraAvanceRegistro, PresupuestoItemSimple, PresupuestoEtapa } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -1103,14 +1103,57 @@ function ItemAvanceRow({ item, fases, onCantidad, onFase, onBorrar, mostrarPreci
   )
 }
 
-function FaseEditorRow({ fase, onFecha, onBorrar }: {
+// Días de atraso/adelanto de una fase, derivado de la bitácora vs. su fecha_fin
+// planificada. Ver progress/decisiones.md 2026-08-28. Simplificación de v1, avisada a
+// Alexandra: la "fecha real de fin" de una fase completa se toma como el MAX(fecha) de
+// TODOS los registros de esa fase una vez que llegó a 100% -- no se reconstruye día por
+// día cuál registro exacto fue el que hizo que el último ítem cerrara. Para una fase
+// todavía en curso que ya pasó su fecha planificada, se muestra el atraso acumulado a hoy.
+function calcularAtrasoFase(fase: ObraFase, items: ObraItem[], registros: ObraAvanceRegistro[]): { dias: number; tipo: 'atraso' | 'adelanto' } | null {
+  if (!fase.fecha_fin) return null
+  const itemsFase = items.filter(it => (it.fase || '') === fase.nombre)
+  if (itemsFase.length === 0) return null
+  const itemIds = new Set(itemsFase.map(it => it.id))
+  const registrosFase = registros.filter(r => itemIds.has(r.item_id))
+  if (registrosFase.length === 0) return null
+
+  const faseCompleta = itemsFase.every(it => it.cantidad_completada >= it.cantidad)
+  const fechaFinPlan = parseFechaObra(fase.fecha_fin)
+
+  let fechaComparar: Date
+  if (faseCompleta) {
+    const fechas = registrosFase.map(r => parseFechaObra(r.fecha).getTime())
+    fechaComparar = new Date(Math.max(...fechas))
+  } else {
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    if (hoy <= fechaFinPlan) return null // en curso, todavía dentro del plazo
+    fechaComparar = hoy
+  }
+
+  const dias = Math.round((fechaComparar.getTime() - fechaFinPlan.getTime()) / 86400000)
+  if (dias === 0) return null
+  return { dias: Math.abs(dias), tipo: dias > 0 ? 'atraso' : 'adelanto' }
+}
+
+function FaseEditorRow({ fase, atraso, onFecha, onBorrar }: {
   fase: ObraFase
+  atraso?: { dias: number; tipo: 'atraso' | 'adelanto' } | null
   onFecha: (campo: 'fecha_inicio' | 'fecha_fin', valor: string) => void
   onBorrar: () => void
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 10px', background: 'var(--surface-alt)', borderRadius: 8 }}>
       <span style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 120 }}>{fase.nombre}</span>
+      {atraso && (
+        <span style={{
+          fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, flexShrink: 0,
+          background: atraso.tipo === 'atraso' ? 'rgba(200,64,32,0.14)' : 'rgba(31,107,63,0.14)',
+          color: atraso.tipo === 'atraso' ? 'var(--danger)' : '#1f6b3f',
+        }}>
+          {atraso.dias} día{atraso.dias !== 1 ? 's' : ''} de {atraso.tipo === 'atraso' ? 'atraso' : 'adelanto'}
+        </span>
+      )}
       <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--muted)' }}>
         Inicio
         <input type="date" value={fase.fecha_inicio || ''} onChange={e => onFecha('fecha_inicio', e.target.value)} style={{ fontSize: 12, padding: '3px 6px', width: 'auto' }} />
@@ -1124,29 +1167,45 @@ function FaseEditorRow({ fase, onFecha, onBorrar }: {
   )
 }
 
-export function PanelAvanceObra({ obraId, presupuestoTotal = null }: { obraId: string; presupuestoTotal?: number | null }) {
+export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId = null, nombre, cliente = null }: { obraId: string; presupuestoTotal?: number | null; presupuestoId?: string | null; nombre: string; cliente?: string | null }) {
   const [items, setItems] = useState<ObraItem[]>([])
   const [fases, setFases] = useState<ObraFase[]>([])
+  const [registros, setRegistros] = useState<ObraAvanceRegistro[]>([])
   const [loading, setLoading] = useState(true)
   const [nuevaFase, setNuevaFase] = useState('')
   const [nuevoItem, setNuevoItem] = useState({ descripcion: '', cantidad: '1', precio_unitario: '', fase: '' })
   const [guardandoItem, setGuardandoItem] = useState(false)
 
   const cargar = useCallback(async () => {
-    const [{ data: it }, { data: fa }] = await Promise.all([
+    const [{ data: it }, { data: fa }, { data: reg }] = await Promise.all([
       supabase.from('obra_items').select('*').eq('obra_id', obraId).order('orden'),
       supabase.from('obra_fases').select('*').eq('obra_id', obraId).order('orden'),
+      // Tabla nueva (obra_avance_registros) -- si todavía no se corrió la migración, esto
+      // vuelve con error y `reg` queda undefined/null: se degrada a [] sin romper el resto
+      // de la pantalla (la Agenda y las fases se siguen viendo, solo sin badges de atraso).
+      supabase.from('obra_avance_registros').select('*').eq('obra_id', obraId).order('fecha'),
     ])
     setItems((it as ObraItem[]) || [])
     setFases((fa as ObraFase[]) || [])
+    setRegistros((reg as ObraAvanceRegistro[]) || [])
     setLoading(false)
   }, [obraId])
 
   useEffect(() => { cargar() }, [cargar])
 
+  // `cantidad_completada` ya no se escribe directo -- se inserta el delta como una fila
+  // nueva en la bitácora (obra_avance_registros) y un trigger de Postgres recalcula el
+  // campo cacheado del ítem. Ver progress/decisiones.md 2026-08-28. El estado local se
+  // sigue actualizando optimista para que la UI responda al toque.
   async function actualizarCantidad(item: ObraItem, cantidad: number) {
+    const delta = cantidad - item.cantidad_completada
     setItems(prev => prev.map(x => x.id === item.id ? { ...x, cantidad_completada: cantidad } : x))
-    const { error } = await supabase.from('obra_items').update({ cantidad_completada: cantidad }).eq('id', item.id)
+    if (delta === 0) return
+    const { error } = await supabase.from('obra_avance_registros').insert({
+      obra_id: obraId,
+      item_id: item.id,
+      cantidad_avanzada: delta,
+    })
     if (error) { alert('No se pudo actualizar. Intenta de nuevo.'); cargar() }
   }
 
@@ -1229,9 +1288,14 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null }: { obraId: s
   return (
     <div>
       {items.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--muted)', padding: '4px 0', marginBottom: 16 }}>
-          Esta obra todavía no tiene ítems cargados — agrégalos a mano abajo (útil sobre todo si el presupuesto era "externo": esos solo traen el monto total, nunca el detalle línea por línea).
-        </p>
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: 'var(--muted)', padding: '4px 0', marginBottom: presupuestoId ? 0 : 10 }}>
+            Esta obra todavía no tiene ítems cargados — agrégalos a mano abajo, o subí el presupuesto para que la IA lo lea.
+          </p>
+          {!presupuestoId && (
+            <CargarPresupuestoObra obra={{ id: obraId, nombre, cliente }} onGuardado={cargar} />
+          )}
+        </div>
       ) : (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
@@ -1291,6 +1355,7 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null }: { obraId: s
               <FaseEditorRow
                 key={f.id}
                 fase={f}
+                atraso={calcularAtrasoFase(f, items, registros)}
                 onFecha={(campo, valor) => actualizarFechaFase(f, campo, valor)}
                 onBorrar={() => borrarFase(f)}
               />
@@ -1380,10 +1445,13 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null }: { obraId: s
 // fase primero, y SÍ pueden actualizar cuánto llevan hecho (son quienes instalan de
 // verdad, es el reporte de campo real, mismo criterio de confianza que ya tienen con
 // el Reporte Diario). No pueden crear/editar fases ni fechas -- eso lo decide Gustavo.
-export function PanelAvanceObraCampo({ obraId }: { obraId: string }) {
+export function PanelAvanceObraCampo({ obraId, trabajador }: { obraId: string; trabajador: string }) {
   const [items, setItems] = useState<ObraItem[]>([])
   const [fases, setFases] = useState<ObraFase[]>([])
   const [loading, setLoading] = useState(true)
+  // Un solo selector de fecha arriba de la lista (no por fila) -- la fecha que se manda
+  // en la bitácora para todo lo que se cargue en esta visita. Default: hoy.
+  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
 
   const cargar = useCallback(async () => {
     const [{ data: it }, { data: fa }] = await Promise.all([
@@ -1397,9 +1465,19 @@ export function PanelAvanceObraCampo({ obraId }: { obraId: string }) {
 
   useEffect(() => { cargar() }, [cargar])
 
+  // Mismo criterio que en PanelAvanceObra: el delta se inserta en la bitácora, nunca se
+  // escribe cantidad_completada directo -- el trigger de Postgres se encarga.
   async function actualizarCantidad(item: ObraItem, cantidad: number) {
+    const delta = cantidad - item.cantidad_completada
     setItems(prev => prev.map(x => x.id === item.id ? { ...x, cantidad_completada: cantidad } : x))
-    const { error } = await supabase.from('obra_items').update({ cantidad_completada: cantidad }).eq('id', item.id)
+    if (delta === 0) return
+    const { error } = await supabase.from('obra_avance_registros').insert({
+      obra_id: obraId,
+      item_id: item.id,
+      fecha,
+      cantidad_avanzada: delta,
+      trabajador,
+    })
     if (error) { alert('No se pudo actualizar. Intenta de nuevo.'); cargar() }
   }
 
@@ -1421,6 +1499,15 @@ export function PanelAvanceObraCampo({ obraId }: { obraId: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+        Fecha del avance
+        <input
+          type="date"
+          value={fecha}
+          onChange={e => setFecha(e.target.value)}
+          style={{ fontSize: 13, padding: '6px 10px', width: 'auto' }}
+        />
+      </label>
       {grupos.map(g => {
         const faseInfo = fases.find(f => f.nombre === g.fase)
         return (
@@ -1491,11 +1578,20 @@ export function PanelAvanceObras() {
         </label>
       </div>
 
-      {obraId && (
-        <div className="card" style={{ padding: '18px 20px' }}>
-          <PanelAvanceObra obraId={obraId} presupuestoTotal={obras.find(o => o.id === obraId)?.presupuesto_total ?? null} />
-        </div>
-      )}
+      {obraId && (() => {
+        const obra = obras.find(o => o.id === obraId)
+        return (
+          <div className="card" style={{ padding: '18px 20px' }}>
+            <PanelAvanceObra
+              obraId={obraId}
+              presupuestoTotal={obra?.presupuesto_total ?? null}
+              presupuestoId={obra?.presupuesto_id ?? null}
+              nombre={obra?.nombre ?? ''}
+              cliente={obra?.cliente ?? null}
+            />
+          </div>
+        )
+      })()}
     </div>
   )
 }
