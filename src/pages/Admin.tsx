@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelBancoContenido, PanelIdeasContenido } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelBancoContenido, PanelIdeasContenido, PanelAvanceObras } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
@@ -1221,7 +1221,7 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  type SeccionAdmin = 'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'banco_contenido' | 'ideas'
+  type SeccionAdmin = 'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'banco_contenido' | 'ideas'
   const [seccion, setSeccion] = useState<SeccionAdmin | null>(null)
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
 
@@ -1345,6 +1345,7 @@ export default function Admin() {
     { key: 'boletas', label: 'Boletas', icon: 'boletas' },
     { key: 'facturas', label: 'Facturas', icon: 'facturas' },
     { key: 'obras', label: 'Obras', icon: 'obras' },
+    { key: 'avance_obra', label: 'Avance de obra', icon: 'avance' },
     { key: 'calendario', label: 'Calendario', icon: 'calendario' },
     { key: 'stock', label: 'Stock', icon: 'stock' },
     { key: 'pagos', label: 'Pago semanal', icon: 'pago' },
@@ -1520,6 +1521,8 @@ export default function Admin() {
             <PanelFacturas />
           ) : seccion === 'obras' ? (
             <PanelObras />
+          ) : seccion === 'avance_obra' ? (
+            <PanelAvanceObras />
           ) : seccion === 'calendario' ? (
             <PanelCalendario />
           ) : seccion === 'stock' ? (

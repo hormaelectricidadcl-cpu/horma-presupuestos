@@ -185,7 +185,6 @@ export function PanelObras() {
   const [presupuestosAceptados, setPresupuestosAceptados] = useState<PresupuestoGuardado[]>([])
   const [mostrarNuevaCuentaSuelta, setMostrarNuevaCuentaSuelta] = useState(false)
   const [nuevaCuentaSuelta, setNuevaCuentaSuelta] = useState({ pagador: '', concepto: '', total_presupuesto: '' })
-  const [avanceAbierto, setAvanceAbierto] = useState<string | null>(null)
 
   useEffect(() => {
     if (!localStorage.getItem('horma_guia_obras_vista')) {
@@ -633,15 +632,6 @@ export function PanelObras() {
                       </button>
                       {o.obraId && (
                         <button
-                          className="btn btn-secondary"
-                          onClick={() => setAvanceAbierto(a => a === o.obraId ? null : (o.obraId as string))}
-                          style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
-                        >
-                          {avanceAbierto === o.obraId ? '▲' : '▾'} Avance de obra
-                        </button>
-                      )}
-                      {o.obraId && (
-                        <button
                           className="btn btn-danger"
                           onClick={() => borrarObra(o.obraId as string, o.obra)}
                           style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}
@@ -650,11 +640,6 @@ export function PanelObras() {
                         </button>
                       )}
                     </div>
-                    {o.obraId && avanceAbierto === o.obraId && (
-                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: 12 }}>
-                        <PanelAvanceObra obraId={o.obraId} />
-                      </div>
-                    )}
                     {o.obraId && (
                       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)' }}>
@@ -827,7 +812,7 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 700 }}>Avance de obra</span>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>Avance</span>
           <span className="font-display" style={{ fontSize: 15, fontWeight: 800, color: colorPct }}>{pct}%</span>
         </div>
         <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
@@ -852,6 +837,59 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Pestaña propia (no vive adentro de la card de cada obra en "Obras" -- ahí ya hay
+// demasiado detalle apilado, ver conversación con Alexandra 28/08/2026): selector de
+// obra + el checklist de arriba para la que se elija.
+export function PanelAvanceObras() {
+  const [obras, setObras] = useState<Obra[]>([])
+  const [obraId, setObraId] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.from('obras').select('*').order('nombre').then(({ data }) => {
+      const lista = (data as Obra[]) || []
+      setObras(lista)
+      setObraId(prev => prev || lista.find(o => o.estado_obra === 'en_curso')?.id || lista[0]?.id || '')
+      setLoading(false)
+    })
+  }, [])
+
+  if (loading) return <div className="spinner" />
+
+  if (obras.length === 0) {
+    return <p style={{ color: 'var(--muted-inverse)', fontSize: 14 }}>Todavía no hay obras cargadas.</p>
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--text-inverse)' }}>
+          Obra:
+          <select
+            value={obraId}
+            onChange={e => setObraId(e.target.value)}
+            style={{
+              width: 'auto', padding: '6px 10px', fontSize: 13, fontWeight: 600, borderRadius: 6,
+              border: '1.5px solid var(--primary)', background: 'var(--white)', color: 'var(--secondary)',
+              cursor: 'pointer', appearance: 'auto',
+            }}
+          >
+            {obras.map(o => (
+              <option key={o.id} value={o.id}>{o.nombre}{o.estado_obra !== 'en_curso' ? ` (${ESTADO_OBRA_LABELS[o.estado_obra]})` : ''}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {obraId && (
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <PanelAvanceObra obraId={obraId} />
+        </div>
+      )}
     </div>
   )
 }
