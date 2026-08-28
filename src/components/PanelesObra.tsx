@@ -789,8 +789,10 @@ function parseFechaObra(s: string): Date {
 }
 
 // Vista semanal tipo Gantt: una fila por fase, una barra por el rango de fechas que
-// tenga cargado. Solo se dibuja si al menos una fase tiene fecha de inicio Y fin.
-function GanttSemanal({ fases }: { fases: ObraFase[] }) {
+// tenga cargado, con un relleno interno mostrando cuánto de esa fase ya se completó
+// (ponderado por monto de los ítems que le corresponden). Solo se dibuja si al menos
+// una fase tiene fecha de inicio Y fin.
+function GanttSemanal({ fases, items }: { fases: ObraFase[]; items: ObraItem[] }) {
   const conFechas = fases.filter(f => f.fecha_inicio && f.fecha_fin)
   if (conFechas.length === 0) return null
 
@@ -838,12 +840,21 @@ function GanttSemanal({ fases }: { fases: ObraFase[] }) {
               <div style={{ gridRow: row, gridColumn: 1, fontSize: 12, fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', paddingRight: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {f.nombre}
               </div>
-              {tieneFechas ? (
-                <div style={{
-                  gridRow: row, gridColumn: `${colInicio + 2} / ${colFin + 3}`,
-                  background: 'var(--primary)', borderRadius: 6, height: 20, alignSelf: 'center',
-                }} />
-              ) : (
+              {tieneFechas ? (() => {
+                const itemsFase = items.filter(it => (it.fase || '') === f.nombre)
+                const totalFase = itemsFase.reduce((s, it) => s + it.total, 0)
+                const hechoFase = itemsFase.reduce((s, it) => s + (it.cantidad > 0 ? (it.cantidad_completada / it.cantidad) * it.total : 0), 0)
+                const pctFase = totalFase > 0 ? Math.round((hechoFase / totalFase) * 100) : 0
+                return (
+                  <div style={{
+                    gridRow: row, gridColumn: `${colInicio + 2} / ${colFin + 3}`,
+                    background: 'rgba(193,68,14,0.22)', borderRadius: 6, height: 20, alignSelf: 'center',
+                    overflow: 'hidden', position: 'relative',
+                  }}>
+                    <div style={{ height: '100%', width: `${pctFase}%`, background: pctFase >= 100 ? 'var(--success)' : 'var(--primary)', transition: 'width 0.2s' }} />
+                  </div>
+                )
+              })() : (
                 <div style={{ gridRow: row, gridColumn: `2 / ${semanas.length + 2}`, fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center' }}>
                   Sin fecha cargada
                 </div>
@@ -856,11 +867,12 @@ function GanttSemanal({ fases }: { fases: ObraFase[] }) {
   )
 }
 
-function ItemAvanceRow({ item, fases, onCantidad, onFase }: {
+function ItemAvanceRow({ item, fases, onCantidad, onFase, mostrarPrecio = true }: {
   item: ObraItem
-  fases: ObraFase[]
+  fases?: ObraFase[]
   onCantidad: (cantidad: number) => void
-  onFase: (fase: string | null) => void
+  onFase?: (fase: string | null) => void
+  mostrarPrecio?: boolean
 }) {
   const [valor, setValor] = useState(String(item.cantidad_completada))
   useEffect(() => { setValor(String(item.cantidad_completada)) }, [item.cantidad_completada])
@@ -868,6 +880,9 @@ function ItemAvanceRow({ item, fases, onCantidad, onFase }: {
   const pct = item.cantidad > 0 ? Math.min(100, Math.round((item.cantidad_completada / item.cantidad) * 100)) : 0
   const completo = item.cantidad_completada >= item.cantidad
   const colorPct = completo ? 'var(--success)' : 'var(--primary)'
+  // Con cantidad=1 (el caso más común: "instalar el tablero", no "50 metros de cable")
+  // un checkbox es más claro que escribir un número -- mismo mecanismo de guardado.
+  const esBinario = item.cantidad === 1
 
   function guardar() {
     const n = Number(valor)
@@ -877,35 +892,47 @@ function ItemAvanceRow({ item, fases, onCantidad, onFase }: {
 
   return (
     <div style={{ padding: '9px 10px', background: 'var(--surface-alt)', borderRadius: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: esBinario ? 0 : 6 }}>
+        {esBinario && (
+          <input
+            type="checkbox"
+            checked={completo}
+            onChange={e => onCantidad(e.target.checked ? item.cantidad : 0)}
+            style={{ width: 18, height: 18, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }}
+          />
+        )}
         <span style={{ flex: 1, fontSize: 13, textDecoration: completo ? 'line-through' : 'none', color: completo ? 'var(--muted)' : 'var(--text)' }}>
           {item.descripcion}
         </span>
-        <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtMoney(item.total)}</span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <input
-          type="number" min={0} max={item.cantidad} step="any"
-          value={valor}
-          onChange={e => setValor(e.target.value)}
-          onBlur={guardar}
-          style={{ width: 56, padding: '4px 6px', fontSize: 12.5, textAlign: 'right' }}
-        />
-        <span style={{ fontSize: 11.5, color: 'var(--muted)', flexShrink: 0 }}>/ {item.cantidad}</span>
-        <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: colorPct, transition: 'width 0.2s' }} />
-        </div>
-        <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: colorPct, width: 30, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
-        {!completo && (
-          <button
-            onClick={() => onCantidad(item.cantidad)}
-            style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
-          >
-            Listo
-          </button>
+        {mostrarPrecio && (
+          <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtMoney(item.total)}</span>
         )}
       </div>
-      {fases.length > 0 && (
+      {!esBinario && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input
+            type="number" min={0} max={item.cantidad} step="any"
+            value={valor}
+            onChange={e => setValor(e.target.value)}
+            onBlur={guardar}
+            style={{ width: 56, padding: '4px 6px', fontSize: 12.5, textAlign: 'right' }}
+          />
+          <span style={{ fontSize: 11.5, color: 'var(--muted)', flexShrink: 0 }}>/ {item.cantidad}</span>
+          <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, background: colorPct, transition: 'width 0.2s' }} />
+          </div>
+          <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: colorPct, width: 30, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
+          {!completo && (
+            <button
+              onClick={() => onCantidad(item.cantidad)}
+              style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
+            >
+              Listo
+            </button>
+          )}
+        </div>
+      )}
+      {onFase && fases && fases.length > 0 && (
         <select
           value={item.fase || ''}
           onChange={e => onFase(e.target.value || null)}
@@ -1031,7 +1058,7 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
         <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
           Agenda
         </p>
-        <GanttSemanal fases={fases} />
+        <GanttSemanal fases={fases} items={items} />
         {fases.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
             {fases.map(f => (
@@ -1077,6 +1104,78 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Vista de campo para Fabriel/Misael (colgada de /obra-fotos, mismo token que ya
+// usan): sin precios -- a ellos les importa la cantidad, no la plata -- agrupada por
+// fase primero, y SÍ pueden actualizar cuánto llevan hecho (son quienes instalan de
+// verdad, es el reporte de campo real, mismo criterio de confianza que ya tienen con
+// el Reporte Diario). No pueden crear/editar fases ni fechas -- eso lo decide Gustavo.
+export function PanelAvanceObraCampo({ obraId }: { obraId: string }) {
+  const [items, setItems] = useState<ObraItem[]>([])
+  const [fases, setFases] = useState<ObraFase[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const cargar = useCallback(async () => {
+    const [{ data: it }, { data: fa }] = await Promise.all([
+      supabase.from('obra_items').select('*').eq('obra_id', obraId).order('orden'),
+      supabase.from('obra_fases').select('*').eq('obra_id', obraId).order('orden'),
+    ])
+    setItems((it as ObraItem[]) || [])
+    setFases((fa as ObraFase[]) || [])
+    setLoading(false)
+  }, [obraId])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function actualizarCantidad(item: ObraItem, cantidad: number) {
+    setItems(prev => prev.map(x => x.id === item.id ? { ...x, cantidad_completada: cantidad } : x))
+    const { error } = await supabase.from('obra_items').update({ cantidad_completada: cantidad }).eq('id', item.id)
+    if (error) { alert('No se pudo actualizar. Intenta de nuevo.'); cargar() }
+  }
+
+  if (loading) return <div className="spinner" style={{ margin: '16px auto' }} />
+
+  if (items.length === 0) {
+    return (
+      <p style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>
+        Esta obra todavía no tiene ítems de avance cargados.
+      </p>
+    )
+  }
+
+  const nombresFase = Array.from(new Set(items.map(it => it.fase || '')))
+  const hayFases = nombresFase.some(f => f !== '')
+  const grupos = hayFases
+    ? nombresFase.map(fase => ({ fase, items: items.filter(it => (it.fase || '') === fase) }))
+    : [{ fase: '', items }]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {grupos.map(g => {
+        const faseInfo = fases.find(f => f.nombre === g.fase)
+        return (
+          <div key={g.fase}>
+            {g.fase && (
+              <div style={{ marginBottom: 8 }}>
+                <p className="font-display" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{g.fase}</p>
+                {faseInfo?.fecha_inicio && faseInfo?.fecha_fin && (
+                  <p style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    {parseFechaObra(faseInfo.fecha_inicio).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })} al {parseFechaObra(faseInfo.fecha_fin).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
+                  </p>
+                )}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {g.items.map(it => (
+                <ItemAvanceRow key={it.id} item={it} onCantidad={c => actualizarCantidad(it, c)} mostrarPrecio={false} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

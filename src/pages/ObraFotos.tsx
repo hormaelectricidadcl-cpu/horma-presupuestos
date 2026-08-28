@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import type { ObraMedia } from '../types'
+import { PanelAvanceObraCampo } from '../components/PanelesObra'
 
 const FABRIEL_TOKEN = import.meta.env.VITE_FABRIEL_TOKEN as string
 const MISAEL_TOKEN = import.meta.env.VITE_MISAEL_TOKEN as string
@@ -42,6 +43,7 @@ export default function ObraFotos({ token }: Props) {
 
   const [obras, setObras] = useState<ObraSimple[]>([])
   const [obraId, setObraId] = useState('')
+  const [vista, setVista] = useState<'fotos' | 'avance'>('fotos')
   const [momento, setMomento] = useState<Momento>('durante')
   const [autorizado, setAutorizado] = useState(false)
   const [archivos, setArchivos] = useState<File[]>([])
@@ -124,80 +126,106 @@ export default function ObraFotos({ token }: Props) {
           <div>
             <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 2 }}>Horma Grup</p>
             <h1 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, color: '#fff' }}>Hola {trabajador}</h1>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Sube fotos o video de la obra</p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Fotos y avance de la obra</p>
           </div>
         </div>
 
-        <div className="card" style={{ padding: 16 }}>
-          <div className="field" style={{ marginBottom: 16 }}>
-            <label>¿En qué obra estás?</label>
-            <select value={obraId} onChange={e => setObraId(e.target.value)} style={{ fontSize: 16 }}>
-              <option value="">Selecciona una obra...</option>
-              {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-            </select>
-          </div>
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label>¿En qué obra estás?</label>
+          <select value={obraId} onChange={e => setObraId(e.target.value)} style={{ fontSize: 16 }}>
+            <option value="">Selecciona una obra...</option>
+            {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+          </select>
+        </div>
 
-          <div className="field" style={{ marginBottom: 16 }}>
-            <label>Momento</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {MOMENTOS.map(m => (
-                <button
-                  key={m.key}
-                  type="button"
-                  onClick={() => setMomento(m.key)}
-                  style={{
-                    flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                    border: `1.5px solid ${momento === m.key ? 'var(--primary)' : 'var(--border)'}`,
-                    background: momento === m.key ? 'var(--primary)' : 'var(--white)',
-                    color: momento === m.key ? '#fff' : 'var(--text)',
-                  }}
-                >{m.label}</button>
-              ))}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
+          {([{ key: 'fotos', label: 'Fotos' }, { key: 'avance', label: 'Avance' }] as const).map(v => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => setVista(v.key)}
+              style={{
+                flex: 1, padding: '9px 8px', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                border: `1.5px solid ${vista === v.key ? 'var(--primary)' : 'var(--border)'}`,
+                background: vista === v.key ? 'var(--primary)' : 'var(--white)',
+                color: vista === v.key ? '#fff' : 'var(--text)',
+              }}
+            >{v.label}</button>
+          ))}
+        </div>
+
+        {vista === 'fotos' ? (
+          <div className="card" style={{ padding: 16 }}>
+            <div className="field" style={{ marginBottom: 16 }}>
+              <label>Momento</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {MOMENTOS.map(m => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setMomento(m.key)}
+                    style={{
+                      flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                      border: `1.5px solid ${momento === m.key ? 'var(--primary)' : 'var(--border)'}`,
+                      background: momento === m.key ? 'var(--primary)' : 'var(--white)',
+                      color: momento === m.key ? '#fff' : 'var(--text)',
+                    }}
+                  >{m.label}</button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={autorizado}
-              onChange={e => setAutorizado(e.target.checked)}
-              style={{ width: 20, height: 20, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }}
-            />
-            <span style={{ fontSize: 14 }}>El cliente autorizó usar esto en redes</span>
-          </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={autorizado}
+                onChange={e => setAutorizado(e.target.checked)}
+                style={{ width: 20, height: 20, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 14 }}>El cliente autorizó usar esto en redes</span>
+            </label>
 
-          <div className="field" style={{ marginBottom: 20 }}>
-            <label>Fotos o video</label>
-            <input
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              onChange={e => setArchivos(Array.from(e.target.files || []))}
-              style={{ fontSize: 14 }}
-            />
-            {archivos.length > 0 && (
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
-                {archivos.length} archivo{archivos.length !== 1 ? 's' : ''} seleccionado{archivos.length !== 1 ? 's' : ''}
+            <div className="field" style={{ marginBottom: 20 }}>
+              <label>Fotos o video</label>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                onChange={e => setArchivos(Array.from(e.target.files || []))}
+                style={{ fontSize: 14 }}
+              />
+              {archivos.length > 0 && (
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                  {archivos.length} archivo{archivos.length !== 1 ? 's' : ''} seleccionado{archivos.length !== 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
+
+            <button
+              className="btn btn-primary btn-lg"
+              onClick={subir}
+              disabled={subiendo}
+              style={{ width: '100%', fontSize: 17, fontWeight: 800 }}
+            >
+              {subiendo ? 'Subiendo...' : 'Subir'}
+            </button>
+
+            {resultado && (
+              <p style={{ fontSize: 13, marginTop: 12, textAlign: 'center', color: resultado.fallidos > 0 ? 'var(--danger)' : 'var(--success)', fontWeight: 600 }}>
+                {resultado.ok > 0 && `${resultado.ok} archivo${resultado.ok !== 1 ? 's' : ''} subido${resultado.ok !== 1 ? 's' : ''} correctamente. `}
+                {resultado.fallidos > 0 && `${resultado.fallidos} fallaron, intenta de nuevo.`}
               </p>
             )}
           </div>
-
-          <button
-            className="btn btn-primary btn-lg"
-            onClick={subir}
-            disabled={subiendo}
-            style={{ width: '100%', fontSize: 17, fontWeight: 800 }}
-          >
-            {subiendo ? 'Subiendo...' : 'Subir'}
-          </button>
-
-          {resultado && (
-            <p style={{ fontSize: 13, marginTop: 12, textAlign: 'center', color: resultado.fallidos > 0 ? 'var(--danger)' : 'var(--success)', fontWeight: 600 }}>
-              {resultado.ok > 0 && `${resultado.ok} archivo${resultado.ok !== 1 ? 's' : ''} subido${resultado.ok !== 1 ? 's' : ''} correctamente. `}
-              {resultado.fallidos > 0 && `${resultado.fallidos} fallaron, intenta de nuevo.`}
-            </p>
-          )}
-        </div>
+        ) : !obraId ? (
+          <p style={{ fontSize: 14, color: 'var(--muted-inverse)', textAlign: 'center', padding: '2rem 0' }}>
+            Elige primero en qué obra estás.
+          </p>
+        ) : (
+          <div className="card" style={{ padding: 16 }}>
+            <PanelAvanceObraCampo obraId={obraId} />
+          </div>
+        )}
       </div>
     </div>
   )
