@@ -10,6 +10,14 @@ Alexandra preguntó directamente si "con Supabase estamos seguros" es cierto. Ve
 
 Ya no hace falta el ítem viejo "Confirmar plan de Supabase (backups automáticos)" por separado — queda reemplazado por el punto 1 de arriba. El ítem de RLS deshabilitado en `notas_rapidas`/`tareas_clientes`/`seo_*` sigue aparte más abajo — es un hallazgo distinto (tablas con RLS completamente apagado, no el patrón "anon full access" de este bloque).
 
+## 🔲 Avance de obra (carta Gantt) — seguimiento pendiente, 28/08/2026
+Funcionalidad grande construida en la sesión del 28/08 (detalle completo en `estado_actual.md`, sección "Sesión 28/08/2026 (continuación 2)"). Pendiente real:
+- **Correr `sql/20260828_trabajadores_obra_asignada.sql`** — sin esto, asignar obra a Fabriel/Misael desde Trabajadores falla (degradado bien, no rompe nada).
+- Confirmar con más casos reales que la IA de "presupuesto externo" lee bien el desglose de ítems (solo se probó con un PDF, salió perfecto — falta ver si es consistente).
+- Probar la vista semanal tipo Gantt con una obra real que tenga fases con fecha de inicio y fin cargadas de punta a punta (solo se probó con datos puntuales).
+- Confirmar en producción que el rediseño de Admin.tsx (fondo oscuro, íconos) se ve bien — nunca se pudo probar en vivo por el login de Cloudflare.
+- Borrar a mano (opcional) el registro huérfano en `clientes` ("Familia Rojas Test2") de una prueba de esta sesión.
+
 ## ✅ Lote de 11 puntos — pruebas reales de Alexandra y Gustavo, 27/08/2026
 Los 11 puntos quedaron construidos y verificados el 27/08/2026 (detalle completo de causa raíz y verificación en `estado_actual.md`, sección "Sesión 27/08/2026"). **Commiteado y pusheado a `main` (`75888db`).** `sql/20260827_trabajadores_activo.sql` ya corrida por Alexandra el mismo día. Pendiente real que queda:
 - Probar Archivar/Reactivar en la card de Trabajadores con un trabajador real (la migración ya está corrida, agregar ya se había probado antes).
