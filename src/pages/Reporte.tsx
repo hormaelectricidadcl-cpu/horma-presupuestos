@@ -129,6 +129,13 @@ export default function Reporte({ token, embedded = false }: Props) {
   const [obras, setObras] = useState<string[]>(OBRAS_FALLBACK)
   const [obraGeneral, setObraGeneral] = useState('')
   const [compras, setCompras] = useState<CompraRow[]>([])
+  // Compras ya guardadas (con id) se ven como una tarjeta chica y cerrada -- "esto ya
+  // quedó guardado, no hace falta que ocupe media pantalla" -- en vez de mostrar el
+  // formulario completo de todas de nuevo. Una compra recién agregada (sin id) siempre
+  // arranca abierta. Ver progress/decisiones.md 2026-08-28 sobre por qué NO se vacía el
+  // formulario entero: el guardado borra-y-reinserta todo el día, vaciar el formulario
+  // hacía que un segundo guardado el mismo día borrara lo del primero.
+  const [comprasColapsadas, setComprasColapsadas] = useState<Set<string>>(new Set())
   const [subiendoBoletaIdx, setSubiendoBoletaIdx] = useState<number | null>(null)
   const [cobros, setCobros] = useState<CobroRow[]>([])
   const [subcontratos, setSubcontratos] = useState<SubcontratoRow[]>([])
@@ -180,6 +187,7 @@ export default function Reporte({ token, embedded = false }: Props) {
       id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', destino: c.destino || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false, fotoBoletaUrl: c.foto_boleta_url || '',
       items: itemsPorCompra[c.id] || [],
     })))
+    setComprasColapsadas(new Set(comprasDia.map(c => c.id)))
     setUsosStock((salidasDia || []).map((s: { id: string; material_id: string; cantidad: number; obra: string | null }) => ({
       id: s.id, materialId: s.material_id, cantidad: String(s.cantidad), obra: s.obra || '',
     })))
@@ -685,7 +693,6 @@ export default function Reporte({ token, embedded = false }: Props) {
     // antes de que pasara con datos reales). Se vuelve a recargar el día completo -- para
     // sumar otra compra/cobro sin perder lo anterior, se usa "+ Agregar..." como siempre.
     cargarDia(fecha)
-    setUsosStock([])
   }
 
   if (!tokenValido) {
@@ -712,7 +719,7 @@ export default function Reporte({ token, embedded = false }: Props) {
               ✓ Reporte guardado correctamente
             </p>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
-              Todo lo que ves abajo es justo lo que quedó guardado. Para agregar otra boleta o compra, tocá "+ Agregar compra" más abajo.
+              Las compras ya guardadas quedaron cerraditas más abajo (✓). Para agregar otra boleta, tocá "+ Agregar compra".
             </p>
           </div>
         )}
@@ -854,7 +861,26 @@ export default function Reporte({ token, embedded = false }: Props) {
             {/* Compras del día */}
             <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Compras del día</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-              {compras.map((c, idx) => (
+              {compras.map((c, idx) => {
+                const colapsada = !!(c.id && comprasColapsadas.has(c.id))
+                if (colapsada) {
+                  return (
+                    <div key={idx} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <span style={{ color: '#1f6b3f', fontWeight: 800, flexShrink: 0 }}>✓</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.descripcion}</span>
+                        <span style={{ fontSize: 13, color: 'var(--muted)', flexShrink: 0 }}>${Number(c.monto).toLocaleString('es-CL')}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => setComprasColapsadas(prev => { const next = new Set(prev); next.delete(c.id!); return next })}
+                        style={{ fontSize: 12, flexShrink: 0 }}
+                      >Editar</button>
+                    </div>
+                  )
+                }
+                return (
                 <div key={idx} className="card" style={{ padding: 14 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div>
@@ -975,7 +1001,8 @@ export default function Reporte({ token, embedded = false }: Props) {
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
             <button type="button" className="btn btn-secondary" onClick={agregarCompra} style={{ width: '100%', marginBottom: 24 }}>
               + Agregar compra
