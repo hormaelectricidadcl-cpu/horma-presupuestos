@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador, ObraItem, PresupuestoItemSimple, PresupuestoEtapa } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador, ObraItem, ObraFase, PresupuestoItemSimple, PresupuestoEtapa } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -17,6 +17,12 @@ export function fmtMoney(n: number) {
 // al momento de convertirlo en obra -- así "Avance de obra" tiene contra qué medir.
 // Los presupuestos "externos" (PDF/foto, sin ítems) no generan filas: la obra queda igual,
 // solo que sin esa card.
+//
+// Si el presupuesto era "por etapas", cada etapa se convierte además en una fila de
+// obra_fases (sin fechas todavía -- esas se cargan a mano en "Avance de obra") para que
+// ya arranque con la agenda armada. Si era "simple", no se crea ninguna fase automática
+// -- decisión tomada con Alexandra el 28/08: las agrupa a mano ella/Gustavo desde el
+// panel, porque un presupuesto simple no trae ninguna estructura de fases de la que partir.
 export async function copiarItemsAObra(
   obraId: string,
   presupuesto: { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null }
@@ -33,7 +39,7 @@ export async function copiarItemsAObra(
         cantidad: it.quantity,
         precio_unitario: it.price,
         total: it.total,
-        completado: false,
+        cantidad_completada: 0,
         orden: idx,
       })
     })
@@ -49,11 +55,20 @@ export async function copiarItemsAObra(
           cantidad: it.cantidad,
           precio_unitario: it.precioUnitario,
           total: it.total,
-          completado: false,
+          cantidad_completada: 0,
           orden: orden++,
         })
       })
     })
+
+    const fases = presupuesto.etapas.map((etapa, idx) => ({
+      obra_id: obraId,
+      nombre: etapa.nombre,
+      orden: idx,
+      fecha_inicio: null,
+      fecha_fin: null,
+    }))
+    if (fases.length > 0) await supabase.from('obra_fases').insert(fases)
   }
 
   if (filas.length === 0) return
@@ -751,39 +766,230 @@ export function PanelObras() {
   )
 }
 
-/* ─── Avance de obra — checklist de los ítems del presupuesto que originó la obra ── */
-function ItemAvanceRow({ item, onToggle }: { item: ObraItem; onToggle: () => void }) {
+/* ─── Avance de obra — cantidad parcial por ítem + agenda por fase (carta Gantt) ──── */
+
+function lunesDe(fecha: Date): Date {
+  const d = new Date(fecha)
+  const dia = d.getDay()
+  d.setDate(d.getDate() + (dia === 0 ? -6 : 1 - dia))
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+function sumarDiasDate(d: Date, n: number): Date {
+  const r = new Date(d)
+  r.setDate(r.getDate() + n)
+  return r
+}
+function fechaCorta(d: Date): string {
+  return d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })
+}
+function parseFechaObra(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+// Vista semanal tipo Gantt: una fila por fase, una barra por el rango de fechas que
+// tenga cargado. Solo se dibuja si al menos una fase tiene fecha de inicio Y fin.
+function GanttSemanal({ fases }: { fases: ObraFase[] }) {
+  const conFechas = fases.filter(f => f.fecha_inicio && f.fecha_fin)
+  if (conFechas.length === 0) return null
+
+  const inicios = conFechas.map(f => parseFechaObra(f.fecha_inicio as string))
+  const fines = conFechas.map(f => parseFechaObra(f.fecha_fin as string))
+  const minInicio = new Date(Math.min(...inicios.map(d => d.getTime())))
+  const maxFin = new Date(Math.max(...fines.map(d => d.getTime())))
+
+  const semanas: Date[] = []
+  let cursor = lunesDe(minInicio)
+  while (cursor <= maxFin) {
+    semanas.push(cursor)
+    cursor = sumarDiasDate(cursor, 7)
+  }
+
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--surface-alt)', borderRadius: 8, cursor: 'pointer' }}>
-      <input type="checkbox" checked={item.completado} onChange={onToggle} />
-      <span style={{ flex: 1, fontSize: 13, textDecoration: item.completado ? 'line-through' : 'none', color: item.completado ? 'var(--muted)' : 'var(--text)' }}>
-        {item.descripcion}
-      </span>
-      <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtMoney(item.total)}</span>
-    </label>
+    <div style={{ overflowX: 'auto', marginBottom: 18 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `140px repeat(${semanas.length}, 60px)`,
+        gridTemplateRows: `auto repeat(${fases.length}, 30px)`,
+        gap: '4px 3px',
+        minWidth: 140 + semanas.length * 63,
+      }}>
+        <div style={{ gridRow: 1, gridColumn: 1 }} />
+        {semanas.map((s, i) => (
+          <div key={i} style={{ gridRow: 1, gridColumn: i + 2, fontSize: 10, fontWeight: 700, color: 'var(--muted)', textAlign: 'center' }}>
+            {fechaCorta(s)}
+          </div>
+        ))}
+        {fases.map((f, rowIdx) => {
+          const row = rowIdx + 2
+          const tieneFechas = f.fecha_inicio && f.fecha_fin
+          let colInicio = 0
+          let colFin = 0
+          if (tieneFechas) {
+            const inicio = parseFechaObra(f.fecha_inicio as string)
+            const fin = parseFechaObra(f.fecha_fin as string)
+            colInicio = semanas.findIndex(s => sumarDiasDate(s, 6) >= inicio)
+            colFin = semanas.length - 1
+            for (let i = semanas.length - 1; i >= 0; i--) { if (semanas[i] <= fin) { colFin = i; break } }
+          }
+          return (
+            <Fragment key={f.id}>
+              <div style={{ gridRow: row, gridColumn: 1, fontSize: 12, fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', paddingRight: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {f.nombre}
+              </div>
+              {tieneFechas ? (
+                <div style={{
+                  gridRow: row, gridColumn: `${colInicio + 2} / ${colFin + 3}`,
+                  background: 'var(--primary)', borderRadius: 6, height: 20, alignSelf: 'center',
+                }} />
+              ) : (
+                <div style={{ gridRow: row, gridColumn: `2 / ${semanas.length + 2}`, fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center' }}>
+                  Sin fecha cargada
+                </div>
+              )}
+            </Fragment>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ItemAvanceRow({ item, fases, onCantidad, onFase }: {
+  item: ObraItem
+  fases: ObraFase[]
+  onCantidad: (cantidad: number) => void
+  onFase: (fase: string | null) => void
+}) {
+  const [valor, setValor] = useState(String(item.cantidad_completada))
+  useEffect(() => { setValor(String(item.cantidad_completada)) }, [item.cantidad_completada])
+
+  const pct = item.cantidad > 0 ? Math.min(100, Math.round((item.cantidad_completada / item.cantidad) * 100)) : 0
+  const completo = item.cantidad_completada >= item.cantidad
+  const colorPct = completo ? 'var(--success)' : 'var(--primary)'
+
+  function guardar() {
+    const n = Number(valor)
+    if (!Number.isFinite(n) || n < 0) { setValor(String(item.cantidad_completada)); return }
+    onCantidad(Math.min(n, item.cantidad))
+  }
+
+  return (
+    <div style={{ padding: '9px 10px', background: 'var(--surface-alt)', borderRadius: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{ flex: 1, fontSize: 13, textDecoration: completo ? 'line-through' : 'none', color: completo ? 'var(--muted)' : 'var(--text)' }}>
+          {item.descripcion}
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtMoney(item.total)}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="number" min={0} max={item.cantidad} step="any"
+          value={valor}
+          onChange={e => setValor(e.target.value)}
+          onBlur={guardar}
+          style={{ width: 56, padding: '4px 6px', fontSize: 12.5, textAlign: 'right' }}
+        />
+        <span style={{ fontSize: 11.5, color: 'var(--muted)', flexShrink: 0 }}>/ {item.cantidad}</span>
+        <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: colorPct, transition: 'width 0.2s' }} />
+        </div>
+        <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: colorPct, width: 30, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
+        {!completo && (
+          <button
+            onClick={() => onCantidad(item.cantidad)}
+            style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
+          >
+            Listo
+          </button>
+        )}
+      </div>
+      {fases.length > 0 && (
+        <select
+          value={item.fase || ''}
+          onChange={e => onFase(e.target.value || null)}
+          style={{ marginTop: 6, fontSize: 11.5, padding: '3px 6px', width: 'auto' }}
+        >
+          <option value="">Sin fase</option>
+          {fases.map(f => <option key={f.id} value={f.nombre}>{f.nombre}</option>)}
+        </select>
+      )}
+    </div>
+  )
+}
+
+function FaseEditorRow({ fase, onFecha, onBorrar }: {
+  fase: ObraFase
+  onFecha: (campo: 'fecha_inicio' | 'fecha_fin', valor: string) => void
+  onBorrar: () => void
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 10px', background: 'var(--surface-alt)', borderRadius: 8 }}>
+      <span style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 120 }}>{fase.nombre}</span>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--muted)' }}>
+        Inicio
+        <input type="date" value={fase.fecha_inicio || ''} onChange={e => onFecha('fecha_inicio', e.target.value)} style={{ fontSize: 12, padding: '3px 6px', width: 'auto' }} />
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--muted)' }}>
+        Fin
+        <input type="date" value={fase.fecha_fin || ''} onChange={e => onFecha('fecha_fin', e.target.value)} style={{ fontSize: 12, padding: '3px 6px', width: 'auto' }} />
+      </label>
+      <button onClick={onBorrar} className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }}>Borrar</button>
+    </div>
   )
 }
 
 export function PanelAvanceObra({ obraId }: { obraId: string }) {
   const [items, setItems] = useState<ObraItem[]>([])
+  const [fases, setFases] = useState<ObraFase[]>([])
   const [loading, setLoading] = useState(true)
+  const [nuevaFase, setNuevaFase] = useState('')
 
   const cargar = useCallback(async () => {
-    const { data } = await supabase.from('obra_items').select('*').eq('obra_id', obraId).order('orden')
-    setItems((data as ObraItem[]) || [])
+    const [{ data: it }, { data: fa }] = await Promise.all([
+      supabase.from('obra_items').select('*').eq('obra_id', obraId).order('orden'),
+      supabase.from('obra_fases').select('*').eq('obra_id', obraId).order('orden'),
+    ])
+    setItems((it as ObraItem[]) || [])
+    setFases((fa as ObraFase[]) || [])
     setLoading(false)
   }, [obraId])
 
   useEffect(() => { cargar() }, [cargar])
 
-  async function toggle(item: ObraItem) {
-    const nuevoValor = !item.completado
-    setItems(prev => prev.map(it => it.id === item.id ? { ...it, completado: nuevoValor } : it))
-    const { error } = await supabase.from('obra_items').update({ completado: nuevoValor }).eq('id', item.id)
-    if (error) {
-      alert('No se pudo actualizar. Intenta de nuevo.')
-      cargar()
-    }
+  async function actualizarCantidad(item: ObraItem, cantidad: number) {
+    setItems(prev => prev.map(x => x.id === item.id ? { ...x, cantidad_completada: cantidad } : x))
+    const { error } = await supabase.from('obra_items').update({ cantidad_completada: cantidad }).eq('id', item.id)
+    if (error) { alert('No se pudo actualizar. Intenta de nuevo.'); cargar() }
+  }
+
+  async function actualizarFaseItem(item: ObraItem, fase: string | null) {
+    setItems(prev => prev.map(x => x.id === item.id ? { ...x, fase } : x))
+    const { error } = await supabase.from('obra_items').update({ fase }).eq('id', item.id)
+    if (error) { alert('No se pudo actualizar. Intenta de nuevo.'); cargar() }
+  }
+
+  async function crearFase() {
+    if (!nuevaFase.trim()) return
+    const { error } = await supabase.from('obra_fases').insert({ obra_id: obraId, nombre: nuevaFase.trim(), orden: fases.length })
+    if (error) { alert('No se pudo crear la fase (puede que ya exista una con ese nombre).'); return }
+    setNuevaFase('')
+    cargar()
+  }
+
+  async function actualizarFechaFase(fase: ObraFase, campo: 'fecha_inicio' | 'fecha_fin', valor: string) {
+    setFases(prev => prev.map(f => f.id === fase.id ? { ...f, [campo]: valor || null } : f))
+    const { error } = await supabase.from('obra_fases').update({ [campo]: valor || null }).eq('id', fase.id)
+    if (error) { alert('No se pudo guardar la fecha. Intenta de nuevo.'); cargar() }
+  }
+
+  async function borrarFase(fase: ObraFase) {
+    if (!window.confirm(`¿Borrar la fase "${fase.nombre}"? Los ítems que estaban en esa fase quedan sin fase, no se borran.`)) return
+    await supabase.from('obra_items').update({ fase: null }).eq('obra_id', obraId).eq('fase', fase.nombre)
+    const { error } = await supabase.from('obra_fases').delete().eq('id', fase.id)
+    if (error) { alert('No se pudo borrar. Intenta de nuevo.'); return }
+    cargar()
   }
 
   if (loading) return <div className="spinner" style={{ margin: '16px auto' }} />
@@ -797,20 +1003,19 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
   }
 
   const totalMonto = items.reduce((s, it) => s + it.total, 0)
-  const montoCompletado = items.filter(it => it.completado).reduce((s, it) => s + it.total, 0)
+  const montoCompletado = items.reduce((s, it) => s + (it.cantidad > 0 ? (it.cantidad_completada / it.cantidad) * it.total : 0), 0)
   const pct = totalMonto > 0 ? Math.round((montoCompletado / totalMonto) * 100) : 0
-  const colorPct = pct === 100 ? 'var(--success)' : 'var(--primary)'
+  const colorPct = pct >= 100 ? 'var(--success)' : 'var(--primary)'
 
-  const fases = Array.from(new Set(items.map(it => it.fase || '')))
-  const hayFases = fases.some(f => f !== '')
-
+  const nombresFase = Array.from(new Set(items.map(it => it.fase || '')))
+  const hayFases = nombresFase.some(f => f !== '')
   const grupos = hayFases
-    ? fases.map(fase => ({ fase, items: items.filter(it => (it.fase || '') === fase) }))
+    ? nombresFase.map(fase => ({ fase, items: items.filter(it => (it.fase || '') === fase) }))
     : [{ fase: '', items }]
 
   return (
     <div>
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
           <span style={{ fontSize: 13, fontWeight: 700 }}>Avance</span>
           <span className="font-display" style={{ fontSize: 15, fontWeight: 800, color: colorPct }}>{pct}%</span>
@@ -821,6 +1026,35 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
         <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{fmtMoney(montoCompletado)} de {fmtMoney(totalMonto)} completado</p>
       </div>
 
+      {/* Agenda por fase — esto es lo que se dibuja como carta Gantt semanal */}
+      <div style={{ marginBottom: 18 }}>
+        <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+          Agenda
+        </p>
+        <GanttSemanal fases={fases} />
+        {fases.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+            {fases.map(f => (
+              <FaseEditorRow
+                key={f.id}
+                fase={f}
+                onFecha={(campo, valor) => actualizarFechaFase(f, campo, valor)}
+                onBorrar={() => borrarFase(f)}
+              />
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input
+            type="text" placeholder="Nombre de la fase (ej: Instalaciones y Protecciones)"
+            value={nuevaFase} onChange={e => setNuevaFase(e.target.value)}
+            style={{ flex: 1, fontSize: 13, padding: '6px 10px' }}
+          />
+          <button onClick={crearFase} className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}>+ Fase</button>
+        </div>
+      </div>
+
+      {/* Ítems, agrupados por fase */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {grupos.map(g => (
           <div key={g.fase}>
@@ -831,7 +1065,13 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {g.items.map(it => (
-                <ItemAvanceRow key={it.id} item={it} onToggle={() => toggle(it)} />
+                <ItemAvanceRow
+                  key={it.id}
+                  item={it}
+                  fases={fases}
+                  onCantidad={c => actualizarCantidad(it, c)}
+                  onFase={f => actualizarFaseItem(it, f)}
+                />
               ))}
             </div>
           </div>

@@ -192,8 +192,18 @@ export interface ObraItem {
   cantidad: number
   precio_unitario: number
   total: number
-  completado: boolean
+  cantidad_completada: number
   orden: number
+}
+
+export interface ObraFase {
+  id: string
+  created_at: string
+  obra_id: string
+  nombre: string
+  orden: number
+  fecha_inicio: string | null
+  fecha_fin: string | null
 }
 
 export interface EventoCalendario {
