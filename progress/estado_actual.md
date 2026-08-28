@@ -1,18 +1,25 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 28/08/2026 (sesión adicional — Fase 1 de bitácora de avance construida + 3 fixes chicos)
+## Última actualización: 28/08/2026 (sesión adicional — bitácora de avance + selección múltiple de fotos + visor de Banco de contenido, todo pusheado)
 
 ## Para la próxima sesión — empezar acá
 
-**Lo más reciente (misma fecha, sesión aparte de la del rediseño):**
-- **Fase 1 de "Bitácora de avance diario por obra" — construida, bloqueada en una migración pendiente.** Ver detalle completo abajo, sección "Bitácora de avance diario — Fase 1 construida (28/08/2026)". Falta correr `sql/20260828_obra_avance_registros.sql`.
-- **3 fixes chicos, construidos y verificados en navegador (Vite local + Playwright), `tsc` limpio:**
+**Ronda final de hoy (28/08), pusheada a `main`:**
+- **`/obra-fotos` ya no parece "colgado" después de subir.** Causa real: el input nativo de archivos seguía mostrando "2 files" después de que la subida terminaba y el estado interno ya estaba en 0 — Fabriel/Misael veían el nombre de los archivos viejos y no sabían si hacía falta subir de nuevo. Fix: el input se remonta (con `key` que se incrementa) recién DESPUÉS de terminar la subida, nunca durante la selección (eso fue justamente lo que rompía la selección múltiple en el fix anterior). Verificado con Playwright interceptando la red (para no ensuciar Supabase real): input queda en 0 archivos después de subir, mensaje de éxito visible.
+- **Visor de fotos con flechas en "Banco de contenido"** (pedido de Alexandra: antes había que abrir cada foto en una pestaña nueva, cerrarla, abrir la siguiente — "tardaría mucho en ver todas las imágenes"). Ahora click en cualquier miniatura abre un visor de pantalla completa con navegación ← → (botones y teclado), Escape para cerrar, funciona para fotos y videos, con "Descargar" también disponible ahí. Probado con datos reales (32 registros en `obra_media`) vía Playwright: contador "1 de 32" → avanza correctamente con teclado y con el botón → Escape cierra.
+- **Pedido de descarga masiva + borrado, para cuando una obra se cierra — anotado en `progress/tareas.md`, sin construir todavía.** El borrado está técnicamente bloqueado hoy a propósito (el bucket `audio-notas` solo tiene políticas `SELECT`/`INSERT` para `anon`, no `DELETE` — confirmado contra Supabase real) y agregar esa política agranda el hueco de seguridad ya conocido (punto de "anon full access"). Necesita una decisión de Alexandra antes de construirlo — detalle completo en `tareas.md`.
+- **Plan de Supabase confirmado: Free, sin backups automáticos — el riesgo más urgente de los tres puntos de seguridad, resuelto (28/08).** Decisión tomada: pasan a Pro el 2 de septiembre de 2026 (cuando les paguen). Resuelve backups + storage (hoy 119 MB de 1 GB ya usados en el bucket). Detalle en `tareas.md`, sección de seguridad.
+- `tsc --noEmit` limpio en toda la ronda.
+
+**Tanda anterior de hoy (misma fecha, sesión aparte de la del rediseño), también pusheada:**
+- **Fase 1 de "Bitácora de avance diario por obra" — construida, migración corrida por Alexandra, verificada de punta a punta contra Supabase real (insert/delete de prueba confirmando el trigger: 0→12→0), commiteada y pusheada a `main` (`c93036c`).** Ver detalle completo abajo, sección "Bitácora de avance diario — Fase 1 construida (28/08/2026)".
+- **3 fixes chicos de la misma tanda, también pusheados en `c93036c`:**
   1. Botón "+ Cargar presupuesto (IA)" ahora también aparece dentro de "Avance de obra" (antes solo estaba en la tarjeta de la pestaña Obras) cuando la obra no tiene ítems ni presupuesto vinculado — probado con la obra real "Camino turístico 11474, Lo Barnechea".
   2. Sacado el checkbox "El cliente autorizó usar esto en redes" del formulario de subida de fotos de Fabriel/Misael (`/obra-fotos`) — a pedido explícito de Alexandra.
   3. Agregado un aviso visible en `/obra-fotos` pidiendo activar la ubicación si el navegador no la tiene disponible, antes de subir fotos — antes fallaba en silencio (guardaba `lat`/`lng` en null sin avisar a nadie).
   4. **Hallazgo real, no pedido explícitamente:** "Banco de contenido" (donde se descargan las fotos/videos subidos desde obra) solo existía en Admin — el resumen de la sesión del 26/08 decía que estaba "en Gustavo y Admin" pero el código nunca lo tenía en `Gustavo.tsx`. Agregado también ahí (nav + render), mismo componente `PanelBancoContenido`, verificado en navegador.
-- Nada de esto se commiteó/pusheó todavía (no se pidió) — queda en el working tree.
+- **Fix nuevo, sin commitear/pushear todavía (queda en el working tree):** Alexandra reportó que Fabriel/Misael "solo pueden subir una foto a la vez" en `/obra-fotos`. Causa real, encontrada con Playwright, no asumida: el input de archivos ya tenía `multiple`, pero cada `onChange` **reemplazaba** el array de archivos seleccionados en vez de sumarlo — si un trabajador sacaba una foto con la cámara y después tocaba "Elegir archivos" de nuevo para sacar otra, la segunda pisaba la primera sin que se dieran cuenta. Se cambió a acumular (`setArchivos(prev => [...prev, ...nuevos])`) y se agregó una grilla de miniaturas con botón "✕" para sacar una si se cargó por error. **De paso se encontró y sacó una línea (`e.target.value = ''`) que causaba que React descartara la actualización de estado en Chromium** — confirmado con un debug puntual (el conteo de archivos volvía a 0 después de cada selección hasta sacar esa línea). Verificado con Playwright simulando dos selecciones separadas: acumula correctamente (1 → 2), la miniatura se puede sacar individualmente. `tsc` limpio.
 
 ### Bitácora de avance diario — Fase 1 construida (28/08/2026)
 

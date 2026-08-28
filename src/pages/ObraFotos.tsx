@@ -47,7 +47,9 @@ export default function ObraFotos({ token }: Props) {
   const [vista, setVista] = useState<'fotos' | 'avance'>('fotos')
   const [momento, setMomento] = useState<Momento>('durante')
   const [archivos, setArchivos] = useState<File[]>([])
+  const [inputKey, setInputKey] = useState(0)
   const [subiendo, setSubiendo] = useState(false)
+  const [progreso, setProgreso] = useState<{ actual: number; total: number } | null>(null)
   const [resultado, setResultado] = useState<{ ok: number; fallidos: number } | null>(null)
   const [ubicacionOk, setUbicacionOk] = useState<boolean | null>(null)
 
@@ -96,12 +98,14 @@ export default function ObraFotos({ token }: Props) {
     if (archivos.length === 0) { alert('Elige al menos una foto o video.'); return }
     setSubiendo(true)
     setResultado(null)
+    setProgreso({ actual: 0, total: archivos.length })
 
     const ubicacion = await pedirUbicacion()
 
     let ok = 0
     let fallidos = 0
     for (let i = 0; i < archivos.length; i++) {
+      setProgreso({ actual: i + 1, total: archivos.length })
       const archivo = archivos[i]
       const ext = archivo.name.split('.').pop() || 'bin'
       const filename = `obra-${obraId}-${Date.now()}-${i}.${ext}`
@@ -124,7 +128,12 @@ export default function ObraFotos({ token }: Props) {
 
     setResultado({ ok, fallidos })
     setArchivos([])
+    // Remonta el input de archivos (con `key`) para que su "2 files" nativo se limpie --
+    // resetear `.value` a mano dentro del onChange rompía la selección múltiple (ver commit
+    // anterior), así que el reset se hace acá, después de terminar, nunca durante la selección.
+    setInputKey(k => k + 1)
     setSubiendo(false)
+    setProgreso(null)
   }
 
   return (
@@ -209,19 +218,50 @@ export default function ObraFotos({ token }: Props) {
 
             <div className="field" style={{ marginBottom: 20 }}>
               <label>Fotos o video</label>
+              {archivos.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8, marginBottom: 10 }}>
+                  {archivos.map((archivo, i) => (
+                    <div key={i} style={{ position: 'relative' }}>
+                      {archivo.type.startsWith('image/') ? (
+                        <img
+                          src={URL.createObjectURL(archivo)}
+                          alt=""
+                          style={{ width: '100%', height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
+                        />
+                      ) : (
+                        <div style={{ width: '100%', height: 72, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--white)', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Video</div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setArchivos(prev => prev.filter((_, idx) => idx !== i))}
+                        style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, fontSize: 12, cursor: 'pointer', lineHeight: 1 }}
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <input
+                key={inputKey}
                 type="file"
                 accept="image/*,video/*"
                 multiple
-                onChange={e => setArchivos(Array.from(e.target.files || []))}
+                onChange={e => setArchivos(prev => [...prev, ...Array.from(e.target.files || [])])}
                 style={{ fontSize: 14 }}
               />
-              {archivos.length > 0 && (
-                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
-                  {archivos.length} archivo{archivos.length !== 1 ? 's' : ''} seleccionado{archivos.length !== 1 ? 's' : ''}
-                </p>
-              )}
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                {archivos.length > 0
+                  ? `${archivos.length} foto${archivos.length !== 1 ? 's' : ''}/video${archivos.length !== 1 ? 's' : ''} lista${archivos.length !== 1 ? 's' : ''} para subir. Podés seguir agregando más antes de tocar "Subir".`
+                  : 'Podés elegir varias fotos a la vez, o tocar de nuevo para ir agregando una por una.'}
+              </p>
             </div>
+
+            {subiendo && (
+              <div style={{ padding: '10px 14px', background: '#fef2e0', border: '1px solid #e8a33d', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>
+                <p style={{ fontSize: 13, color: '#7a5210', fontWeight: 700 }}>
+                  Subiendo{progreso && progreso.total > 1 ? ` foto ${progreso.actual} de ${progreso.total}` : ''}... no cierres ni salgas de esta pantalla.
+                </p>
+              </div>
+            )}
 
             <button
               className="btn btn-primary btn-lg"
@@ -229,7 +269,7 @@ export default function ObraFotos({ token }: Props) {
               disabled={subiendo}
               style={{ width: '100%', fontSize: 17, fontWeight: 800 }}
             >
-              {subiendo ? 'Subiendo...' : 'Subir'}
+              {subiendo ? 'Subiendo, espera...' : 'Subir'}
             </button>
 
             {resultado && (

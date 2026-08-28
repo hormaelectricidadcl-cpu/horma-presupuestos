@@ -4948,6 +4948,7 @@ export function PanelBancoContenido() {
   const [vista, setVista] = useState<VistaBanco>('semana')
   const [periodoKey, setPeriodoKey] = useState('')
   const [soloDestacados, setSoloDestacados] = useState(false)
+  const [visorIndex, setVisorIndex] = useState<number | null>(null)
 
   const cargar = useCallback(async () => {
     const [{ data: o }, { data: m }] = await Promise.all([
@@ -4966,13 +4967,26 @@ export function PanelBancoContenido() {
     setMedia(prev => prev.map(m => m.id === item.id ? { ...m, destacado: !m.destacado } : m))
   }
 
-  if (loading) return <div className="spinner" />
-
   const obraMap = new Map(obras.map(o => [o.id, o.nombre]))
   const mediaFiltradaObra = obraFiltro ? media.filter(m => m.obra_id === obraFiltro) : media
   const periodos = agruparMediaPorPeriodo(vista, mediaFiltradaObra)
   const periodo = periodos.find(p => p.key === periodoKey) || periodos.find(p => p.enCurso) || periodos[0] || null
   const itemsPeriodo = periodo ? (soloDestacados ? periodo.items.filter(m => m.destacado) : periodo.items) : []
+
+  // Navegación del visor con flechas del teclado -- se define acá (antes del `if (loading)`)
+  // porque los hooks no pueden ser condicionales.
+  useEffect(() => {
+    if (visorIndex === null) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'ArrowRight') setVisorIndex(i => (i === null ? null : (i + 1) % itemsPeriodo.length))
+      if (e.key === 'ArrowLeft') setVisorIndex(i => (i === null ? null : (i - 1 + itemsPeriodo.length) % itemsPeriodo.length))
+      if (e.key === 'Escape') setVisorIndex(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [visorIndex, itemsPeriodo.length])
+
+  if (loading) return <div className="spinner" />
 
   return (
     <div>
@@ -5057,7 +5071,11 @@ export function PanelBancoContenido() {
                   }}
                 >✓</span>
               )}
-              <a href={m.url} target="_blank" rel="noreferrer">
+              <button
+                type="button"
+                onClick={() => setVisorIndex(itemsPeriodo.indexOf(m))}
+                style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}
+              >
                 {m.tipo === 'foto' ? (
                   <img src={m.url} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
                 ) : m.tipo === 'video' ? (
@@ -5065,7 +5083,7 @@ export function PanelBancoContenido() {
                 ) : (
                   <div style={{ width: '100%', height: 120, borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-alt)', fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Archivo</div>
                 )}
-              </a>
+              </button>
               <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {!obraFiltro && (
                   <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -5085,6 +5103,66 @@ export function PanelBancoContenido() {
           ))}
         </div>
       )}
+
+      {visorIndex !== null && itemsPeriodo[visorIndex] && (() => {
+        const actual = itemsPeriodo[visorIndex]
+        return (
+          <div
+            onClick={() => setVisorIndex(null)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(10,14,26,0.92)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem 1.5rem',
+            }}
+          >
+            <button
+              onClick={() => setVisorIndex(null)}
+              title="Cerrar (Esc)"
+              style={{
+                position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%',
+                width: 40, height: 40, color: '#fff', fontSize: 18, cursor: 'pointer', lineHeight: 1,
+              }}
+            >✕</button>
+
+            {itemsPeriodo.length > 1 && (
+              <button
+                onClick={e => { e.stopPropagation(); setVisorIndex(i => (i === null ? null : (i - 1 + itemsPeriodo.length) % itemsPeriodo.length)) }}
+                title="Anterior (←)"
+                style={{
+                  position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
+                  background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%',
+                  width: 48, height: 48, color: '#fff', fontSize: 22, cursor: 'pointer', lineHeight: 1,
+                }}
+              >‹</button>
+            )}
+            {itemsPeriodo.length > 1 && (
+              <button
+                onClick={e => { e.stopPropagation(); setVisorIndex(i => (i === null ? null : (i + 1) % itemsPeriodo.length)) }}
+                title="Siguiente (→)"
+                style={{
+                  position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
+                  background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%',
+                  width: 48, height: 48, color: '#fff', fontSize: 22, cursor: 'pointer', lineHeight: 1,
+                }}
+              >›</button>
+            )}
+
+            <div onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw', maxHeight: '78vh', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              {actual.tipo === 'foto' ? (
+                <img src={actual.url} alt="" style={{ maxWidth: '90vw', maxHeight: '72vh', borderRadius: 10, objectFit: 'contain' }} />
+              ) : actual.tipo === 'video' ? (
+                <video src={actual.url} controls autoPlay style={{ maxWidth: '90vw', maxHeight: '72vh', borderRadius: 10 }} />
+              ) : (
+                <a href={actual.url} target="_blank" rel="noreferrer" style={{ color: '#fff', fontWeight: 700 }}>Abrir archivo →</a>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
+                <span>{visorIndex + 1} de {itemsPeriodo.length}</span>
+                <span>{actual.momento ? MOMENTO_LABEL[actual.momento] : '—'}{actual.subido_por ? ` · ${actual.subido_por}` : ''}</span>
+                <a href={actual.url} download target="_blank" rel="noreferrer" style={{ color: '#fff', fontWeight: 700, textDecoration: 'underline' }}>Descargar</a>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
