@@ -1,6 +1,13 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-27 — Eliminar un trabajador = archivar, nunca borrar la fila
+Al construir la card de Trabajadores (agregar/eliminar), se detectó que `pago_semanal_comprobantes`, `ajustes_pago_semanal` y `adelantos_trabajador` guardan al trabajador por **nombre** (texto), no por FK a `trabajadores.id`. Borrar la fila de `trabajadores` lo hubiera sacado también del selector de "Historial de pagos" (que lista trabajadores desde esa tabla) — su historial de pagos habría quedado inalcanzable desde la UI, aunque los datos siguieran en Supabase.
+
+**Decisión (confirmada con Alexandra antes de construir):** "eliminar" = archivar (columna `activo` en `trabajadores`, migración `sql/20260827_trabajadores_activo.sql`), nunca un `DELETE`. Un trabajador archivado desaparece de Reporte Diario y Pago semanal (activos), pero su historial sigue disponible — "Historial de pagos" lista todos los trabajadores sin filtrar por `activo`. De paso, la lista de trabajadores de Reporte Diario (antes una constante hardcodeada `TRABAJADORES` en `Reporte.tsx`) pasó a cargarse en tiempo real desde `trabajadores` filtrando `activo=true`, para que archivar a alguien realmente lo saque del uso diario y no solo del cálculo de pago.
+
+**Regla para el futuro:** mismo criterio que ya existía para `clientes.archivado` — cuando un registro tiene historial financiero referenciado por nombre/texto en otras tablas (no por FK), "eliminar" desde la UI significa archivar (ocultar de las vistas activas), nunca un `DELETE` real.
+
 ## 2026-08-25 — Convención de nombres para `sql/*.sql`, de acá en adelante
 Alexandra pidió un sistema de nombres para no perderse entre migraciones. Desde esta fecha en adelante:
 
