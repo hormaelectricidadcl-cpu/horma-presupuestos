@@ -867,11 +867,12 @@ function GanttSemanal({ fases, items }: { fases: ObraFase[]; items: ObraItem[] }
   )
 }
 
-function ItemAvanceRow({ item, fases, onCantidad, onFase, mostrarPrecio = true }: {
+function ItemAvanceRow({ item, fases, onCantidad, onFase, onBorrar, mostrarPrecio = true }: {
   item: ObraItem
   fases?: ObraFase[]
   onCantidad: (cantidad: number) => void
   onFase?: (fase: string | null) => void
+  onBorrar?: () => void
   mostrarPrecio?: boolean
 }) {
   const [valor, setValor] = useState(String(item.cantidad_completada))
@@ -932,16 +933,23 @@ function ItemAvanceRow({ item, fases, onCantidad, onFase, mostrarPrecio = true }
           )}
         </div>
       )}
-      {onFase && fases && fases.length > 0 && (
-        <select
-          value={item.fase || ''}
-          onChange={e => onFase(e.target.value || null)}
-          style={{ marginTop: 6, fontSize: 11.5, padding: '3px 6px', width: 'auto' }}
-        >
-          <option value="">Sin fase</option>
-          {fases.map(f => <option key={f.id} value={f.nombre}>{f.nombre}</option>)}
-        </select>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+        {onFase && fases && fases.length > 0 && (
+          <select
+            value={item.fase || ''}
+            onChange={e => onFase(e.target.value || null)}
+            style={{ fontSize: 11.5, padding: '3px 6px', width: 'auto' }}
+          >
+            <option value="">Sin fase</option>
+            {fases.map(f => <option key={f.id} value={f.nombre}>{f.nombre}</option>)}
+          </select>
+        )}
+        {onBorrar && (
+          <button onClick={onBorrar} style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            Borrar
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -972,6 +980,8 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
   const [fases, setFases] = useState<ObraFase[]>([])
   const [loading, setLoading] = useState(true)
   const [nuevaFase, setNuevaFase] = useState('')
+  const [nuevoItem, setNuevoItem] = useState({ descripcion: '', cantidad: '1', precio_unitario: '', fase: '' })
+  const [guardandoItem, setGuardandoItem] = useState(false)
 
   const cargar = useCallback(async () => {
     const [{ data: it }, { data: fa }] = await Promise.all([
@@ -989,6 +999,41 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
     setItems(prev => prev.map(x => x.id === item.id ? { ...x, cantidad_completada: cantidad } : x))
     const { error } = await supabase.from('obra_items').update({ cantidad_completada: cantidad }).eq('id', item.id)
     if (error) { alert('No se pudo actualizar. Intenta de nuevo.'); cargar() }
+  }
+
+  // Cubre el caso más común de esta obra en particular: presupuestos "externos" (PDF/foto
+  // subida a mano) solo traen el monto total, nunca el detalle línea por línea -- así que
+  // no hay nada que copiar automáticamente. Esto deja cargar los ítems a mano, para no
+  // depender de que el presupuesto haya sido hecho "por etapas" en la app.
+  async function agregarItem() {
+    if (!nuevoItem.descripcion.trim()) { alert('Completa la descripción del ítem.'); return }
+    const cantidad = Number(nuevoItem.cantidad)
+    if (!Number.isFinite(cantidad) || cantidad <= 0) { alert('La cantidad tiene que ser un número mayor a cero.'); return }
+    const precioUnitario = Number(nuevoItem.precio_unitario || 0)
+    if (!Number.isFinite(precioUnitario) || precioUnitario < 0) { alert('El precio unitario tiene que ser un número (o dejarlo vacío si no lo sabes).'); return }
+    setGuardandoItem(true)
+    const { error } = await supabase.from('obra_items').insert({
+      obra_id: obraId,
+      fase: nuevoItem.fase || null,
+      descripcion: nuevoItem.descripcion.trim(),
+      categoria: null,
+      cantidad,
+      precio_unitario: precioUnitario,
+      total: cantidad * precioUnitario,
+      cantidad_completada: 0,
+      orden: items.length,
+    })
+    setGuardandoItem(false)
+    if (error) { alert('No se pudo guardar el ítem. Intenta de nuevo.'); return }
+    setNuevoItem({ descripcion: '', cantidad: '1', precio_unitario: '', fase: nuevoItem.fase })
+    cargar()
+  }
+
+  async function borrarItem(item: ObraItem) {
+    if (!window.confirm(`¿Borrar "${item.descripcion}"? No se puede deshacer.`)) return
+    const { error } = await supabase.from('obra_items').delete().eq('id', item.id)
+    if (error) { alert('No se pudo borrar. Intenta de nuevo.'); return }
+    cargar()
   }
 
   async function actualizarFaseItem(item: ObraItem, fase: string | null) {
@@ -1021,14 +1066,6 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
 
   if (loading) return <div className="spinner" style={{ margin: '16px auto' }} />
 
-  if (items.length === 0) {
-    return (
-      <p style={{ fontSize: 13, color: 'var(--muted)', padding: '4px 0' }}>
-        Esta obra no tiene ítems de presupuesto para hacer seguimiento (viene de un presupuesto externo, o se creó sin uno vinculado).
-      </p>
-    )
-  }
-
   const totalMonto = items.reduce((s, it) => s + it.total, 0)
   const montoCompletado = items.reduce((s, it) => s + (it.cantidad > 0 ? (it.cantidad_completada / it.cantidad) * it.total : 0), 0)
   const pct = totalMonto > 0 ? Math.round((montoCompletado / totalMonto) * 100) : 0
@@ -1042,16 +1079,22 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 700 }}>Avance</span>
-          <span className="font-display" style={{ fontSize: 15, fontWeight: 800, color: colorPct }}>{pct}%</span>
+      {items.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--muted)', padding: '4px 0', marginBottom: 16 }}>
+          Esta obra todavía no tiene ítems cargados — agrégalos a mano abajo (útil sobre todo si el presupuesto era "externo": esos solo traen el monto total, nunca el detalle línea por línea).
+        </p>
+      ) : (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>Avance</span>
+            <span className="font-display" style={{ fontSize: 15, fontWeight: 800, color: colorPct }}>{pct}%</span>
+          </div>
+          <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, background: colorPct, transition: 'width 0.2s' }} />
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{fmtMoney(montoCompletado)} de {fmtMoney(totalMonto)} completado</p>
         </div>
-        <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: colorPct, transition: 'width 0.2s' }} />
-        </div>
-        <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{fmtMoney(montoCompletado)} de {fmtMoney(totalMonto)} completado</p>
-      </div>
+      )}
 
       {/* Agenda por fase — esto es lo que se dibuja como carta Gantt semanal */}
       <div style={{ marginBottom: 18 }}>
@@ -1082,27 +1125,68 @@ export function PanelAvanceObra({ obraId }: { obraId: string }) {
       </div>
 
       {/* Ítems, agrupados por fase */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {grupos.map(g => (
-          <div key={g.fase}>
-            {g.fase && (
-              <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
-                {g.fase}
-              </p>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {g.items.map(it => (
-                <ItemAvanceRow
-                  key={it.id}
-                  item={it}
-                  fases={fases}
-                  onCantidad={c => actualizarCantidad(it, c)}
-                  onFase={f => actualizarFaseItem(it, f)}
-                />
-              ))}
+      {items.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 18 }}>
+          {grupos.map(g => (
+            <div key={g.fase}>
+              {g.fase && (
+                <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                  {g.fase}
+                </p>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {g.items.map(it => (
+                  <ItemAvanceRow
+                    key={it.id}
+                    item={it}
+                    fases={fases}
+                    onCantidad={c => actualizarCantidad(it, c)}
+                    onFase={f => actualizarFaseItem(it, f)}
+                    onBorrar={() => borrarItem(it)}
+                  />
+                ))}
+              </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* Agregar ítem a mano -- cubre presupuestos "externos" (sin detalle) y obras sin presupuesto vinculado */}
+      <div>
+        <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+          Agregar ítem
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input
+            type="text" placeholder="Descripción (ej: Instalación de tablero)"
+            value={nuevoItem.descripcion} onChange={e => setNuevoItem(p => ({ ...p, descripcion: e.target.value }))}
+            style={{ fontSize: 13, padding: '7px 10px' }}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="number" min="0" step="any" placeholder="Cantidad"
+              value={nuevoItem.cantidad} onChange={e => setNuevoItem(p => ({ ...p, cantidad: e.target.value }))}
+              style={{ flex: 1, fontSize: 13, padding: '7px 10px' }}
+            />
+            <input
+              type="number" min="0" placeholder="Precio unitario (opcional)"
+              value={nuevoItem.precio_unitario} onChange={e => setNuevoItem(p => ({ ...p, precio_unitario: e.target.value }))}
+              style={{ flex: 1, fontSize: 13, padding: '7px 10px' }}
+            />
+            {fases.length > 0 && (
+              <select
+                value={nuevoItem.fase} onChange={e => setNuevoItem(p => ({ ...p, fase: e.target.value }))}
+                style={{ flex: 1, fontSize: 13, padding: '7px 10px' }}
+              >
+                <option value="">Sin fase</option>
+                {fases.map(f => <option key={f.id} value={f.nombre}>{f.nombre}</option>)}
+              </select>
+            )}
           </div>
-        ))}
+          <button onClick={agregarItem} disabled={guardandoItem} className="btn btn-secondary" style={{ fontSize: 13, padding: '8px 12px' }}>
+            {guardandoItem ? 'Guardando...' : '+ Agregar ítem'}
+          </button>
+        </div>
       </div>
     </div>
   )
