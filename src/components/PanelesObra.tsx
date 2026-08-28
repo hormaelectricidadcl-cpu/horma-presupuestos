@@ -13,6 +13,22 @@ export function fmtMoney(n: number) {
   return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString('es-CL')}`
 }
 
+// Cuando la suma de los ítems de una obra no coincide con su presupuesto total, antes de
+// avisar "falta desglosar algo" hay que descartar la explicación más común: que la
+// diferencia sea, ni más ni menos, gastos generales + IVA -- la misma fórmula que ya usa
+// el presupuestador de esta app (subtotal -> +GG% -> neto -> +19% IVA -> total). Si
+// cuadra con algún % de GG habitual, no es un ítem de trabajo faltante, es matemática
+// normal de presupuesto.
+function detectarGGeIVA(subtotal: number, total: number): { pct: number; gg: number; iva: number } | null {
+  for (const pct of [0, 5, 7, 10, 12, 15]) {
+    const gg = Math.round(subtotal * pct / 100)
+    const neto = subtotal + gg
+    const iva = Math.round(neto * 0.19)
+    if (Math.abs(neto + iva - total) <= 200) return { pct, gg, iva }
+  }
+  return null
+}
+
 // Copia el detalle línea por línea de un presupuesto (simple, por etapas, o externo con
 // desglose leído por IA) a obra_items, al momento de convertirlo en obra -- así "Avance
 // de obra" tiene contra qué medir. Los presupuestos "externos" sin desglose (la IA solo
@@ -1097,26 +1113,39 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null }: { obraId: s
         </div>
       )}
 
-      {/* Si los ítems no suman lo mismo que el presupuesto de la obra, avisar en vez de
-          mostrar un % que en realidad está calculado contra una base incompleta -- pasa
-          seguido con presupuestos externos, donde la IA lee bien el total pero no siempre
-          encuentra el 100% del desglose (IVA, gastos generales, un ítem sin tabla, etc). */}
-      {presupuestoTotal != null && items.length > 0 && Math.abs(presupuestoTotal - totalMonto) > 1000 && (
-        <div style={{ marginBottom: 16, padding: 12, background: '#fef2e0', border: '1px solid #e8a33d', borderRadius: 8 }}>
-          <p style={{ fontSize: 12.5, fontWeight: 700, color: '#7a5210', marginBottom: 4 }}>
-            Los ítems no suman lo mismo que el presupuesto de la obra
-          </p>
-          <p style={{ fontSize: 12, color: '#7a5210', marginBottom: 8 }}>
-            Ítems: {fmtMoney(totalMonto)} · Presupuesto de la obra: {fmtMoney(presupuestoTotal)} · Diferencia sin desglosar: {fmtMoney(presupuestoTotal - totalMonto)}
-          </p>
-          <button
-            onClick={() => setNuevoItem(p => ({ ...p, descripcion: p.descripcion || 'Otros / sin desglosar', cantidad: '1', precio_unitario: String(Math.round(presupuestoTotal - totalMonto)) }))}
-            style={{ fontSize: 12, fontWeight: 700, color: '#7a5210', background: 'none', border: '1px solid #e8a33d', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}
-          >
-            Completar el formulario de abajo con la diferencia
-          </button>
-        </div>
-      )}
+      {/* Si los ítems no suman lo mismo que el presupuesto de la obra: primero se descarta
+          que la diferencia sea gastos generales + IVA (matemática normal, no falta nada) --
+          solo si NO cuadra con eso se avisa como posible ítem sin desglosar. Pasa seguido
+          con presupuestos externos, donde la IA lee bien el total pero el desglose que
+          encuentra es el neto de materiales/mano de obra, sin el margen ni el impuesto. */}
+      {presupuestoTotal != null && items.length > 0 && Math.abs(presupuestoTotal - totalMonto) > 1000 && (() => {
+        const ggIva = detectarGGeIVA(totalMonto, presupuestoTotal)
+        return ggIva ? (
+          <div style={{ marginBottom: 16, padding: 12, background: '#eaf4ee', border: '1px solid #7fb894', borderRadius: 8 }}>
+            <p style={{ fontSize: 12.5, fontWeight: 700, color: '#1f6b3f', marginBottom: 4 }}>
+              La diferencia es gastos generales + IVA, no un ítem faltante
+            </p>
+            <p style={{ fontSize: 12, color: '#1f6b3f' }}>
+              Ítems (neto): {fmtMoney(totalMonto)} · Gastos generales ({ggIva.pct}%): {fmtMoney(ggIva.gg)} · IVA (19%): {fmtMoney(ggIva.iva)} · Total: {fmtMoney(presupuestoTotal)}
+            </p>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 16, padding: 12, background: '#fef2e0', border: '1px solid #e8a33d', borderRadius: 8 }}>
+            <p style={{ fontSize: 12.5, fontWeight: 700, color: '#7a5210', marginBottom: 4 }}>
+              Los ítems no suman lo mismo que el presupuesto de la obra
+            </p>
+            <p style={{ fontSize: 12, color: '#7a5210', marginBottom: 8 }}>
+              Ítems: {fmtMoney(totalMonto)} · Presupuesto de la obra: {fmtMoney(presupuestoTotal)} · Diferencia sin desglosar: {fmtMoney(presupuestoTotal - totalMonto)}
+            </p>
+            <button
+              onClick={() => setNuevoItem(p => ({ ...p, descripcion: p.descripcion || 'Otros / sin desglosar', cantidad: '1', precio_unitario: String(Math.round(presupuestoTotal - totalMonto)) }))}
+              style={{ fontSize: 12, fontWeight: 700, color: '#7a5210', background: 'none', border: '1px solid #e8a33d', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}
+            >
+              Completar el formulario de abajo con la diferencia
+            </button>
+          </div>
+        )
+      })()}
 
       {/* Agenda por fase — esto es lo que se dibuja como carta Gantt semanal */}
       <div style={{ marginBottom: 18 }}>
