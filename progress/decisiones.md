@@ -1,6 +1,38 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-28 — Reporte Diario: NO vaciar el formulario tras guardar; compras ya guardadas se colapsan en su lugar
+Alexandra pidió que, tras "Guardar reporte del día", el formulario quedara en blanco (como cualquier
+formulario normal), para poder cargar varias boletas de compra seguidas sin confusión sobre si ya había
+guardado o no. Se implementó así primero, pero se encontró un bug real antes de que causara daño en
+producción: el guardado de compras/cobros/subcontratos/trabajos puntuales/uso de stock funciona
+borrando TODO lo de esa fecha y reinsertando solo lo que hay en el formulario en ese momento — con el
+formulario vacío, un segundo guardado el mismo día borraba lo guardado en el primero.
+
+**Decisión final:** se revirtió el "formulario en blanco". En su lugar, cada compra que ya tiene `id`
+(ya guardada) se muestra colapsada como una tarjeta chica ("✓ descripción — monto" + botón "Editar") en
+vez del formulario completo — se colapsan solas al cargar el día (carga inicial o después de guardar).
+"+ Agregar compra" siempre abre una fila nueva en blanco sin tocar las demás. Esto da la sensación de
+"pantalla limpia, lista para lo próximo" que pedía Alexandra, sin tocar el mecanismo de guardado
+(borrar-y-reinsertar) que ya está probado. Además, al guardar, la pantalla sube sola arriba de todo y
+muestra un cartel verde grande de confirmación (7 segundos) — el cartel chico de antes, pegado cerca del
+botón, no se notaba lo suficiente en el uso real.
+
+**Por qué no se hizo el "formulario en blanco" bien (cambiando el guardado a upsert real por fila) en el
+momento:** era un cambio más grande y riesgoso para hacer sobre la marcha en una sesión donde ya había
+pasado un incidente real de escritura accidental (ver `feedback_interceptar_red_antes_de_probar_guardar`
+en memoria) — se priorizó la solución más segura y suficiente sobre la más "ideal". Si en el futuro se
+quiere reintentar el formulario en blanco de verdad, el prerrequisito técnico es cambiar compras/cobros/
+subcontratos/trabajos puntuales/uso de stock de "borrar todo y reinsertar" a upsert real (insertar solo
+lo nuevo, actualizar solo lo existente, borrar solo lo que se saca explícitamente con "Quitar" — de forma
+inmediata, no a reconciliar al guardar).
+
+**Regla para el futuro:** cuando la solución "correcta" a un pedido de UX requiere tocar un mecanismo de
+guardado de datos financieros ya probado, y hay presión de tiempo o ya hubo un incidente en la misma
+sesión, preferir la solución de menor riesgo que satisface el pedido real (acá: "que se vea limpio") por
+sobre la arquitectónicamente más pura (acá: "vaciar de verdad") — y dejar la más grande documentada como
+prerrequisito explícito para cuando se pueda hacer con más cuidado.
+
 ## 2026-08-28 — Bitácora de avance diario reemplaza el UPDATE directo de cantidad_completada
 Alexandra pidió (viendo la vista de campo) que el avance quede fechado por día y por trabajador, para
 tres usos: detectar atraso real vs. planificado y su costo en sueldos pagados de más, respaldo para
