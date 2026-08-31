@@ -2543,30 +2543,26 @@ export function PanelPagoSemanal() {
                   </div>
                 </div>
 
-                {(f.totalAjustes !== 0 || f.totalAdelantosQueRestan > 0 || ultimoComprobante) && (
-                  <>
-                    <div style={{ height: 1, background: 'var(--border)', margin: '12px 0 10px' }} />
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12.5, fontWeight: 700 }}>
-                        {f.totalAjustes !== 0 && (
-                          <span style={{ color: f.totalAjustes >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                            Ajustes {f.totalAjustes > 0 ? '+' : ''}{fmtMoney(f.totalAjustes)}
-                          </span>
-                        )}
-                        {f.totalAdelantosQueRestan > 0 && (
-                          <span style={{ color: 'var(--danger)' }}>Adelanto -{fmtMoney(f.totalAdelantosQueRestan)}</span>
-                        )}
-                      </div>
-                      <ComprobanteCelda
-                        trabajador={f.trabajador}
-                        semanaKey={semana.key}
-                        montoCalculado={f.neto}
-                        comprobante={ultimoComprobante}
-                        onSubido={cargar}
-                      />
-                    </div>
-                  </>
-                )}
+                <div style={{ height: 1, background: 'var(--border)', margin: '12px 0 10px' }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12.5, fontWeight: 700 }}>
+                    {f.totalAjustes !== 0 && (
+                      <span style={{ color: f.totalAjustes >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                        Ajustes {f.totalAjustes > 0 ? '+' : ''}{fmtMoney(f.totalAjustes)}
+                      </span>
+                    )}
+                    {f.totalAdelantosQueRestan > 0 && (
+                      <span style={{ color: 'var(--danger)' }}>Adelanto -{fmtMoney(f.totalAdelantosQueRestan)}</span>
+                    )}
+                  </div>
+                  <ComprobanteCelda
+                    trabajador={f.trabajador}
+                    semanaKey={semana.key}
+                    montoCalculado={f.neto}
+                    comprobante={ultimoComprobante}
+                    onSubido={cargar}
+                  />
+                </div>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                   <button
