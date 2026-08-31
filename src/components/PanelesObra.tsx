@@ -2534,7 +2534,7 @@ export function PanelPagoSemanal() {
                     <p style={{ fontSize: 12, color: 'var(--muted)' }}>
                       {f.sueldoFijo
                         ? 'Solo viático/ajustes esta semana'
-                        : `${f.dias} día${f.dias !== 1 ? 's' : ''}${f.ganado ? ` · ganado ${fmtMoney(f.ganado)}` : ''}${f.viatico > 0 ? ' · viático incluido' : ''}`}
+                        : `${f.dias} día${f.dias !== 1 ? 's' : ''}${f.ganado ? ` · ganado ${fmtMoney(f.ganado)}` : ''}${f.viatico > 0 ? ` · viático ${fmtMoney(f.viatico)}` : ''}`}
                     </p>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
