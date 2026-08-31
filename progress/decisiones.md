@@ -1,6 +1,20 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-31 — Regla de negocio: el sábado no lleva viático
+Encontrado revisando por qué Henry y Manuel no cuadraban con lo transferido esa semana: a los dos les
+faltaban $10.000 exactos cada uno (un viático) contra el neto calculado. Alexandra confirmó la causa: los
+sábados trabajados NO llevan viático (a diferencia de lunes a viernes), y el Reporte Diario de esa semana
+los había cargado con `viatico=true` igual que cualquier otro día. Corregido en Supabase (`viatico=false`
+para Henry y Manuel, 29/08/2026) — con eso los 5 trabajadores de la semana 24-30/08 cuadraron exacto
+contra las transferencias reales.
+
+**Nada se cambió en el código todavía.** El formulario de Reporte Diario (`Reporte.tsx`) no sabe de esta
+regla — el checkbox "Sin viático hoy" queda en el valor que haya dejado el día anterior, así que si un
+sábado se carga sin sacarlo a mano, va a volver a pasar. Pendiente decidir con Alexandra/Gustavo si vale
+la pena que el formulario desmarque viático automáticamente cuando la fecha elegida es sábado (o domingo),
+o si prefieren seguir haciéndolo a mano y solo tener presente la regla.
+
 ## 2026-08-31 — Supabase pasó a plan Pro (antes de lo planeado)
 Estaba anotado para el 2/09/2026 (cuando les paguen); Alexandra lo adelantó al 31/08 después de la
 conversación de seguridad del 28/08, para tener backups automáticos cuanto antes. Confirmado por
