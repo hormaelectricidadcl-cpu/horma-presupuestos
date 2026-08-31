@@ -1,6 +1,21 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-08-31 — Supabase pasó a plan Pro (antes de lo planeado)
+Estaba anotado para el 2/09/2026 (cuando les paguen); Alexandra lo adelantó al 31/08 después de la
+conversación de seguridad del 28/08, para tener backups automáticos cuanto antes. Confirmado por
+Alexandra viendo el dashboard de Supabase (no verificable por MCP, que es solo lectura y no expone plan/
+billing). Resuelve el punto más urgente de los tres de la conversación de seguridad ("¿un error o ataque
+es recuperable?") — backups diarios con 7 días de retención, más el proyecto ya no se pausa por
+inactividad. **Quedan sin tocar los otros dos puntos de esa conversación:** el bucket `audio-notas`
+permite `list` público, y casi todas las tablas de negocio siguen con política `"anon full access"` (sin
+login/token real). **CONFIRMADO el mismo 31/08:** Database → Backups muestra backups diarios desde el 26/08, el más
+reciente del mismo día (31 ago 04:27 UTC) — funcionando sin intervención. **Ojo con una limitación real,
+visible en esa misma pantalla:** los backups son solo de la base de datos (tablas), NO incluyen Storage
+(fotos de obra, comprobantes, boletas, PDFs del bucket `audio-notas`) — restaurar un backup no recupera
+un archivo borrado del bucket. Para plata/datos están cubiertos; para archivos adjuntos, sigue sin haber
+red de contención más allá de no borrar nada del bucket sin cuidado.
+
 ## 2026-08-28 — Reporte Diario: NO vaciar el formulario tras guardar; compras ya guardadas se colapsan en su lugar
 Alexandra pidió que, tras "Guardar reporte del día", el formulario quedara en blanco (como cualquier
 formulario normal), para poder cargar varias boletas de compra seguidas sin confusión sobre si ya había

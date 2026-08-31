@@ -2090,6 +2090,17 @@ export interface FilaPagoSemanal {
   adelantosQueRestan: AdelantoTrabajador[]
   totalAdelantosQueRestan: number
   neto: number
+  diasDetalle: DiaDetallePago[]
+}
+
+// Desglose día por día de una fila de pago semanal -- para que se pueda ver de
+// dónde sale el "ganado"/"viático" sin tener que pedir la cuenta a mano.
+export interface DiaDetallePago {
+  fecha: string
+  obra: string | null
+  fraccionJornada: number
+  ganado: number
+  viatico: number
 }
 
 // Rango lunes-domingo (mismas fechas 'YYYY-MM-DD' que usa `getPeriodo`) de una
@@ -2118,10 +2129,47 @@ export function calcularFilaPagoSemanal(
   const adelantosQueRestan = sueldoFijo ? [] : adelantosDeLaSemana
   const totalAdelantosQueRestan = adelantosQueRestan.reduce((s, a) => s + a.monto, 0)
   const neto = calculado + totalAjustes - totalAdelantosQueRestan
+  const diasDetalle: DiaDetallePago[] = diariosPresentes
+    .slice()
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+    .map(d => ({
+      fecha: d.fecha,
+      obra: d.obra,
+      fraccionJornada: d.fraccion_jornada,
+      ganado: sueldoFijo ? 0 : d.fraccion_jornada * t.tarifa_diaria,
+      viatico: d.viatico ? t.viatico_diario : 0,
+    }))
   return {
     trabajador: t.nombre, sueldoFijo, dias, ganado, viatico, calculado,
-    ajustes: ajustesDeLaSemana, totalAjustes, adelantosQueRestan, totalAdelantosQueRestan, neto,
+    ajustes: ajustesDeLaSemana, totalAjustes, adelantosQueRestan, totalAdelantosQueRestan, neto, diasDetalle,
   }
+}
+
+/* ─── Desglose día por día de una fila de pago semanal, colapsado por defecto ──── */
+function DesgloseDiasToggle({ fila }: { fila: FilaPagoSemanal }) {
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button
+        onClick={() => setAbierto(a => !a)}
+        style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }}
+      >{abierto ? '▲' : '▾'} Ver desglose por día</button>
+      {abierto && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {fila.diasDetalle.length === 0 ? (
+            <p style={{ fontSize: 12, color: 'var(--muted)' }}>Sin días registrados esa semana.</p>
+          ) : fila.diasDetalle.map(d => (
+            <div key={d.fecha} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, padding: '5px 8px', background: 'var(--surface-alt)', borderRadius: 6 }}>
+              <span style={{ color: 'var(--muted)', width: 68, flexShrink: 0 }}>{d.fecha.split('-').reverse().join('/')}</span>
+              <span style={{ flex: 1 }}>{d.fraccionJornada === 1 ? 'Día completo' : d.fraccionJornada === 0.5 ? 'Medio día' : `Jornada ${d.fraccionJornada}`}{d.obra ? ` · ${d.obra}` : ''}</span>
+              {!fila.sueldoFijo && <span style={{ fontWeight: 700 }}>{fmtMoney(d.ganado)}</span>}
+              {d.viatico > 0 && <span style={{ color: 'var(--primary)', fontWeight: 600 }}>+{fmtMoney(d.viatico)} viático</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 /* ─── Comprobante de pago semanal (uno por fila de trabajador/semana) ──── */
@@ -2520,16 +2568,20 @@ export function PanelPagoSemanal() {
                   </>
                 )}
 
-                <button
-                  onClick={() => setExpandido(abierta ? null : f.trabajador)}
-                  style={{ marginTop: 12, background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }}
-                >{abierta ? '▲' : '▾'} Ajustar/Adelanto</button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  <button
+                    onClick={() => setExpandido(abierta ? null : f.trabajador)}
+                    style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }}
+                  >{abierta ? '▲' : '▾'} Ajustar/Adelanto</button>
+                </div>
 
                 {abierta && (
                   <div style={{ marginTop: 12 }}>
                     <DetalleAjustesAdelantos fila={f} semanaKey={semana.key} onGuardado={cargar} />
                   </div>
                 )}
+
+                <DesgloseDiasToggle fila={f} />
               </div>
             )
           })}
@@ -2590,6 +2642,7 @@ function FilaSemanaHistorial({ fila, semanaKey, semanaLabel, comprobante, onSubi
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
         <ComprobanteCelda trabajador={fila.trabajador} semanaKey={semanaKey} montoCalculado={fila.neto} comprobante={comprobante} onSubido={onSubido} />
       </div>
+      <DesgloseDiasToggle fila={fila} />
     </div>
   )
 }
