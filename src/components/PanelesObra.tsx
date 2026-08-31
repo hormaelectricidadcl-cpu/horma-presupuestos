@@ -2322,6 +2322,24 @@ function DetalleAjustesAdelantos({ fila, semanaKey, onGuardado }: { fila: FilaPa
     const monto = Number(montoAdelanto)
     if (!Number.isFinite(monto) || monto <= 0) { alert('El monto tiene que ser un número mayor a cero.'); return }
     if (!fechaAdelanto) { alert('Elige la fecha del adelanto.'); return }
+
+    // Aviso de posible duplicado -- mismo criterio que ya existe para compras/cobros en
+    // Reporte Diario. Acá hace falta más que ahí: como esta fecha puede ser de cualquier
+    // semana (no solo la que se está viendo), un adelanto ya cargado para ese trabajador
+    // ese mismo día no aparece en ningún lado de esta pantalla -- se detectó así un
+    // duplicado real (mismo comprobante subido dos veces) el 31/08/2026.
+    const { data: existentes } = await supabase
+      .from('adelantos_trabajador')
+      .select('id, monto, nota')
+      .eq('trabajador', fila.trabajador)
+      .eq('fecha', fechaAdelanto)
+    if (existentes && existentes.length > 0) {
+      const detalle = existentes.map(e => `${fmtMoney(e.monto)}${e.nota ? ` (${e.nota})` : ''}`).join(', ')
+      if (!window.confirm(`${fila.trabajador} ya tiene un adelanto cargado el ${fechaAdelanto.split('-').reverse().join('/')}: ${detalle}. ¿Es un adelanto distinto (Aceptar) o es el mismo cargado de nuevo (Cancelar)?`)) {
+        return
+      }
+    }
+
     setGuardando(true)
     const { error } = await supabase.from('adelantos_trabajador').insert({
       trabajador: fila.trabajador, fecha: fechaAdelanto, monto,
