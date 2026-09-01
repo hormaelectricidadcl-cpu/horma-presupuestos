@@ -1,6 +1,46 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-01 — Procedimiento para "mover" un adelanto de sueldo fijo de un mes a otro
+Caso real: Fabriel pidió que su adelanto de $100.000 (cargado 14/08) se descontara de
+septiembre en vez de agosto, porque en agosto tuvo que pagar varias cosas. El sistema
+agrupa cada adelanto por el mes de su `fecha` (no por cuándo se cargó) -- no existe un
+campo para "editar" la fecha de un adelanto ya cargado. El procedimiento correcto es:
+borrar el adelanto viejo (botón "✕" en la ficha del trabajador, dentro de la card del mes
+correspondiente) y cargar uno nuevo con la fecha correcta desde Pago Semanal → trabajador
+→ "+ Adelanto". Alexandra ya lo hizo una vez con este caso real, verificado con
+comprobante subido y "✓ Coincide".
+
+## 2026-09-01 — Comprobante del pago mensual de sueldo fijo usa una clave sintética
+Para que Fabriel (y cualquier sueldo fijo futuro) pueda subir el comprobante de su pago
+mensual grande (no solo los pedacitos de viático semanal), se reusó `ComprobanteCelda`
+con `semana_key = "mensual-2026-08"` en vez de una semana real -- confirmado antes de
+hacerlo que nada en el código parsea `pago_semanal_comprobantes.semana_key` como fecha
+real (solo se usa como clave opaca de comparación). Si en el futuro alguien agrega lógica
+que sí espere una fecha real ahí, tener esto en cuenta.
+
+## 2026-09-01 — Pendientes viejos se archivan, no se borran (mismo patrón que trabajadores/clientes)
+La pestaña "Gustavo" en Admin (pendientes ya respondidos) mezclaba ~35 clientes de hace
+meses, todos ya marcados "Listo", con el único cliente activo real. Se agregó columna
+`archivado` en `pendientes` (sql/20260901_pendientes_archivado.sql) siguiendo el mismo
+criterio ya usado para trabajadores/clientes: nunca borrar el historial real, solo
+sacarlo de la vista por defecto con un toggle "Ver archivados". Botón masivo "Archivar
+todos los 'Listo'" para no tener que archivar cliente por cliente en una limpieza grande
+-- usa `revisado_admin` (ya existía) como criterio de "ya terminado con este cliente".
+
+## 2026-09-01 — Bug sistémico: fondo claro sin color de texto explícito queda invisible
+Encontrado 4 veces en la misma sesión (modal de Detalle de obra, detalle de presupuesto,
+historial de cliente en Admin, formulario de Nuevo/Editar pendiente): la app define
+`color: var(--text-inverse)` (texto claro) a nivel de `.app`/`.pendientes` porque el
+fondo por defecto es navy oscuro. Cualquier contenedor nuevo con fondo blanco/claro
+(`var(--white)`, `var(--surface)`) que NO defina su propio `color: var(--text)` hereda
+ese texto claro y queda invisible sobre su propio fondo claro. Causó al menos un
+problema real (Alexandra cargó un pendiente duplicado porque no veía lo que tipeaba).
+**Regla para no repetir esto:** cualquier `<div>`/`<form>` nuevo con `background: 'var(--white)'`
+o `'var(--surface)'` tiene que llevar también `color: 'var(--text)'` explícito en el
+mismo style, sin excepción -- no alcanza con que los textos internos lo tengan cada uno
+por separado.
+
 ## 2026-08-31 — Regla de negocio: el sábado no lleva viático
 Encontrado revisando por qué Henry y Manuel no cuadraban con lo transferido esa semana: a los dos les
 faltaban $10.000 exactos cada uno (un viático) contra el neto calculado. Alexandra confirmó la causa: los

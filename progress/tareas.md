@@ -2,6 +2,15 @@
 > Estados: 🔲 pendiente · 🔄 en progreso · ✅ hecho (mover a estado_actual.md como resumen y borrar de acá cuando se confirme)
 > Contexto del rediseño grande del 20/08 → ver decisiones.md.
 
+## 🔲 Borrar pendiente duplicado de Patricia Marambio (emitir_factura), 01/09/2026
+Alexandra cargó 2 veces la misma factura para Patricia Marambio (Mga Abogados Ltda, $125.446) por el bug de contraste del formulario (ya corregido). IDs reales: `2fa1c38f-1568-40af-987f-e48fc122ff2c` (14:42, sin monto) y `c90334af-a4d9-4bde-9893-ff8d70af1a11` (21:03, con el monto). Recomendado borrar el primero desde el botón "Eliminar" de esa tarjeta en Admin → Activos. Sin confirmar/ejecutar todavía.
+
+## 🔲 Borrar cobro real de $700 (error de tipeo), obra Camino turístico 11474, 01/09/2026
+`reportes_cobros` id `456af00b-cbd6-433d-94f5-5358d62441d0`, fecha 29/08/2026, cliente "Francisca", monto $700 — le faltaban tres ceros (debía ser $700.000). Gustavo ya cargó el monto correcto como fila nueva el 01/09, pero la fila mala nunca se borró, así que "Facturado" en esa obra queda $700 de más. Se puede borrar desde Reporte Diario → fecha 29/08/2026 → Cobros del día → "✕ Quitar". Sin confirmar/ejecutar todavía.
+
+## 🔲 Probar en producción: Archivar todos los "Listo" (Admin → Gustavo), 01/09/2026
+Feature nueva construida hoy (migración `sql/20260901_pendientes_archivado.sql`, ya corrida) para sacar ~35 clientes viejos de la vista "Gustavo" sin borrar nada. No se pudo probar en vivo desde acá (Admin.tsx no corre en Vite local). Confirmar que el botón funciona y que Patricia Marambio (el único activo real) no queda archivada por error.
+
 ## 🔲 Archivar a Alejandro — confirmado 28/08/2026 que ya no trabaja con Horma
 Gustavo confirmó que Alejandro ya no trabaja con ellos. Se ofreció archivarlo desde la card de Trabajadores (botón "Archivar" ya existe, mismo criterio que otros trabajadores que dejaron de estar activos — su historial de pagos pasado no se toca, solo deja de aparecer en la asistencia diaria). Quedó sin hacer al cierre de la sesión del 28/08 — confirmar con Alexandra si ya lo hizo ella o si hace falta hacerlo.
 
