@@ -533,7 +533,7 @@ function CrearForm({
   }
 
   return (
-    <div style={{ background: 'var(--white)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow-md)', marginBottom: '1.5rem', border: '2px solid var(--primary)' }}>
+    <div style={{ background: 'var(--white)', color: 'var(--text)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow-md)', marginBottom: '1.5rem', border: '2px solid var(--primary)' }}>
       <h3 style={{ marginBottom: '1.25rem', fontSize: 16, fontWeight: 700 }}>
         {clienteInicial ? `Nuevo pendiente — ${clienteInicial}` : 'Nuevo pendiente'}
       </h3>
@@ -717,7 +717,7 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
   }
 
   return (
-    <form onSubmit={submit} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, padding: '14px', background: 'var(--surface-alt)', borderRadius: 'var(--radius-sm)' }}>
+    <form onSubmit={submit} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, padding: '14px', background: 'var(--surface-alt)', color: 'var(--text)', borderRadius: 'var(--radius-sm)' }}>
       <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--secondary)', marginBottom: 2 }}>Editar pendiente</p>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <div className="field">
@@ -1224,6 +1224,7 @@ export default function Admin() {
   type SeccionAdmin = 'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'banco_contenido' | 'ideas'
   const [seccion, setSeccion] = useState<SeccionAdmin | null>(null)
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
+  const [verArchivadosGustavo, setVerArchivadosGustavo] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('horma_admin_token')
@@ -1274,6 +1275,33 @@ export default function Admin() {
     loadPendientes()
   }
 
+  // Archiva TODOS los pendientes de este cliente que están en la pestaña "Gustavo"
+  // (ya respondidos) -- para sacar clientes viejos de la vista sin borrar nada. No toca
+  // los pendientes activos de ese cliente (si volviera a escribir, sigue funcionando igual).
+  async function archivarClienteGustavo(cliente: string, ids: string[]) {
+    if (!window.confirm(`¿Archivar a "${cliente}"? Deja de verse en esta lista (${ids.length} pendiente${ids.length !== 1 ? 's' : ''}). Se puede volver a mostrar con "Ver archivados".`)) return
+    await supabase.from('pendientes').update({ archivado: true }).in('id', ids)
+    loadPendientes()
+  }
+
+  // Archiva de una sola vez TODOS los clientes de "Gustavo" que ya están marcados
+  // "Listo" (revisado_admin=true) -- para no tener que apretar "Archivar" cliente por
+  // cliente en una limpieza grande. Los que siguen "Por revisar" (como Patricia Marambio)
+  // no se tocan.
+  async function archivarTodosLosRevisados(lista: Pendiente[]) {
+    const grupos = lista.reduce<Record<string, Pendiente[]>>((acc, p) => {
+      if (!acc[p.cliente_nombre]) acc[p.cliente_nombre] = []
+      acc[p.cliente_nombre].push(p)
+      return acc
+    }, {})
+    const clientesListos = Object.entries(grupos).filter(([, items]) => items.every(p => (p.revisado_admin ?? false) && !p.archivado))
+    const ids = clientesListos.flatMap(([, items]) => items.map(p => p.id))
+    if (ids.length === 0) { alert('No hay clientes marcados "Listo" para archivar.') ; return }
+    if (!window.confirm(`¿Archivar ${clientesListos.length} cliente${clientesListos.length !== 1 ? 's' : ''} ya marcados "Listo" (${ids.length} pendientes en total)? Los que siguen "Por revisar" no se tocan.`)) return
+    await supabase.from('pendientes').update({ archivado: true }).in('id', ids)
+    loadPendientes()
+  }
+
   if (!authed) return <div className="pendientes"><LoginForm onLogin={() => setAuthed(true)} /></div>
 
   const activos = pendientes.filter(p => p.estado !== 'respondido')
@@ -1281,7 +1309,8 @@ export default function Admin() {
     .filter(p => p.estado === 'respondido')
     .sort((a, b) => new Date(b.respondido_at ?? b.created_at).getTime() - new Date(a.respondido_at ?? a.created_at).getTime())
   const vencidos = activos.filter(p => new Date(p.fecha_limite) < new Date())
-  const respondidosGustavo = respondidos.filter(p => !p.destinatario || p.destinatario === 'gustavo')
+  const respondidosGustavoTodos = respondidos.filter(p => !p.destinatario || p.destinatario === 'gustavo')
+  const respondidosGustavo = respondidosGustavoTodos.filter(p => verArchivadosGustavo || !p.archivado)
   const activosGustavo = activos.filter(p => !p.destinatario || p.destinatario === 'gustavo')
 
   const clienteGroups = activos.reduce<Record<string, Pendiente[]>>((acc, p) => {
@@ -1299,25 +1328,37 @@ export default function Admin() {
       acc[p.cliente_nombre].push(p)
       return acc
     }, {})
-    return Object.entries(grupos).map(([cliente, items]) => (
-      <div key={cliente}>
-        {items.length > 1 && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '7px 12px', marginBottom: 6,
-            background: '#f0f4ff', border: '1px solid #c7d2fe',
-            borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
-          }}>
-            <span></span>
-            <span>{cliente}</span>
+    return Object.entries(grupos).map(([cliente, items]) => {
+      const archivado = items.every(p => p.archivado)
+      return (
+      <div key={cliente} style={{ opacity: archivado ? 0.55 : 1 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '7px 12px', marginBottom: 6,
+          background: '#f0f4ff', border: '1px solid #c7d2fe',
+          borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#3730a3',
+        }}>
+          <span>{cliente}</span>
+          {items.length > 1 && (
             <span style={{ fontWeight: 400, color: 'var(--muted)' }}>— {items.length} pendientes relacionados</span>
+          )}
+          {archivado && (
+            <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--muted)' }}>(archivado)</span>
+          )}
+          {items.length > 1 && (
             <button
               onClick={() => setHistorialCliente(cliente)}
-              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
+              style={{ marginLeft: archivado ? 0 : 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3730a3', fontWeight: 600, padding: '2px 6px' }}
             >Ver historial →</button>
-          </div>
-        )}
-        <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : {}}>
+          )}
+          {!archivado && (
+            <button
+              onClick={() => archivarClienteGustavo(cliente, items.map(p => p.id))}
+              style={{ marginLeft: items.length > 1 ? 0 : 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--danger)', fontWeight: 600, padding: '2px 6px' }}
+            >Archivar</button>
+          )}
+        </div>
+        <div style={items.length > 1 ? { paddingLeft: 12, borderLeft: '3px solid #c7d2fe', marginBottom: 16 } : { marginBottom: 12 }}>
           {items.map(p => (
             <PendienteCard
               key={p.id}
@@ -1331,7 +1372,8 @@ export default function Admin() {
           ))}
         </div>
       </div>
-    ))
+      )
+    })
   }
 
   const gustavoToken = import.meta.env.VITE_GUSTAVO_TOKEN as string
@@ -1511,7 +1553,20 @@ export default function Admin() {
               ))
             )
           ) : seccion === 'respondidos_gustavo' ? (
-            renderRespondidos(respondidosGustavo)
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted-inverse)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={verArchivadosGustavo} onChange={e => setVerArchivadosGustavo(e.target.checked)} />
+                  Ver archivados
+                </label>
+                <button
+                  onClick={() => archivarTodosLosRevisados(respondidosGustavo)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: 12, padding: '6px 12px' }}
+                >Archivar todos los "Listo"</button>
+              </div>
+              {renderRespondidos(respondidosGustavo)}
+            </div>
           ) : seccion === 'presupuestos' ? (
             <PanelPresupuestos />
           ) : seccion === 'boletas' ? (

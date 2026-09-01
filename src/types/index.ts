@@ -35,6 +35,7 @@ export interface Pendiente {
   audio_url?: string | null
   destinatario?: Destinatario
   revisado_admin?: boolean
+  archivado?: boolean
 }
 
 export interface NuevoPendiente {
