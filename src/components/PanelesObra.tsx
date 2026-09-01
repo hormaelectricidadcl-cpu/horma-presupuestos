@@ -2762,10 +2762,22 @@ function PanelHistorialSueldoFijo({ trabajador, diariosTrabajador, ajustesTrabaj
         const adelantadoMes = adelantosDelMes.reduce((s, a) => s + a.monto, 0)
         const restaPagar = sueldoMensual - adelantadoMes
         const semanasDelMes = semanas.filter(s => mesDeSemana.get(s.key) === mesKey)
+        const comprobanteMes = ultimoComprobante(`mensual-${mesKey}`)
+        // "Resta pagar" es lo que corresponde pagar este mes (no cambia aunque ya se haya
+        // pagado) -- para que quede claro que YA se pagó sin tener que buscar el chequecito
+        // chico junto al botón de comprobante, se agrega un aviso grande aparte.
+        const pagoConfirmado = comprobanteMes?.monto_leido != null && Math.round(comprobanteMes.monto_leido) === Math.round(restaPagar)
 
         return (
           <div key={mesKey} className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>{label}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 800 }}>{label}</h3>
+              {pagoConfirmado && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', background: '#eafaf0', border: '1px solid #b8e6c9', borderRadius: 6, padding: '3px 8px' }}>
+                  ✓ Pago del mes confirmado con comprobante
+                </span>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <StatTile label="Sueldo del mes" valor={fmtMoney(sueldoMensual)} />
               <StatTile label="Adelantado" valor={fmtMoney(adelantadoMes)} tono={adelantadoMes > 0 ? 'alerta' : 'neutral'} />
