@@ -2746,6 +2746,10 @@ function PanelHistorialSueldoFijo({ trabajador, diariosTrabajador, ajustesTrabaj
     mesDeSemana.set(s.key, mesKey)
   }
   for (const a of adelantosTrabajador) mesesSet.add(getPeriodo(a.fecha, 'mes').key)
+  // El mes actual siempre se muestra, aunque todavía no tenga ningún día trabajado ni
+  // adelanto cargado -- si no, no había manera de "entrar" a septiembre para cargarle
+  // un adelanto antes de que exista algo ahí (reportado por Alexandra con Fabriel).
+  mesesSet.add(getPeriodo(new Date().toISOString().slice(0, 10), 'mes').key)
 
   const meses = Array.from(mesesSet).sort((a, b) => b.localeCompare(a))
 
