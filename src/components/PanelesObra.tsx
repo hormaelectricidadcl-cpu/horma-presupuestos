@@ -2766,10 +2766,24 @@ function PanelHistorialSueldoFijo({ trabajador, diariosTrabajador, ajustesTrabaj
         return (
           <div key={mesKey} className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
             <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>{label}</h3>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <StatTile label="Sueldo del mes" valor={fmtMoney(sueldoMensual)} />
               <StatTile label="Adelantado" valor={fmtMoney(adelantadoMes)} tono={adelantadoMes > 0 ? 'alerta' : 'neutral'} />
               <StatTile label="Resta pagar" valor={fmtMoney(restaPagar)} tono={restaPagar >= 0 ? 'positivo' : 'negativo'} />
+            </div>
+
+            {/* Comprobante del pago mensual (el sueldo/"Resta pagar" grande) -- distinto de los
+                comprobantes de viático semanal más abajo. Usa una clave sintética ("mensual-...")
+                en vez de una semana real, porque este pago no corresponde a ninguna semana. */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <p style={{ fontSize: 12, color: 'var(--muted)' }}>Comprobante del pago del mes</p>
+              <ComprobanteCelda
+                trabajador={trabajador.nombre}
+                semanaKey={`mensual-${mesKey}`}
+                montoCalculado={restaPagar}
+                comprobante={ultimoComprobante(`mensual-${mesKey}`)}
+                onSubido={onRecargar}
+              />
             </div>
 
             {adelantosDelMes.length > 0 && (
@@ -3614,7 +3628,7 @@ export function PanelTrabajadores() {
                 <button
                   onClick={() => setTrabajadorSel(t.nombre)}
                   style={{
-                    width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                    width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text)',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap',
                   }}
                 >
