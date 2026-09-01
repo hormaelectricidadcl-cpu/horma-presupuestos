@@ -65,6 +65,7 @@ interface CobroRow {
   obra: string
   cliente: string
   monto: string
+  comprobanteUrl: string
 }
 
 interface SubcontratoRow {
@@ -72,6 +73,7 @@ interface SubcontratoRow {
   obra: string
   subcontrato: string
   monto: string
+  comprobanteUrl: string
 }
 
 interface TrabajoPuntualRow {
@@ -80,6 +82,7 @@ interface TrabajoPuntualRow {
   direccion: string
   trabajador: string
   monto: string
+  comprobanteUrl: string
 }
 
 interface UsoStockRow {
@@ -137,6 +140,8 @@ export default function Reporte({ token, embedded = false }: Props) {
   // hacía que un segundo guardado el mismo día borrara lo del primero.
   const [comprasColapsadas, setComprasColapsadas] = useState<Set<string>>(new Set())
   const [subiendoBoletaIdx, setSubiendoBoletaIdx] = useState<number | null>(null)
+  // Captura de comprobante para Cobros/Subcontratos/Trabajo puntual -- 'cobro-0', 'subcontrato-2', etc.
+  const [subiendoComprobante, setSubiendoComprobante] = useState<string | null>(null)
   const [cobros, setCobros] = useState<CobroRow[]>([])
   const [subcontratos, setSubcontratos] = useState<SubcontratoRow[]>([])
   const [trabajosPuntuales, setTrabajosPuntuales] = useState<TrabajoPuntualRow[]>([])
@@ -191,22 +196,22 @@ export default function Reporte({ token, embedded = false }: Props) {
     setUsosStock((salidasDia || []).map((s: { id: string; material_id: string; cantidad: number; obra: string | null }) => ({
       id: s.id, materialId: s.material_id, cantidad: String(s.cantidad), obra: s.obra || '',
     })))
-    const cobrosLegado = (cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number }) => ({
-      id: c.id, origen: 'reportes_cobros' as const, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto),
+    const cobrosLegado = (cobr || []).map((c: { id: string; obra: string | null; cliente: string; monto: number; comprobante_url: string | null }) => ({
+      id: c.id, origen: 'reportes_cobros' as const, obra: c.obra || '', cliente: c.cliente, monto: String(c.monto), comprobanteUrl: c.comprobante_url || '',
     }))
     type AbonoConCuenta = { id: string; monto: number; cuentas_por_cobrar: { obra: string | null; pagador: string }[] | { obra: string | null; pagador: string } | null }
     const cobrosDeCuenta = ((aboAquiDia || []) as AbonoConCuenta[])
       .map(a => ({ ...a, cuenta: Array.isArray(a.cuentas_por_cobrar) ? a.cuentas_por_cobrar[0] : a.cuentas_por_cobrar }))
       .filter(a => a.cuenta?.obra)
       .map(a => ({
-        id: a.id, origen: 'abono_cuenta' as const, obra: a.cuenta!.obra as string, cliente: a.cuenta!.pagador, monto: String(a.monto),
+        id: a.id, origen: 'abono_cuenta' as const, obra: a.cuenta!.obra as string, cliente: a.cuenta!.pagador, monto: String(a.monto), comprobanteUrl: '',
       }))
     setCobros([...cobrosLegado, ...cobrosDeCuenta])
-    setSubcontratos((subc || []).map((s: { id: string; obra: string | null; subcontrato: string; monto: number }) => ({
-      id: s.id, obra: s.obra || '', subcontrato: s.subcontrato, monto: String(s.monto),
+    setSubcontratos((subc || []).map((s: { id: string; obra: string | null; subcontrato: string; monto: number; comprobante_url: string | null }) => ({
+      id: s.id, obra: s.obra || '', subcontrato: s.subcontrato, monto: String(s.monto), comprobanteUrl: s.comprobante_url || '',
     })))
-    setTrabajosPuntuales((punt || []).map((p: { id: string; descripcion: string; direccion: string | null; trabajador: string | null; monto: number | null }) => ({
-      id: p.id, descripcion: p.descripcion, direccion: p.direccion || '', trabajador: p.trabajador || '', monto: p.monto != null ? String(p.monto) : '',
+    setTrabajosPuntuales((punt || []).map((p: { id: string; descripcion: string; direccion: string | null; trabajador: string | null; monto: number | null; comprobante_url: string | null }) => ({
+      id: p.id, descripcion: p.descripcion, direccion: p.direccion || '', trabajador: p.trabajador || '', monto: p.monto != null ? String(p.monto) : '', comprobanteUrl: p.comprobante_url || '',
     })))
     setLoading(false)
   }, [])
@@ -345,7 +350,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
 
   function agregarCobro() {
-    setCobros(prev => [...prev, { obra: '', cliente: '', monto: '' }])
+    setCobros(prev => [...prev, { obra: '', cliente: '', monto: '', comprobanteUrl: '' }])
   }
   function actualizarCobro(idx: number, patch: Partial<CobroRow>) {
     setCobros(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
@@ -356,7 +361,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
 
   function agregarSubcontrato() {
-    setSubcontratos(prev => [...prev, { obra: '', subcontrato: '', monto: '' }])
+    setSubcontratos(prev => [...prev, { obra: '', subcontrato: '', monto: '', comprobanteUrl: '' }])
   }
   function actualizarSubcontrato(idx: number, patch: Partial<SubcontratoRow>) {
     setSubcontratos(prev => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
@@ -367,7 +372,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
 
   function agregarTrabajoPuntual() {
-    setTrabajosPuntuales(prev => [...prev, { descripcion: '', direccion: '', trabajador: '', monto: '' }])
+    setTrabajosPuntuales(prev => [...prev, { descripcion: '', direccion: '', trabajador: '', monto: '', comprobanteUrl: '' }])
   }
   function actualizarTrabajoPuntual(idx: number, patch: Partial<TrabajoPuntualRow>) {
     setTrabajosPuntuales(prev => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
@@ -375,6 +380,84 @@ export default function Reporte({ token, embedded = false }: Props) {
   function quitarTrabajoPuntual(idx: number) {
     if (!window.confirm('¿Seguro que quieres quitar este trabajo puntual?')) return
     setTrabajosPuntuales(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  // Subida genérica de captura (comprobante/foto) para Cobros, Subcontratos y Trabajo
+  // puntual -- sube la imagen y además la manda a leer con la misma IA que ya lee el
+  // comprobante de Pago semanal (/api/parse-comprobante, piensa en captura de
+  // transferencia): así el monto se completa solo y Gustavo no tiene que tipearlo a
+  // mano ni arriesgarse a un error de dedo. Si la IA no puede leerlo, avisa y deja
+  // completar a mano -- igual criterio que la boleta de Compras.
+  async function subirCaptura(prefijo: string, archivo: File): Promise<string | null> {
+    const ext = archivo.name.split('.').pop() || 'jpg'
+    const filename = `${prefijo}-${Date.now()}.${ext}`
+    const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+    if (error) {
+      alert('Error al subir la captura: ' + error.message)
+      return null
+    }
+    const { data: urlData } = supabase.storage.from('audio-notas').getPublicUrl(data.path)
+    return urlData.publicUrl
+  }
+
+  async function leerMontoDeCaptura(url: string): Promise<number | null> {
+    const res = await fetch('/api/parse-comprobante', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+    const resultado = await res.json()
+    if (!res.ok) throw new Error(resultado.error || 'error desconocido')
+    return resultado.monto != null ? Number(resultado.monto) : null
+  }
+
+  async function subirCapturaCobro(idx: number, archivo: File) {
+    setSubiendoComprobante(`cobro-${idx}`)
+    try {
+      const url = await subirCaptura('cobro', archivo)
+      if (!url) return
+      actualizarCobro(idx, { comprobanteUrl: url })
+      try {
+        const monto = await leerMontoDeCaptura(url)
+        if (monto != null) actualizarCobro(idx, { monto: String(monto) })
+      } catch (err) {
+        alert('La captura se guardó, pero la IA no pudo leer el monto (' + String(err) + '). Complétalo a mano.')
+      }
+    } finally {
+      setSubiendoComprobante(null)
+    }
+  }
+  async function subirCapturaSubcontrato(idx: number, archivo: File) {
+    setSubiendoComprobante(`subcontrato-${idx}`)
+    try {
+      const url = await subirCaptura('subcontrato', archivo)
+      if (!url) return
+      actualizarSubcontrato(idx, { comprobanteUrl: url })
+      try {
+        const monto = await leerMontoDeCaptura(url)
+        if (monto != null) actualizarSubcontrato(idx, { monto: String(monto) })
+      } catch (err) {
+        alert('La captura se guardó, pero la IA no pudo leer el monto (' + String(err) + '). Complétalo a mano.')
+      }
+    } finally {
+      setSubiendoComprobante(null)
+    }
+  }
+  async function subirCapturaTrabajoPuntual(idx: number, archivo: File) {
+    setSubiendoComprobante(`trabajo-${idx}`)
+    try {
+      const url = await subirCaptura('trabajo-puntual', archivo)
+      if (!url) return
+      actualizarTrabajoPuntual(idx, { comprobanteUrl: url })
+      try {
+        const monto = await leerMontoDeCaptura(url)
+        if (monto != null) actualizarTrabajoPuntual(idx, { monto: String(monto) })
+      } catch (err) {
+        alert('La captura se guardó, pero la IA no pudo leer el monto (' + String(err) + '). Complétalo a mano.')
+      }
+    } finally {
+      setSubiendoComprobante(null)
+    }
   }
 
   async function enviarReporte() {
@@ -627,7 +710,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     await supabase.from('reportes_cobros').delete().eq('fecha', fecha)
     if (cobrosParaLegado.length) {
       const { error: e3 } = await supabase.from('reportes_cobros').insert(
-        cobrosParaLegado.map(c => ({ fecha, obra: c.obra || null, cliente: c.cliente.trim(), monto: Number(c.monto) }))
+        cobrosParaLegado.map(c => ({ fecha, obra: c.obra || null, cliente: c.cliente.trim(), monto: Number(c.monto), comprobante_url: c.comprobanteUrl || null }))
       )
       if (e3) {
         setError('Error al guardar los cobros. Intenta de nuevo.')
@@ -642,7 +725,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     const cobrosNuevosParaCuenta = cobrosParaCuenta.filter(c => !c.fila.id)
     if (cobrosNuevosParaCuenta.length) {
       const { error: e3b } = await supabase.from('abonos_cuenta').insert(
-        cobrosNuevosParaCuenta.map(c => ({ cuenta_id: c.cuentaId, fecha, monto: Number(c.fila.monto) }))
+        cobrosNuevosParaCuenta.map(c => ({ cuenta_id: c.cuentaId, fecha, monto: Number(c.fila.monto), comprobante_url: c.fila.comprobanteUrl || null }))
       )
       if (e3b) {
         setError('Error al guardar los cobros. Intenta de nuevo.')
@@ -654,7 +737,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     await supabase.from('reportes_subcontratos').delete().eq('fecha', fecha)
     if (subcontratosValidos.length) {
       const { error: e4 } = await supabase.from('reportes_subcontratos').insert(
-        subcontratosValidos.map(s => ({ fecha, obra: s.obra || null, subcontrato: s.subcontrato.trim(), monto: Number(s.monto) }))
+        subcontratosValidos.map(s => ({ fecha, obra: s.obra || null, subcontrato: s.subcontrato.trim(), monto: Number(s.monto), comprobante_url: s.comprobanteUrl || null }))
       )
       if (e4) {
         setError('Error al guardar los subcontratos. Intenta de nuevo.')
@@ -666,7 +749,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     await supabase.from('reportes_trabajos_puntuales').delete().eq('fecha', fecha)
     if (trabajosValidos.length) {
       const { error: e5 } = await supabase.from('reportes_trabajos_puntuales').insert(
-        trabajosValidos.map(p => ({ fecha, descripcion: p.descripcion.trim(), direccion: p.direccion.trim() || null, trabajador: p.trabajador || null, monto: p.monto.trim() ? Number(p.monto) : null }))
+        trabajosValidos.map(p => ({ fecha, descripcion: p.descripcion.trim(), direccion: p.direccion.trim() || null, trabajador: p.trabajador || null, monto: p.monto.trim() ? Number(p.monto) : null, comprobante_url: p.comprobanteUrl || null }))
       )
       if (e5) {
         setError('Error al guardar los trabajos puntuales. Intenta de nuevo.')
@@ -1101,6 +1184,30 @@ export default function Reporte({ token, embedded = false }: Props) {
                           </select>
                         </div>
                       </div>
+                      <div>
+                        <label className="btn btn-secondary" style={{ display: 'inline-block', fontSize: 13, cursor: subiendoComprobante === `cobro-${idx}` ? 'default' : 'pointer', opacity: subiendoComprobante === `cobro-${idx}` ? 0.6 : 1 }}>
+                          {subiendoComprobante === `cobro-${idx}` ? 'Leyendo captura...' : c.comprobanteUrl ? 'Cambiar captura' : '+ Subir captura'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={subiendoComprobante === `cobro-${idx}`}
+                            style={{ display: 'none' }}
+                            onChange={e => {
+                              const archivo = e.target.files?.[0]
+                              e.target.value = ''
+                              if (archivo) subirCapturaCobro(idx, archivo)
+                            }}
+                          />
+                        </label>
+                        {c.comprobanteUrl && (
+                          <a href={c.comprobanteUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 10, fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
+                            Ver captura
+                          </a>
+                        )}
+                        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                          Sube la captura y la IA completa el monto — revísalo antes de guardar.
+                        </p>
+                      </div>
                       <button type="button" className="btn btn-ghost" onClick={() => quitarCobro(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
                         ✕ Quitar
                       </button>
@@ -1146,6 +1253,30 @@ export default function Reporte({ token, embedded = false }: Props) {
                           {obras.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                       </div>
+                    </div>
+                    <div>
+                      <label className="btn btn-secondary" style={{ display: 'inline-block', fontSize: 13, cursor: subiendoComprobante === `subcontrato-${idx}` ? 'default' : 'pointer', opacity: subiendoComprobante === `subcontrato-${idx}` ? 0.6 : 1 }}>
+                        {subiendoComprobante === `subcontrato-${idx}` ? 'Leyendo captura...' : s.comprobanteUrl ? 'Cambiar captura' : '+ Subir captura'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={subiendoComprobante === `subcontrato-${idx}`}
+                          style={{ display: 'none' }}
+                          onChange={e => {
+                            const archivo = e.target.files?.[0]
+                            e.target.value = ''
+                            if (archivo) subirCapturaSubcontrato(idx, archivo)
+                          }}
+                        />
+                      </label>
+                      {s.comprobanteUrl && (
+                        <a href={s.comprobanteUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 10, fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
+                          Ver captura
+                        </a>
+                      )}
+                      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                        Sube la captura y la IA completa el monto — revísalo antes de guardar.
+                      </p>
                     </div>
                     <button type="button" className="btn btn-ghost" onClick={() => quitarSubcontrato(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
                       ✕ Quitar
@@ -1200,6 +1331,30 @@ export default function Reporte({ token, embedded = false }: Props) {
                         value={p.monto}
                         onChange={e => actualizarTrabajoPuntual(idx, { monto: e.target.value })}
                       />
+                    </div>
+                    <div>
+                      <label className="btn btn-secondary" style={{ display: 'inline-block', fontSize: 13, cursor: subiendoComprobante === `trabajo-${idx}` ? 'default' : 'pointer', opacity: subiendoComprobante === `trabajo-${idx}` ? 0.6 : 1 }}>
+                        {subiendoComprobante === `trabajo-${idx}` ? 'Leyendo captura...' : p.comprobanteUrl ? 'Cambiar captura' : '+ Subir captura'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={subiendoComprobante === `trabajo-${idx}`}
+                          style={{ display: 'none' }}
+                          onChange={e => {
+                            const archivo = e.target.files?.[0]
+                            e.target.value = ''
+                            if (archivo) subirCapturaTrabajoPuntual(idx, archivo)
+                          }}
+                        />
+                      </label>
+                      {p.comprobanteUrl && (
+                        <a href={p.comprobanteUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 10, fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
+                          Ver captura
+                        </a>
+                      )}
+                      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                        Sube la captura y la IA completa el monto — revísalo antes de guardar.
+                      </p>
                     </div>
                     <button type="button" className="btn btn-ghost" onClick={() => quitarTrabajoPuntual(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>
                       ✕ Quitar

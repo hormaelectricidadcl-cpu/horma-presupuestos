@@ -326,6 +326,92 @@ const ESTADO_OBRA_LABELS: Record<EstadoObra, string> = {
   cerrada: 'Cerrada',
 }
 
+// Resumen por obra (cobrado, gastado, saldo, falta por cobrar) -- extraído de
+// PanelObras para que PanelConsultasIA (chat con IA) use exactamente el mismo
+// cálculo, y nunca le muestre a Gustavo un número de saldo distinto al de la
+// pestaña Obras.
+export function calcularResumenObras(
+  obrasMaestro: Obra[],
+  diarios: ReporteTrabajadorDia[],
+  compras: ReporteCompraDia[],
+  cobros: ReporteCobroDia[],
+  subcontratos: ReporteSubcontratoDia[],
+  cuentas: CuentaPorCobrar[],
+  abonos: AbonoCuenta[],
+  subcontratosMaster: SubcontratoMaster[],
+  trabajadoresTarifas: Trabajador[],
+) {
+  const nombres = Array.from(new Set([
+    ...obrasMaestro.map(o => o.nombre),
+    ...diarios.filter(d => d.presente && d.obra).map(d => d.obra as string),
+    ...compras.filter(c => c.obra).map(c => c.obra as string),
+    ...cobros.filter(c => c.obra).map(c => c.obra as string),
+    ...subcontratos.filter(s => s.obra).map(s => s.obra as string),
+    ...cuentas.filter(c => c.obra).map(c => c.obra as string),
+  ]))
+
+  return nombres.map(obra => {
+    const maestro = obrasMaestro.find(o => o.nombre === obra)
+    const diariosObra = diarios.filter(d => d.obra === obra && d.presente)
+    const comprasObra = compras.filter(c => c.obra === obra)
+    const cobrosObra = cobros.filter(c => c.obra === obra)
+    const subcontratosObra = subcontratos.filter(s => s.obra === obra)
+    // Plata cobrada por esta obra vía el sistema manual de cuentas por cobrar
+    // (cuenta.obra === esta obra) — sin esto, obras como "Doctora Eloísa 5860"
+    // muestran Cobrado $0 aunque ya se hayan recibido varios abonos, porque esos
+    // abonos viven en abonos_cuenta, no en reportes_cobros.
+    const cuentasObra = cuentas.filter(c => c.obra === obra)
+    const cuentaIdsObra = new Set(cuentasObra.map(c => c.id))
+    const cobradoManual = abonos.filter(a => cuentaIdsObra.has(a.cuenta_id)).reduce((sum, a) => sum + a.monto, 0)
+    // Lo mismo que "Pendiente" en la pestaña Cuentas por cobrar, sumado — para
+    // que Gustavo vea el mismo número acá sin tener que abrir otra pestaña y
+    // hacer la cuenta él mismo. Si la obra tiene cuenta(s) manual(es), se suma
+    // el restante de esas; si no, se usa presupuesto de la obra menos cobrado.
+    const pendienteManual = cuentasObra.reduce((sum, c) => {
+      const abonadoCuenta = abonos.filter(a => a.cuenta_id === c.id).reduce((s, a) => s + a.monto, 0)
+      return sum + Math.max(c.total_presupuesto - abonadoCuenta, 0)
+    }, 0)
+
+    const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
+    const contratosObra = subcontratosMaster.filter(s => s.obra === obra)
+    const gastoSubcontratos = contratosObra.length > 0
+      ? contratosObra.reduce((sum, s) => sum + s.total_contrato, 0)
+      : subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const pagadoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    const adelantos = diariosObra.filter(d => d.tipo_pago !== 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
+    const pagosSemanales = diariosObra.filter(d => d.tipo_pago === 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
+    const manoDeObra = diariosObra.reduce((sum, d) => {
+      const tarifa = trabajadoresTarifas.find(t => t.nombre === d.trabajador)
+      const base = d.fraccion_jornada * (tarifa?.tarifa_diaria || 0)
+      const viaticoMonto = d.viatico ? (tarifa?.viatico_diario || 0) : 0
+      return sum + base + viaticoMonto
+    }, 0)
+    const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
+    const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0) + cobradoManual
+    const saldo = cobrado - gastoCompras - pagadoSubcontratos - adelantos - pagosSemanales
+    // Si la obra tiene cuenta(s) por cobrar, el presupuesto real es la SUMA de
+    // esas cuentas — no el campo suelto de la obra, que puede quedar
+    // desactualizado (ej. alguien lo edita a mano reflejando solo una parte,
+    // como paso con Luis Carrera). Con cuenta(s), ese campo pasa a ser de solo
+    // lectura — se edita cuenta por cuenta desde Cuentas por cobrar.
+    const tieneCuentas = cuentasObra.length > 0
+    const presupuestoTotal = tieneCuentas
+      ? cuentasObra.reduce((sum, c) => sum + c.total_presupuesto, 0)
+      : (maestro?.presupuesto_total ?? null)
+    const activa = maestro?.activa ?? true
+    const estadoObra = maestro?.estado_obra ?? 'en_curso'
+    const faltaPorCobrar = tieneCuentas
+      ? pendienteManual
+      : (presupuestoTotal != null ? Math.max(presupuestoTotal - cobrado, 0) : null)
+
+    return {
+      obra, obraId: maestro?.id, activa, estadoObra,
+      fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
+      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
+    }
+  })
+}
+
 export function PanelObras() {
   const [diarios, setDiarios] = useState<ReporteTrabajadorDia[]>([])
   const [compras, setCompras] = useState<ReporteCompraDia[]>([])
@@ -528,75 +614,7 @@ export function PanelObras() {
 
   if (loading) return <div className="spinner" />
 
-  const nombres = Array.from(new Set([
-    ...obrasMaestro.map(o => o.nombre),
-    ...diarios.filter(d => d.presente && d.obra).map(d => d.obra as string),
-    ...compras.filter(c => c.obra).map(c => c.obra as string),
-    ...cobros.filter(c => c.obra).map(c => c.obra as string),
-    ...subcontratos.filter(s => s.obra).map(s => s.obra as string),
-    ...cuentas.filter(c => c.obra).map(c => c.obra as string),
-  ]))
-
-  const resumen = nombres.map(obra => {
-    const maestro = obrasMaestro.find(o => o.nombre === obra)
-    const diariosObra = diarios.filter(d => d.obra === obra && d.presente)
-    const comprasObra = compras.filter(c => c.obra === obra)
-    const cobrosObra = cobros.filter(c => c.obra === obra)
-    const subcontratosObra = subcontratos.filter(s => s.obra === obra)
-    // Plata cobrada por esta obra vía el sistema manual de cuentas por cobrar
-    // (cuenta.obra === esta obra) — sin esto, obras como "Doctora Eloísa 5860"
-    // muestran Cobrado $0 aunque ya se hayan recibido varios abonos, porque esos
-    // abonos viven en abonos_cuenta, no en reportes_cobros.
-    const cuentasObra = cuentas.filter(c => c.obra === obra)
-    const cuentaIdsObra = new Set(cuentasObra.map(c => c.id))
-    const cobradoManual = abonos.filter(a => cuentaIdsObra.has(a.cuenta_id)).reduce((sum, a) => sum + a.monto, 0)
-    // Lo mismo que "Pendiente" en la pestaña Cuentas por cobrar, sumado — para
-    // que Gustavo vea el mismo número acá sin tener que abrir otra pestaña y
-    // hacer la cuenta él mismo. Si la obra tiene cuenta(s) manual(es), se suma
-    // el restante de esas; si no, se usa presupuesto de la obra menos cobrado.
-    const pendienteManual = cuentasObra.reduce((sum, c) => {
-      const abonadoCuenta = abonos.filter(a => a.cuenta_id === c.id).reduce((s, a) => s + a.monto, 0)
-      return sum + Math.max(c.total_presupuesto - abonadoCuenta, 0)
-    }, 0)
-
-    const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
-    const contratosObra = subcontratosMaster.filter(s => s.obra === obra)
-    const gastoSubcontratos = contratosObra.length > 0
-      ? contratosObra.reduce((sum, s) => sum + s.total_contrato, 0)
-      : subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
-    const pagadoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
-    const adelantos = diariosObra.filter(d => d.tipo_pago !== 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
-    const pagosSemanales = diariosObra.filter(d => d.tipo_pago === 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
-    const manoDeObra = diariosObra.reduce((sum, d) => {
-      const tarifa = trabajadoresTarifas.find(t => t.nombre === d.trabajador)
-      const base = d.fraccion_jornada * (tarifa?.tarifa_diaria || 0)
-      const viaticoMonto = d.viatico ? (tarifa?.viatico_diario || 0) : 0
-      return sum + base + viaticoMonto
-    }, 0)
-    const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
-    const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0) + cobradoManual
-    const saldo = cobrado - gastoCompras - pagadoSubcontratos - adelantos - pagosSemanales
-    // Si la obra tiene cuenta(s) por cobrar, el presupuesto real es la SUMA de
-    // esas cuentas — no el campo suelto de la obra, que puede quedar
-    // desactualizado (ej. alguien lo edita a mano reflejando solo una parte,
-    // como paso con Luis Carrera). Con cuenta(s), ese campo pasa a ser de solo
-    // lectura — se edita cuenta por cuenta desde Cuentas por cobrar.
-    const tieneCuentas = cuentasObra.length > 0
-    const presupuestoTotal = tieneCuentas
-      ? cuentasObra.reduce((sum, c) => sum + c.total_presupuesto, 0)
-      : (maestro?.presupuesto_total ?? null)
-    const activa = maestro?.activa ?? true
-    const estadoObra = maestro?.estado_obra ?? 'en_curso'
-    const faltaPorCobrar = tieneCuentas
-      ? pendienteManual
-      : (presupuestoTotal != null ? Math.max(presupuestoTotal - cobrado, 0) : null)
-
-    return {
-      obra, obraId: maestro?.id, activa, estadoObra,
-      fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
-      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
-    }
-  })
+  const resumen = calcularResumenObras(obrasMaestro, diarios, compras, cobros, subcontratos, cuentas, abonos, subcontratosMaster, trabajadoresTarifas)
 
   const enCurso = resumen.filter(o => o.activa)
   const culminadas = resumen.filter(o => !o.activa)
@@ -806,14 +824,23 @@ export function PanelObras() {
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)' }}>
                           Inicio
                           <input type="date" value={o.fechaInicio || ''} onChange={e => guardarFechaObra(o.obraId as string, 'fecha_inicio', e.target.value)} style={{ fontSize: 12, padding: '3px 6px', width: 'auto' }} />
+                          {o.fechaInicio && (
+                            <button type="button" onClick={() => guardarFechaObra(o.obraId as string, 'fecha_inicio', '')} title="Borrar fecha" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: 13, padding: 0 }}>✕</button>
+                          )}
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)' }}>
                           Fin
                           <input type="date" value={o.fechaFin || ''} onChange={e => guardarFechaObra(o.obraId as string, 'fecha_fin', e.target.value)} style={{ fontSize: 12, padding: '3px 6px', width: 'auto' }} />
+                          {o.fechaFin && (
+                            <button type="button" onClick={() => guardarFechaObra(o.obraId as string, 'fecha_fin', '')} title="Borrar fecha" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: 13, padding: 0 }}>✕</button>
+                          )}
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)' }}>
                           Garantía hasta
                           <input type="date" value={o.garantiaHasta || ''} onChange={e => guardarFechaObra(o.obraId as string, 'garantia_hasta', e.target.value)} style={{ fontSize: 12, padding: '3px 6px', width: 'auto' }} />
+                          {o.garantiaHasta && (
+                            <button type="button" onClick={() => guardarFechaObra(o.obraId as string, 'garantia_hasta', '')} title="Borrar fecha" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: 13, padding: 0 }}>✕</button>
+                          )}
                         </label>
                       </div>
                     )}
@@ -2301,6 +2328,20 @@ function DetalleAjustesAdelantos({ fila, semanaKey, onGuardado }: { fila: FilaPa
     onGuardado()
   }
 
+  async function borrarAjuste(id: string, motivo: string) {
+    if (!window.confirm(`¿Borrar el ajuste "${motivo}"? No se puede deshacer.`)) return
+    const { error } = await supabase.from('ajustes_pago_semanal').delete().eq('id', id)
+    if (error) { alert('No se pudo borrar el ajuste: ' + error.message); return }
+    onGuardado()
+  }
+
+  async function borrarAdelanto(id: string, monto: number) {
+    if (!window.confirm(`¿Borrar el adelanto de ${fmtMoney(monto)}? No se puede deshacer.`)) return
+    const { error } = await supabase.from('adelantos_trabajador').delete().eq('id', id)
+    if (error) { alert('No se pudo borrar el adelanto: ' + error.message); return }
+    onGuardado()
+  }
+
   async function subirComprobanteAdelanto(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0]
     e.target.value = ''
@@ -2358,10 +2399,13 @@ function DetalleAjustesAdelantos({ fila, semanaKey, onGuardado }: { fila: FilaPa
         <div>
           <p style={{ fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>Ajustes de la semana</p>
           {fila.ajustes.map(a => (
-            <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0' }}>
+            <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '3px 0' }}>
               <span style={{ color: 'var(--text)' }}>{a.motivo}</span>
-              <span style={{ fontWeight: 700, color: a.monto >= 0 ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
-                {a.monto >= 0 ? '+' : ''}{fmtMoney(a.monto)}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: 700, color: a.monto >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                  {a.monto >= 0 ? '+' : ''}{fmtMoney(a.monto)}
+                </span>
+                <button onClick={() => borrarAjuste(a.id, a.motivo)} title="Borrar ajuste" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: 13, padding: 0 }}>✕</button>
               </span>
             </div>
           ))}
@@ -2372,12 +2416,15 @@ function DetalleAjustesAdelantos({ fila, semanaKey, onGuardado }: { fila: FilaPa
         <div>
           <p style={{ fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>Adelantos</p>
           {fila.adelantosQueRestan.map(a => (
-            <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0' }}>
+            <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '3px 0' }}>
               <span style={{ color: 'var(--text)' }}>
                 {a.fecha.split('-').reverse().join('/')}{a.nota ? ` — ${a.nota}` : ''}
                 {a.comprobante_url && <a href={a.comprobante_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: 'var(--primary)' }}>Ver comprobante</a>}
               </span>
-              <span style={{ fontWeight: 700, color: 'var(--danger)', whiteSpace: 'nowrap' }}>-{fmtMoney(a.monto)}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: 700, color: 'var(--danger)' }}>-{fmtMoney(a.monto)}</span>
+                <button onClick={() => borrarAdelanto(a.id, a.monto)} title="Borrar adelanto" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: 13, padding: 0 }}>✕</button>
+              </span>
             </div>
           ))}
           {fila.sueldoFijo && (
@@ -5374,6 +5421,165 @@ export function PanelIdeasContenido({ soloLectura = false }: { soloLectura?: boo
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/* ─── Consultas con IA — Gustavo pregunta, la IA responde con datos reales de hoy ──── */
+interface MensajeChatIA {
+  rol: 'usuario' | 'ia'
+  texto: string
+}
+
+export function PanelConsultasIA() {
+  const [cargando, setCargando] = useState(true)
+  const [contexto, setContexto] = useState<Record<string, unknown> | null>(null)
+  const [mensajes, setMensajes] = useState<MensajeChatIA[]>([])
+  const [pregunta, setPregunta] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState('')
+
+  // Junta el mismo tipo de datos que ya se muestran en Obras/Pago semanal/Cuentas por
+  // cobrar y los resume en un JSON chico para pasarle a la IA como contexto -- reusa
+  // calcularResumenObras/calcularFilaPagoSemanal (misma fuente de verdad que esos
+  // paneles) en vez de recalcular los números por su cuenta.
+  const cargarContexto = useCallback(async () => {
+    setCargando(true)
+    const [
+      { data: diarios }, { data: compras }, { data: cobros }, { data: subcontratos },
+      { data: obrasMaestro }, { data: trabajadoresTarifas }, { data: subcontratosMaster },
+      { data: cuentas }, { data: abonos }, { data: ajustes }, { data: adelantos },
+    ] = await Promise.all([
+      supabase.from('reportes_diarios').select('*'),
+      supabase.from('reportes_compras').select('*'),
+      supabase.from('reportes_cobros').select('*'),
+      supabase.from('reportes_subcontratos').select('*'),
+      supabase.from('obras').select('*').order('nombre'),
+      supabase.from('trabajadores').select('*'),
+      supabase.from('subcontratos_master').select('*'),
+      supabase.from('cuentas_por_cobrar').select('*'),
+      supabase.from('abonos_cuenta').select('*'),
+      supabase.from('ajustes_pago_semanal').select('*'),
+      supabase.from('adelantos_trabajador').select('*'),
+    ])
+
+    const diariosT = (diarios as ReporteTrabajadorDia[]) || []
+    const tarifasT = (trabajadoresTarifas as Trabajador[]) || []
+    const cuentasT = (cuentas as CuentaPorCobrar[]) || []
+    const abonosT = (abonos as AbonoCuenta[]) || []
+
+    const resumenObras = calcularResumenObras(
+      (obrasMaestro as Obra[]) || [], diariosT, (compras as ReporteCompraDia[]) || [],
+      (cobros as ReporteCobroDia[]) || [], (subcontratos as ReporteSubcontratoDia[]) || [], cuentasT,
+      abonosT, (subcontratosMaster as SubcontratoMaster[]) || [], tarifasT,
+    )
+
+    const semanas = agruparPorPeriodo('semana', diariosT, [], [], [])
+    const semanaActual = semanas.find(s => s.enCurso) || semanas[0] || null
+    const semanaPagoActual = semanaActual ? (() => {
+      const { inicio, fin } = semanaRango(semanaActual.key)
+      const filas = tarifasT
+        .map(t => {
+          const diasPresentes = semanaActual.diarios.filter(d => d.trabajador === t.nombre && d.presente)
+          const ajustesDeLaSemana = ((ajustes as AjustePagoSemanal[]) || []).filter(a => a.trabajador === t.nombre && a.semana_key === semanaActual.key)
+          const adelantosDeLaSemana = ((adelantos as AdelantoTrabajador[]) || []).filter(a => a.trabajador === t.nombre && a.fecha >= inicio && a.fecha <= fin)
+          return calcularFilaPagoSemanal(t, diasPresentes, ajustesDeLaSemana, adelantosDeLaSemana)
+        })
+        .filter(f => f.dias > 0 || f.ajustes.length > 0 || f.adelantosQueRestan.length > 0)
+      return { rango: `${inicio} a ${fin}`, trabajadores: filas.map(f => ({ trabajador: f.trabajador, sueldoFijo: f.sueldoFijo, dias: f.dias, ganado: f.ganado, viatico: f.viatico, ajustes: f.totalAjustes, adelantos: f.totalAdelantosQueRestan, neto: f.neto })) }
+    })() : null
+
+    const cuentasSueltas = cuentasT
+      .filter(c => !c.obra && c.activa)
+      .map(c => {
+        const abonado = abonosT.filter(a => a.cuenta_id === c.id).reduce((s, a) => s + a.monto, 0)
+        return { pagador: c.pagador, concepto: c.concepto, totalPresupuesto: c.total_presupuesto, abonado, pendiente: Math.max(c.total_presupuesto - abonado, 0) }
+      })
+
+    setContexto({
+      fechaHoy: new Date().toISOString().slice(0, 10),
+      obras: resumenObras.filter(o => o.activa).map(o => ({
+        nombre: o.obra, cliente: o.cliente, estado: o.estadoObra,
+        presupuestoTotal: o.presupuestoTotal, cobrado: o.cobrado, faltaPorCobrar: o.faltaPorCobrar,
+        gastoCompras: o.gastoCompras, gastoSubcontratos: o.gastoSubcontratos, manoDeObra: o.manoDeObra, saldo: o.saldo,
+        fechaInicio: o.fechaInicio, fechaFin: o.fechaFin, garantiaHasta: o.garantiaHasta,
+      })),
+      semanaPagoActual,
+      cuentasPorCobrarSueltas: cuentasSueltas,
+      trabajadores: tarifasT.filter(t => t.activo).map(t => ({ nombre: t.nombre, tarifaDiaria: t.tarifa_diaria, viaticoDiario: t.viatico_diario, sueldoFijo: t.tarifa_diaria === 0 })),
+    })
+    setCargando(false)
+  }, [])
+
+  useEffect(() => { cargarContexto() }, [cargarContexto])
+
+  async function preguntar() {
+    if (!pregunta.trim() || !contexto || enviando) return
+    const preguntaActual = pregunta.trim()
+    const historialParaEnviar = mensajes.slice(-8)
+    setMensajes(prev => [...prev, { rol: 'usuario', texto: preguntaActual }])
+    setPregunta('')
+    setEnviando(true)
+    setError('')
+    try {
+      const res = await fetch('/api/chat-ia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pregunta: preguntaActual, contexto, historial: historialParaEnviar }),
+      })
+      const resultado = await res.json()
+      if (!res.ok) throw new Error(resultado.error || 'error desconocido')
+      setMensajes(prev => [...prev, { rol: 'ia', texto: resultado.respuesta || 'No obtuve respuesta.' }])
+    } catch (err) {
+      setError('No se pudo consultar a la IA: ' + String(err))
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  if (cargando) return <div className="spinner" />
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>
+        Pregúntale a la IA sobre tus obras, pagos y cobros — responde con los datos reales cargados hoy en la app, no inventa cifras.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+        {mensajes.length === 0 && (
+          <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>
+            Ej: "¿Cuánto falta por cobrar en Luis Carrera?", "¿Cuánto llevo pagado esta semana?", "¿Qué obra tiene el saldo más bajo?"
+          </p>
+        )}
+        {mensajes.map((m, i) => (
+          <div
+            key={i}
+            style={{
+              alignSelf: m.rol === 'usuario' ? 'flex-end' : 'flex-start',
+              maxWidth: '85%', padding: '10px 14px', borderRadius: 12, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap',
+              background: m.rol === 'usuario' ? 'var(--primary)' : 'var(--surface-alt)',
+              color: m.rol === 'usuario' ? 'var(--text-inverse)' : 'var(--text)',
+            }}
+          >
+            {m.texto}
+          </div>
+        ))}
+        {enviando && <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>Pensando...</p>}
+      </div>
+      {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 10 }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type="text"
+          placeholder="Escribe tu pregunta..."
+          value={pregunta}
+          onChange={e => setPregunta(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !enviando) preguntar() }}
+          style={{ flex: 1 }}
+          disabled={enviando}
+        />
+        <button className="btn btn-primary" onClick={preguntar} disabled={enviando || !pregunta.trim()}>
+          {enviando ? '...' : 'Preguntar'}
+        </button>
+      </div>
     </div>
   )
 }

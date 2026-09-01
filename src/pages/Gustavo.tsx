@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
 import Presupuesto from './Presupuesto'
 import PresupuestoEtapas from './PresupuestoEtapas'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido, PanelAvanceObras, PanelBancoContenido } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido, PanelAvanceObras, PanelBancoContenido, PanelConsultasIA } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { NavIcon, type NavIconName } from '../components/NavIcon'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
@@ -496,7 +496,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas' | 'banco_contenido'
+  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas' | 'banco_contenido' | 'consultas_ia'
   const [seccion, setSeccion] = useState<SeccionGustavo | null>(null)
   const [modoPresupuestador, setModoPresupuestador] = useState<'simple' | 'etapas'>('simple')
 
@@ -504,6 +504,7 @@ export default function Gustavo({ token }: Props) {
 
   const SECCIONES: { key: SeccionGustavo; label: string; icon: NavIconName; destacado?: boolean }[] = [
     { key: 'pendientes', label: 'Mis tareas', icon: 'tareas' },
+    { key: 'consultas_ia', label: 'Consultas IA', icon: 'consultas' },
     { key: 'reporte', label: 'Reporte diario', icon: 'reporte' },
     { key: 'calendario', label: 'Calendario', icon: 'calendario' },
     { key: 'obras', label: 'Obras', icon: 'obras' },
@@ -647,6 +648,8 @@ export default function Gustavo({ token }: Props) {
               <PanelPresupuestos />
             ) : seccion === 'reporte' ? (
               <Reporte token={REPORTE_TOKEN} embedded />
+            ) : seccion === 'consultas_ia' ? (
+              <PanelConsultasIA />
             ) : seccion === 'clientes' ? (
               <PanelClientes />
             ) : seccion === 'obras' ? (

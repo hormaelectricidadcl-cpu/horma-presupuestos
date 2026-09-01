@@ -6,7 +6,7 @@ export type NavIconName =
   | 'tareas' | 'reporte' | 'calendario' | 'obras' | 'pago' | 'historial'
   | 'trabajadores' | 'boletas' | 'facturas' | 'presupuestos' | 'presupuestador'
   | 'ideas' | 'notas' | 'clientes' | 'stock' | 'resultados' | 'banco_contenido' | 'gustavo'
-  | 'avance'
+  | 'avance' | 'consultas'
 
 export function NavIcon({ name, color = '#14213D', size = 20 }: { name: NavIconName; color?: string; size?: number }) {
   const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
@@ -50,5 +50,7 @@ export function NavIcon({ name, color = '#14213D', size = 20 }: { name: NavIconN
       return <svg {...p}><path d="M4 5h16v11H9l-5 4z" /></svg>
     case 'avance':
       return <svg {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 15.5l3-4 3 2 4-6" /><circle cx="17" cy="7.5" r="1" fill={color} stroke="none" /></svg>
+    case 'consultas':
+      return <svg {...p}><path d="M4 5h16v11H9l-5 4z" /><path d="M8 9h8M8 12.5h5" /></svg>
   }
 }
