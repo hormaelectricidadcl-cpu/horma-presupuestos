@@ -2763,9 +2763,6 @@ function PanelHistorialSueldoFijo({ trabajador, diariosTrabajador, ajustesTrabaj
         const restaPagar = sueldoMensual - adelantadoMes
         const semanasDelMes = semanas.filter(s => mesDeSemana.get(s.key) === mesKey)
         const comprobanteMes = ultimoComprobante(`mensual-${mesKey}`)
-        // "Resta pagar" es lo que corresponde pagar este mes (no cambia aunque ya se haya
-        // pagado) -- para que quede claro que YA se pagó sin tener que buscar el chequecito
-        // chico junto al botón de comprobante, se agrega un aviso grande aparte.
         const pagoConfirmado = comprobanteMes?.monto_leido != null && Math.round(comprobanteMes.monto_leido) === Math.round(restaPagar)
 
         return (
@@ -2781,7 +2778,11 @@ function PanelHistorialSueldoFijo({ trabajador, diariosTrabajador, ajustesTrabaj
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <StatTile label="Sueldo del mes" valor={fmtMoney(sueldoMensual)} />
               <StatTile label="Adelantado" valor={fmtMoney(adelantadoMes)} tono={adelantadoMes > 0 ? 'alerta' : 'neutral'} />
-              <StatTile label="Resta pagar" valor={fmtMoney(restaPagar)} tono={restaPagar >= 0 ? 'positivo' : 'negativo'} />
+              {/* Mismo monto que "Resta pagar" -- pero una vez que el comprobante confirma que
+                  se pagó, mantener la etiqueta "Resta pagar" contradice al aviso verde de arriba
+                  (Alexandra lo reportó: "si ya pagué, ¿por qué sigue diciendo resta pagar?").
+                  Se relabela a "Pagado" en vez de poner $0, para no perder de vista el monto. */}
+              <StatTile label={pagoConfirmado ? 'Pagado' : 'Resta pagar'} valor={fmtMoney(restaPagar)} tono={pagoConfirmado || restaPagar >= 0 ? 'positivo' : 'negativo'} />
             </div>
 
             {/* Comprobante del pago mensual (el sueldo/"Resta pagar" grande) -- distinto de los
@@ -3307,7 +3308,7 @@ export function HistorialObraModal({
       }}
     >
       <div style={{
-        background: 'var(--white)', borderRadius: '16px 16px 0 0',
+        background: 'var(--white)', color: 'var(--text)', borderRadius: '16px 16px 0 0',
         width: '100%', maxWidth: 860, maxHeight: '85vh',
         display: 'flex', flexDirection: 'column',
         boxShadow: '0 -4px 32px rgba(0,0,0,0.15)',
@@ -4297,7 +4298,7 @@ export function PanelPresupuestos() {
           onClick={() => { setDetalleId(null); setDetalle(null) }}
         >
           <div
-            style={{ background: 'var(--white)', borderRadius: 'var(--radius)', maxWidth: 640, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: '1.5rem' }}
+            style={{ background: 'var(--white)', color: 'var(--text)', borderRadius: 'var(--radius)', maxWidth: 640, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: '1.5rem' }}
             onClick={e => e.stopPropagation()}
           >
             {cargandoDetalle || !detalle ? (

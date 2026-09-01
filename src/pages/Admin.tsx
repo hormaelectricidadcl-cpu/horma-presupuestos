@@ -247,7 +247,7 @@ function HistorialModal({
       }}
     >
       <div style={{
-        background: 'var(--white)', borderRadius: '16px 16px 0 0',
+        background: 'var(--white)', color: 'var(--text)', borderRadius: '16px 16px 0 0',
         width: '100%', maxWidth: 860, maxHeight: '85vh',
         display: 'flex', flexDirection: 'column',
         boxShadow: '0 -4px 32px rgba(0,0,0,0.15)',
