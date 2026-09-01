@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { generatePDF } from '../utils/pdfGenerator'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelBancoContenido, PanelIdeasContenido, PanelAvanceObras } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelBancoContenido, PanelIdeasContenido, PanelAvanceObras } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
 import { HiloPendiente } from '../components/HiloPendiente'
@@ -1221,7 +1221,7 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [clienteInicial, setClienteInicial] = useState('')
   const [formInit, setFormInit] = useState<{ destinatario: Destinatario; tipo: TipoPendiente }>({ destinatario: 'gustavo', tipo: 'confirmar_visita' })
-  type SeccionAdmin = 'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'banco_contenido' | 'ideas'
+  type SeccionAdmin = 'activos' | 'respondidos_gustavo' | 'clientes' | 'presupuestos' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'banco_contenido' | 'ideas'
   const [seccion, setSeccion] = useState<SeccionAdmin | null>(null)
   const [historialCliente, setHistorialCliente] = useState<string | null>(null)
 
@@ -1349,7 +1349,6 @@ export default function Admin() {
     { key: 'calendario', label: 'Calendario', icon: 'calendario' },
     { key: 'stock', label: 'Stock', icon: 'stock' },
     { key: 'pagos', label: 'Pago semanal', icon: 'pago' },
-    { key: 'historial_pagos', label: 'Historial de pagos', icon: 'historial' },
     { key: 'trabajadores', label: 'Trabajadores', icon: 'trabajadores' },
     { key: 'resultados', label: 'Estado de resultados', icon: 'resultados' },
     { key: 'banco_contenido', label: 'Banco de contenido', icon: 'banco_contenido' },
@@ -1529,8 +1528,6 @@ export default function Admin() {
             <PanelStock />
           ) : seccion === 'pagos' ? (
             <PanelPagoSemanal />
-          ) : seccion === 'historial_pagos' ? (
-            <PanelHistorialPagos />
           ) : seccion === 'trabajadores' ? (
             <PanelTrabajadores />
           ) : seccion === 'resultados' ? (

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
 import Presupuesto from './Presupuesto'
 import PresupuestoEtapas from './PresupuestoEtapas'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelHistorialPagos, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido, PanelAvanceObras, PanelBancoContenido, PanelConsultasIA } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido, PanelAvanceObras, PanelBancoContenido, PanelConsultasIA } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { NavIcon, type NavIconName } from '../components/NavIcon'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
@@ -496,7 +496,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'historial_pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas' | 'banco_contenido' | 'consultas_ia'
+  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas' | 'banco_contenido' | 'consultas_ia'
   const [seccion, setSeccion] = useState<SeccionGustavo | null>(null)
   const [modoPresupuestador, setModoPresupuestador] = useState<'simple' | 'etapas'>('simple')
 
@@ -510,7 +510,6 @@ export default function Gustavo({ token }: Props) {
     { key: 'obras', label: 'Obras', icon: 'obras' },
     { key: 'avance_obra', label: 'Avance de obra', icon: 'avance' },
     { key: 'pagos', label: 'Pago semanal', icon: 'pago' },
-    { key: 'historial_pagos', label: 'Historial de pagos', icon: 'historial' },
     { key: 'trabajadores', label: 'Trabajadores', icon: 'trabajadores' },
     { key: 'boletas', label: 'Boletas', icon: 'boletas' },
     { key: 'facturas', label: 'Facturas', icon: 'facturas' },
@@ -662,8 +661,6 @@ export default function Gustavo({ token }: Props) {
               <PanelStock />
             ) : seccion === 'pagos' ? (
               <PanelPagoSemanal />
-            ) : seccion === 'historial_pagos' ? (
-              <PanelHistorialPagos />
             ) : seccion === 'trabajadores' ? (
               <PanelTrabajadores />
             ) : seccion === 'resultados' ? (
