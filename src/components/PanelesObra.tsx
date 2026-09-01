@@ -4820,6 +4820,21 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
     cargar()
   }
 
+  // Ninguna otra tabla tiene FK real a clientes.id -- obras/cuentas_por_cobrar/pendientes
+  // guardan el nombre del cliente como texto, no por referencia. Borrar la fila de
+  // `clientes` no borra ningún historial, solo saca el cliente de esta lista (mismo
+  // principio ya usado en borrarObra).
+  async function borrarCliente(c: Cliente) {
+    if (!window.confirm(`¿Borrar a "${c.nombre}" de Clientes? Su historial de pendientes/obras (si tiene) NO se borra, solo deja de aparecer acá. No se puede deshacer.`)) return
+    const { error } = await supabase.from('clientes').delete().eq('id', c.id)
+    if (error) {
+      alert('No se pudo borrar: ' + error.message)
+      return
+    }
+    setSeleccionado(null)
+    cargar()
+  }
+
   if (seleccionado) {
     return (
       <div>
@@ -4845,6 +4860,14 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
               title={seleccionado.archivado ? 'Volver a mostrar en la lista' : 'Sacar de la lista sin borrar el historial'}
             >
               {seleccionado.archivado ? 'Desarchivar' : 'Archivar'}
+            </button>
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 12, padding: '6px 12px', color: 'var(--danger)' }}
+              onClick={() => borrarCliente(seleccionado)}
+              title="Borrar esta ficha de cliente (no se puede deshacer)"
+            >
+              Borrar
             </button>
           </div>
         </div>
