@@ -144,6 +144,11 @@ export default function Reporte({ token, embedded = false }: Props) {
   // -- en vez del formulario completo siempre abierto. Se descolapsa solo si se edita
   // algo de ese trabajador (deja de coincidir con lo guardado), nunca al revés.
   const [trabajadoresColapsados, setTrabajadoresColapsados] = useState<Set<string>>(new Set())
+  // Mismo criterio para Cobros -- solo los de origen 'reportes_cobros' (editables acá);
+  // los de 'abono_cuenta' ya se muestran de solo lectura, sin formulario que colapsar.
+  const [cobrosColapsados, setCobrosColapsados] = useState<Set<string>>(new Set())
+  const [subcontratosColapsados, setSubcontratosColapsados] = useState<Set<string>>(new Set())
+  const [trabajosPuntualesColapsados, setTrabajosPuntualesColapsados] = useState<Set<string>>(new Set())
   const [subiendoBoletaIdx, setSubiendoBoletaIdx] = useState<number | null>(null)
   // Captura de comprobante para Cobros/Subcontratos/Trabajo puntual -- 'cobro-0', 'subcontrato-2', etc.
   const [subiendoComprobante, setSubiendoComprobante] = useState<string | null>(null)
@@ -213,12 +218,15 @@ export default function Reporte({ token, embedded = false }: Props) {
         id: a.id, origen: 'abono_cuenta' as const, obra: a.cuenta!.obra as string, cliente: a.cuenta!.pagador, monto: String(a.monto), comprobanteUrl: '',
       }))
     setCobros([...cobrosLegado, ...cobrosDeCuenta])
+    setCobrosColapsados(new Set(cobrosLegado.map(c => c.id)))
     setSubcontratos((subc || []).map((s: { id: string; obra: string | null; subcontrato: string; monto: number; comprobante_url: string | null }) => ({
       id: s.id, obra: s.obra || '', subcontrato: s.subcontrato, monto: String(s.monto), comprobanteUrl: s.comprobante_url || '',
     })))
+    setSubcontratosColapsados(new Set((subc || []).map((s: { id: string }) => s.id)))
     setTrabajosPuntuales((punt || []).map((p: { id: string; descripcion: string; direccion: string | null; trabajador: string | null; monto: number | null; comprobante_url: string | null }) => ({
       id: p.id, descripcion: p.descripcion, direccion: p.direccion || '', trabajador: p.trabajador || '', monto: p.monto != null ? String(p.monto) : '', comprobanteUrl: p.comprobante_url || '',
     })))
+    setTrabajosPuntualesColapsados(new Set((punt || []).map((p: { id: string }) => p.id)))
     setLoading(false)
   }, [])
 
@@ -366,6 +374,8 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
   function actualizarCobro(idx: number, patch: Partial<CobroRow>) {
     setCobros(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
+    const id = cobros[idx]?.id
+    if (id) setCobrosColapsados(prev => { if (!prev.has(id)) return prev; const next = new Set(prev); next.delete(id); return next })
   }
   function quitarCobro(idx: number) {
     if (!window.confirm('¿Seguro que quieres quitar este cobro?')) return
@@ -377,6 +387,8 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
   function actualizarSubcontrato(idx: number, patch: Partial<SubcontratoRow>) {
     setSubcontratos(prev => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
+    const id = subcontratos[idx]?.id
+    if (id) setSubcontratosColapsados(prev => { if (!prev.has(id)) return prev; const next = new Set(prev); next.delete(id); return next })
   }
   function quitarSubcontrato(idx: number) {
     if (!window.confirm('¿Seguro que quieres quitar este subcontrato?')) return
@@ -388,6 +400,8 @@ export default function Reporte({ token, embedded = false }: Props) {
   }
   function actualizarTrabajoPuntual(idx: number, patch: Partial<TrabajoPuntualRow>) {
     setTrabajosPuntuales(prev => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
+    const id = trabajosPuntuales[idx]?.id
+    if (id) setTrabajosPuntualesColapsados(prev => { if (!prev.has(id)) return prev; const next = new Set(prev); next.delete(id); return next })
   }
   function quitarTrabajoPuntual(idx: number) {
     if (!window.confirm('¿Seguro que quieres quitar este trabajo puntual?')) return
@@ -1179,7 +1193,26 @@ export default function Reporte({ token, embedded = false }: Props) {
             {/* Cobros del día */}
             <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Cobros del día</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-              {cobros.map((c, idx) => (
+              {cobros.map((c, idx) => {
+                const colapsado = !!(c.id && c.origen !== 'abono_cuenta' && cobrosColapsados.has(c.id))
+                if (colapsado) {
+                  return (
+                    <div key={idx} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+                        <span style={{ color: '#1f6b3f', fontWeight: 800, flexShrink: 0 }}>✓</span>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>{c.cliente}</span>
+                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{c.obra || 'sin obra'} · ${Number(c.monto).toLocaleString('es-CL')}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => setCobrosColapsados(prev => { const next = new Set(prev); next.delete(c.id!); return next })}
+                        style={{ fontSize: 12, flexShrink: 0 }}
+                      >Editar</button>
+                    </div>
+                  )
+                }
+                return (
                 <div key={idx} className="card" style={{ padding: 14 }}>
                   {c.origen === 'abono_cuenta' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1248,7 +1281,8 @@ export default function Reporte({ token, embedded = false }: Props) {
                     </div>
                   )}
                 </div>
-              ))}
+                )
+              })}
             </div>
             <button type="button" className="btn btn-secondary" onClick={agregarCobro} style={{ width: '100%', marginBottom: 28 }}>
               + Agregar cobro
@@ -1257,7 +1291,26 @@ export default function Reporte({ token, embedded = false }: Props) {
             {/* Subcontratos */}
             <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Subcontratos</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-              {subcontratos.map((s, idx) => (
+              {subcontratos.map((s, idx) => {
+                const colapsado = !!(s.id && subcontratosColapsados.has(s.id))
+                if (colapsado) {
+                  return (
+                    <div key={idx} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+                        <span style={{ color: '#1f6b3f', fontWeight: 800, flexShrink: 0 }}>✓</span>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>{s.subcontrato}</span>
+                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{s.obra || 'sin obra'} · ${Number(s.monto).toLocaleString('es-CL')}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => setSubcontratosColapsados(prev => { const next = new Set(prev); next.delete(s.id!); return next })}
+                        style={{ fontSize: 12, flexShrink: 0 }}
+                      >Editar</button>
+                    </div>
+                  )
+                }
+                return (
                 <div key={idx} className="card" style={{ padding: 14 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div className="field">
@@ -1317,7 +1370,8 @@ export default function Reporte({ token, embedded = false }: Props) {
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
             <button type="button" className="btn btn-secondary" onClick={agregarSubcontrato} style={{ width: '100%', marginBottom: 28 }}>
               + Agregar subcontrato
@@ -1329,7 +1383,26 @@ export default function Reporte({ token, embedded = false }: Props) {
               Para trabajos nuevos que no son ninguna de las obras de la lista.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-              {trabajosPuntuales.map((p, idx) => (
+              {trabajosPuntuales.map((p, idx) => {
+                const colapsado = !!(p.id && trabajosPuntualesColapsados.has(p.id))
+                if (colapsado) {
+                  return (
+                    <div key={idx} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+                        <span style={{ color: '#1f6b3f', fontWeight: 800, flexShrink: 0 }}>✓</span>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>{p.descripcion}</span>
+                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{p.direccion || 'sin dirección'}{p.monto.trim() ? ` · $${Number(p.monto).toLocaleString('es-CL')}` : ''}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => setTrabajosPuntualesColapsados(prev => { const next = new Set(prev); next.delete(p.id!); return next })}
+                        style={{ fontSize: 12, flexShrink: 0 }}
+                      >Editar</button>
+                    </div>
+                  )
+                }
+                return (
                 <div key={idx} className="card" style={{ padding: 14 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div className="field">
@@ -1395,7 +1468,8 @@ export default function Reporte({ token, embedded = false }: Props) {
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
             <button type="button" className="btn btn-secondary" onClick={agregarTrabajoPuntual} style={{ width: '100%', marginBottom: 28 }}>
               + Agregar trabajo puntual
