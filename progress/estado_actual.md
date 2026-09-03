@@ -1,7 +1,42 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 01/09/2026 (sesión larga) — capturas+IA, borrar ajuste/adelanto/fecha/cliente, chat IA, fusión Trabajadores+Historial, bug sistémico de contraste, archivado de pendientes viejos
+## Última actualización: 03/09/2026 (sesión muy larga) — orden de clientes en 5 fases, Facturas/Boletas emitidas, caso real de Alexis, 3 bugs reales encontrados y corregidos en Reporte Diario
+
+**Todo pusheado a `main` y verificado en producción real** (`dae18db`, `6094041`, `75ada28`, `be6b931`), `tsc --noEmit` limpio en cada paso. Sesión arrancó con un pedido puntual de Alexandra ("hay que extraer los datos de este presupuesto") y terminó en una reorganización de fondo de cómo se conectan cliente/presupuesto/obra/cobro/factura en toda la app, probada con un caso real de punta a punta (Alexis, obra nueva con depósito real de $350.000).
+
+### 1. Facturas y boletas emitidas al cliente (arrancó como pedido puntual, 02/09)
+Alexandra pidió ayuda para subir la factura de un cliente real (Patricia Marambio) y notó que el sistema estaba "roto en pedacitos": el pendiente "Emitir factura", la ficha del cliente y la pestaña "Facturas" (por obra) no se hablaban entre sí.
+- **Al marcar "Respondido" un pendiente "Emitir factura" o "Emitir boleta"** (Admin → Activos), ahora pide subir el archivo del documento — se lee con IA nueva (`functions/api/parse-factura-emitida.js`, monto+fecha+RUT+razón social+giro+dirección del receptor) y se guarda en la tabla nueva `cliente_facturas` (con columna `tipo`: 'factura'/'boleta', migraciones `sql/20260902_cliente_facturas.sql` y `sql/20260903_cliente_facturas_tipo.sql`, **ambas corridas por Alexandra y confirmadas**). Si la ficha del cliente tenía RUT/razón social/giro/dirección vacíos, se completan solos con lo que la IA leyó del documento real (nunca pisa un dato ya cargado).
+- **Hallazgo real de datos, corregido con el ok de Alexandra:** el bloque "CLIENTE" que se veía en la tarjeta de Patricia Marambio (RUT, razón social, etc.) nunca estuvo guardado en su ficha real — era solo texto suelto del mensaje del pendiente. Además existía una segunda ficha de cliente duplicada y vacía ("Mga abogados ltda", creada por error el mismo día). Se copiaron los datos fiscales a la ficha real de Patricia, se borró la duplicada, y se la desarchivó (había quedado archivada pese a tener un pendiente real sin resolver).
+- La pestaña "Facturas" vieja (por obra, Facturado vs. Cobrado) no se tocó — es un objetivo distinto, a propósito.
+
+### 2. Plan de "orden" en 5 fases (pedido explícito de Alexandra: "necesito orden, claridad, confianza en datos")
+Diagnóstico de fondo: `presupuestos`/`obras`/`cuentas_por_cobrar`/`facturas` solo se cruzaban por el NOMBRE del cliente como texto libre, nunca por su `cliente_id` real — mismo origen del problema de Patricia Marambio. Plan completo documentado en `decisiones.md` 2026-09-02/03.
+
+- **Fase 1 — `cliente_id` real en `obras` y `cuentas_por_cobrar`** (`sql/20260903_cliente_id_obras_cuentas.sql`, **corrida y verificada**). Arreglado el punto exacto donde se perdía: la conversión presupuesto→obra ya tenía `cliente_id` disponible pero solo copiaba el nombre. Se crearon los 4 clientes que faltaban (Constructora PSG, Eloísa Díaz, Cristian M, Nicole — la "puerta Gustavo", boca a boca, nunca tenía fichas propias en `clientes`) y se confirmó con Alexandra que "Ignacio" (cuentas por cobrar) = "Constructora PSG" (obras), misma persona. **Verificado: las 7 obras y 8 cuentas por cobrar existentes quedaron con `cliente_id` correcto.**
+- **Fase 2 — ítems del pendiente pasan directo a "Hacer presupuesto".** Botón nuevo "Usar en presupuesto →" en la tarjeta del pendiente, reemplaza al viejo "Generar PDF" (ver bug #1 abajo). Abre el presupuestador con ítems y datos del cliente precargados desde el pendiente, usando su `cliente_id` real al guardar (no vuelve a adivinar por nombre).
+- **Fase 3 — ficha del cliente como panel central.** Ahora muestra, cruzado por `cliente_id`: Presupuestos, Obra(s), Cuentas por cobrar y Facturas/boletas — todo de solo lectura (no duplica los botones de editar que ya existen en sus pestañas propias).
+- **Fase 4 — fecha de agenda estructurada para Gustavo** (campo "¿Cuándo se agenda?" en pendientes "Confirmar visita", guarda `fecha_trabajo` directo) + "Boleta" con el mismo tratamiento que "Factura".
+- **Fase 5 — "Convertir en obra" directo desde la ficha del cliente** (antes solo desde "Mis presupuestos"), a pedido de Alexandra probando el caso real de Alexis.
+
+Cada fase se probó contra Supabase real (simulación antes de migrar, casos de prueba creados y borrados sin dejar rastro, montos verificados contra consultas SQL directas) antes de darla por cerrada.
+
+### 3. Caso real de Alexis — probado de punta a punta, 3 bugs reales encontrados en el camino
+Alexandra usó el flujo completo con un cliente real (obra nueva, presupuesto de $2.510.662, depósito real de $350.000) y encontró 3 problemas reales que no habían aparecido en las pruebas:
+
+1. **El botón viejo "Generar PDF" no guardaba nada y dejaba la dirección vacía siempre** — Alexandra lo usó por costumbre (convivía con el nuevo "Usar en presupuesto →"), el presupuesto nunca quedó en Supabase ("se generó pero no viajó a Mis presupuestos" porque no había nada a donde viajar). **Se eliminó el botón viejo por completo** — ahora solo existe el flujo nuevo, que sí valida y guarda.
+2. **El comprobante del depósito de $350.000 se subió bien pero no había ningún lugar en la app para volver a verlo** — `comprobante_url` se guardaba en `reportes_cobros` desde hace tiempo, pero el tipo `ReporteCobroDia` no lo declaraba y el Detalle de obra no lo mostraba. Se agregó el link "Ver comprobante" en Obras → Detalle → Cobros (verificado con la URL real del archivo de Alexis).
+3. **Reporte Diario mostraba siempre los formularios completos y abiertos, incluso después de guardar** — daba la sensación de que nada se guardaba (Alexandra: "sigue apareciendo lo que se ha guardado cuando debería no aparecer"). El guardado en sí siempre funcionó bien (`reportes_diarios` usa upsert real, no hay riesgo de borrar nada al colapsar). Se aplicó a **Trabajadores, Cobros, Subcontratos y Trabajo puntual** el mismo criterio que ya tenían las Compras: un ítem con datos ya guardados se ve como una línea chica con ✓ y botón "Editar", en vez del formulario completo siempre abierto. Se descolapsa solo si se edita ese ítem puntual. **Verificado sin tocar nunca el botón "Guardar reporte del día" real** (mismo cuidado que el incidente de asistencia del 28/08) — se probó solo cargando un día real con datos ya guardados y usando "Editar".
+
+**Aprendizaje de proceso para la próxima sesión:** en un momento del día se hicieron ~5 commits de trabajo real sin pushear a `main` — Alexandra probó en producción y no encontraba nada nuevo porque nada había llegado ahí todavía. A partir de ahora, pushear apenas se cierra cada pieza (no acumular). Además: **el deploy de Cloudflare Pages puede tardar varios minutos en propagarse** — antes de decir "ya está" hay que confirmar con el hash del bundle (`curl` al sitio real hasta que cambie), no alcanza con que el push haya funcionado.
+
+### Pendiente para la próxima sesión
+- Nada bloqueante de esta sesión — las 5 fases y los 3 bugs quedaron cerrados y verificados en producción real.
+- Seguir usando el caso de Alexis como referencia: falta que Gustavo confirme el depósito viendo el comprobante, y que se le facture/emita boleta cuando corresponda (ya con el flujo nuevo).
+- Los pendientes de fondo de sesiones anteriores (seguridad de Supabase, RLS deshabilitado en tablas `seo_*`, etc.) siguen igual — ver el resto de este archivo y `tareas.md`.
+
+## Última actualización anterior: 01/09/2026 (sesión larga) — capturas+IA, borrar ajuste/adelanto/fecha/cliente, chat IA, fusión Trabajadores+Historial, bug sistémico de contraste, archivado de pendientes viejos
 
 **Nota retroactiva del 31/08 (esa sesión no se cerró en este archivo):** 5 commits en Pago Semanal, todos pusheados — desglose día por día, texto "viático incluido" corregido, botón de comprobante que no aparecía en semana "limpia", regla de negocio (el sábado no lleva viático), borrado de un adelanto duplicado real de Fabriel. Detalle completo en `decisiones.md` 2026-08-31 y git (`8631214`..`d891b23`).
 
