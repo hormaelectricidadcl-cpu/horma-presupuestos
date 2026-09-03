@@ -139,6 +139,11 @@ export default function Reporte({ token, embedded = false }: Props) {
   // formulario entero: el guardado borra-y-reinserta todo el día, vaciar el formulario
   // hacía que un segundo guardado el mismo día borrara lo del primero.
   const [comprasColapsadas, setComprasColapsadas] = useState<Set<string>>(new Set())
+  // Mismo criterio que las compras (arriba): un trabajador que ya tiene fila guardada
+  // hoy para esta fecha se ve como una línea chica y cerrada -- "esto ya quedó guardado"
+  // -- en vez del formulario completo siempre abierto. Se descolapsa solo si se edita
+  // algo de ese trabajador (deja de coincidir con lo guardado), nunca al revés.
+  const [trabajadoresColapsados, setTrabajadoresColapsados] = useState<Set<string>>(new Set())
   const [subiendoBoletaIdx, setSubiendoBoletaIdx] = useState<number | null>(null)
   // Captura de comprobante para Cobros/Subcontratos/Trabajo puntual -- 'cobro-0', 'subcontrato-2', etc.
   const [subiendoComprobante, setSubiendoComprobante] = useState<string | null>(null)
@@ -177,6 +182,7 @@ export default function Reporte({ token, embedded = false }: Props) {
       }
     }
     setTrabajadores(base)
+    setTrabajadoresColapsados(new Set((dia || []).map(row => row.trabajador)))
 
     const comprasDia = (compr || []) as { id: string; descripcion: string; monto: number; obra: string | null; destino: 'stock' | 'trabajo_puntual' | null; pagado_por: string | null; reembolsado: boolean | null; foto_boleta_url: string | null }[]
     let itemsPorCompra: Record<string, CompraItemRow[]> = {}
@@ -262,17 +268,23 @@ export default function Reporte({ token, embedded = false }: Props) {
 
   function actualizarTrabajador(nombre: string, patch: Partial<TrabajadorState>) {
     setTrabajadores(prev => ({ ...prev, [nombre]: { ...prev[nombre], ...patch } }))
+    setTrabajadoresColapsados(prev => { if (!prev.has(nombre)) return prev; const next = new Set(prev); next.delete(nombre); return next })
   }
 
   function aplicarObraATodos() {
     if (!obraGeneral) return
+    const nombresAfectados: string[] = []
     setTrabajadores(prev => {
       const next = { ...prev }
       for (const nombre of trabajadorNombres) {
-        if (next[nombre]?.presente) next[nombre] = { ...next[nombre], obra: obraGeneral, viatico: viaticoPorObra(obraGeneral) }
+        if (next[nombre]?.presente) {
+          next[nombre] = { ...next[nombre], obra: obraGeneral, viatico: viaticoPorObra(obraGeneral) }
+          nombresAfectados.push(nombre)
+        }
       }
       return next
     })
+    setTrabajadoresColapsados(prev => { const next = new Set(prev); for (const n of nombresAfectados) next.delete(n); return next })
   }
 
   function agregarCompra() {
@@ -859,6 +871,28 @@ export default function Reporte({ token, embedded = false }: Props) {
                 const t = trabajadores[nombre]
                 if (!t) return null
                 const esFabriel = nombre === 'Fabriel'
+                const colapsado = t.presente && trabajadoresColapsados.has(nombre)
+                if (colapsado) {
+                  const jornadaLabel = t.fraccionJornada === 1 ? 'Día completo' : 'Medio día'
+                  return (
+                    <div key={nombre} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+                        <span style={{ color: '#1f6b3f', fontWeight: 800, flexShrink: 0 }}>✓</span>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>{nombre}</span>
+                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t.obra || 'sin obra'} · {jornadaLabel}{t.viatico ? '' : ' · sin viático'}</span>
+                        {t.adelanto.trim() && (
+                          <span style={{ fontSize: 13, color: 'var(--muted)' }}>· ${Number(t.adelanto).toLocaleString('es-CL')}</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => setTrabajadoresColapsados(prev => { const next = new Set(prev); next.delete(nombre); return next })}
+                        style={{ fontSize: 12, flexShrink: 0 }}
+                      >Editar</button>
+                    </div>
+                  )
+                }
                 return (
                   <div key={nombre} className="card" style={{ padding: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: t.presente ? 12 : 0 }}>
