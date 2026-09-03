@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
-import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador, ObraItem, ObraFase, ObraAvanceRegistro, PresupuestoItemSimple, PresupuestoEtapa } from '../types'
+import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador, ObraItem, ObraFase, ObraAvanceRegistro, PresupuestoItemSimple, PresupuestoEtapa, ClienteFactura } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
 // panel de Gustavo — antes vivían duplicados letra por letra en Admin.tsx y
@@ -532,6 +532,7 @@ export function PanelObras() {
       const { data: obraCreada, error } = await supabase.from('obras').insert({
         nombre: nuevaObra.nombre.trim(),
         cliente: presupuesto.cliente_nombre,
+        cliente_id: presupuesto.cliente_id,
         presupuesto_total: presupuesto.total,
         presupuesto_id: presupuesto.id,
       }).select('id').single()
@@ -557,9 +558,17 @@ export function PanelObras() {
         }
       }
       if (!window.confirm('¿Confirmas que deseas crear esta obra sin vincularla a un presupuesto? Es la excepción -- lo normal es elegir uno de la lista.')) return
+      // Sin presupuesto no hay cliente_id de donde heredar -- se busca por coincidencia
+      // exacta de nombre contra `clientes` (best-effort, no bloquea si no encuentra nada).
+      let clienteIdExcepcion: string | null = null
+      if (nuevaObra.cliente.trim()) {
+        const { data: clienteMatch } = await supabase.from('clientes').select('id').ilike('nombre', nuevaObra.cliente.trim()).maybeSingle()
+        clienteIdExcepcion = clienteMatch?.id || null
+      }
       const { error } = await supabase.from('obras').insert({
         nombre: nuevaObra.nombre.trim(),
         cliente: nuevaObra.cliente.trim() || null,
+        cliente_id: clienteIdExcepcion,
         presupuesto_total: presupuestoManual,
       })
       if (error) {
@@ -575,7 +584,10 @@ export function PanelObras() {
   }
 
   async function crearCuenta(pagador: string, concepto: string, obra: string | null, total: number) {
-    const { error } = await supabase.from('cuentas_por_cobrar').insert({ pagador, concepto, obra, total_presupuesto: total })
+    // Best-effort, igual criterio que la obra por excepción: si el nombre calza exacto
+    // con un cliente ya existente, se linkea; si no, la cuenta se sigue creando igual.
+    const { data: clienteMatch } = await supabase.from('clientes').select('id').ilike('nombre', pagador).maybeSingle()
+    const { error } = await supabase.from('cuentas_por_cobrar').insert({ pagador, cliente_id: clienteMatch?.id || null, concepto, obra, total_presupuesto: total })
     if (error) {
       alert('No se pudo guardar la cuenta. Intenta de nuevo.')
       return
@@ -4050,6 +4062,7 @@ export function PanelPresupuestos() {
     const { data: obraCreada, error: errorObra } = await supabase.from('obras').insert({
       nombre: nombreObraNueva.trim(),
       cliente: p.cliente_nombre,
+      cliente_id: p.cliente_id,
       presupuesto_total: p.total,
       presupuesto_id: p.id,
     }).select('id').single()
@@ -4886,6 +4899,14 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
   const [seleccionado, setSeleccionado] = useState<Cliente | null>(null)
   const [historial, setHistorial] = useState<Pendiente[]>([])
   const [loadingH, setLoadingH] = useState(false)
+  const [facturasCliente, setFacturasCliente] = useState<ClienteFactura[]>([])
+  const [presupuestosCliente, setPresupuestosCliente] = useState<PresupuestoGuardado[]>([])
+  const [obrasCliente, setObrasCliente] = useState<Obra[]>([])
+  const [cuentasCliente, setCuentasCliente] = useState<CuentaPorCobrar[]>([])
+  const [abonosCliente, setAbonosCliente] = useState<AbonoCuenta[]>([])
+  const [convirtiendoPresId, setConvirtiendoPresId] = useState<string | null>(null)
+  const [nombreObraCliente, setNombreObraCliente] = useState('')
+  const [convirtiendoCliente, setConvirtiendoCliente] = useState(false)
   const [draft, setDraft] = useState<DraftCliente>({ rut: '', razon_social: '', giro: '', direccion_fiscal: '', origen: '', notas: '' })
   const [guardando, setGuardando] = useState(false)
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false)
@@ -4922,13 +4943,60 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
     setSeleccionado(c)
     setDraft(draftDeCliente(c))
     setLoadingH(true)
-    const { data } = await supabase
-      .from('pendientes')
-      .select('*')
-      .eq('cliente_nombre', c.nombre)
-      .order('created_at', { ascending: true })
+    const [{ data }, { data: fac }, { data: pres }, { data: obr }, { data: cuentas }] = await Promise.all([
+      supabase.from('pendientes').select('*').eq('cliente_nombre', c.nombre).order('created_at', { ascending: true }),
+      supabase.from('cliente_facturas').select('*').eq('cliente_nombre', c.nombre).order('fecha', { ascending: false }),
+      supabase.from('presupuestos').select('id, created_at, cliente_id, cliente_nombre, cliente_telefono, cliente_email, cliente_direccion, referencia, tipo, estado, subtotal, iva, total').eq('cliente_id', c.id).order('created_at', { ascending: false }),
+      supabase.from('obras').select('*').eq('cliente_id', c.id).order('created_at', { ascending: false }),
+      supabase.from('cuentas_por_cobrar').select('*').eq('cliente_id', c.id).order('created_at', { ascending: false }),
+    ])
     setHistorial((data as Pendiente[]) || [])
+    setFacturasCliente((fac as ClienteFactura[]) || [])
+    setPresupuestosCliente((pres as PresupuestoGuardado[]) || [])
+    setObrasCliente((obr as Obra[]) || [])
+    const cuentasList = (cuentas as CuentaPorCobrar[]) || []
+    setCuentasCliente(cuentasList)
+    if (cuentasList.length > 0) {
+      const { data: abonos } = await supabase.from('abonos_cuenta').select('*').in('cuenta_id', cuentasList.map(cu => cu.id))
+      setAbonosCliente((abonos as AbonoCuenta[]) || [])
+    } else {
+      setAbonosCliente([])
+    }
     setLoadingH(false)
+  }
+
+  // "Desde el cliente se pueda convertir en obra" -- pedido de Alexandra el 03/09/2026,
+  // para que un presupuesto aceptado no obligue a ir a "Mis presupuestos" a convertirlo.
+  // Mismo mecanismo que ya usa esa pestaña (`copiarItemsAObra`, importado/exportado
+  // como función compartida), solo que acá parte de la ficha del cliente.
+  function abrirConvertirCliente(p: PresupuestoGuardado) {
+    setConvirtiendoPresId(p.id)
+    setNombreObraCliente(p.cliente_direccion || p.cliente_nombre || '')
+  }
+
+  async function confirmarConvertirCliente(p: PresupuestoGuardado) {
+    if (!nombreObraCliente.trim()) { alert('Completa el nombre de la obra.'); return }
+    setConvirtiendoCliente(true)
+    const { data: obraCreada, error: errorObra } = await supabase.from('obras').insert({
+      nombre: nombreObraCliente.trim(),
+      cliente: p.cliente_nombre,
+      cliente_id: p.cliente_id,
+      presupuesto_total: p.total,
+      presupuesto_id: p.id,
+    }).select('id').single()
+    if (errorObra) {
+      setConvirtiendoCliente(false)
+      alert('No se pudo crear la obra. Puede que ya exista una con ese nombre.')
+      return
+    }
+    if (obraCreada?.id) {
+      const { data: detalleCompleto } = await supabase.from('presupuestos').select('tipo, items, etapas').eq('id', p.id).single()
+      if (detalleCompleto) await copiarItemsAObra(obraCreada.id, detalleCompleto as { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null })
+    }
+    await supabase.from('presupuestos').update({ estado: 'convertido' }).eq('id', p.id)
+    setConvirtiendoCliente(false)
+    setConvirtiendoPresId(null)
+    if (seleccionado) verCliente(seleccionado)
   }
 
   async function guardar() {
@@ -5038,6 +5106,118 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
               <input value={draft.direccion_fiscal} onChange={e => setDraft(d => ({ ...d, direccion_fiscal: e.target.value }))} />
             </div>
           </div>
+        </div>
+
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+            Presupuestos
+          </p>
+          {presupuestosCliente.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Todavía no tiene ningún presupuesto.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {presupuestosCliente.map(p => (
+                <div key={p.id} style={{ background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ color: 'var(--muted)', fontSize: 12 }}>{new Date(p.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
+                    <span className="badge badge-otro" style={{ fontSize: 11 }}>{ESTADO_PRESUPUESTO_LABELS[p.estado]}</span>
+                    <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{p.total != null ? fmtMoney(p.total) : '—'}</span>
+                    {p.estado === 'aceptado' && (
+                      <button className="btn btn-primary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={() => abrirConvertirCliente(p)}>
+                        Convertir en obra
+                      </button>
+                    )}
+                  </div>
+                  {convirtiendoPresId === p.id && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                      <div className="field" style={{ flex: 1, minWidth: 180 }}>
+                        <label>Nombre de la obra</label>
+                        <input value={nombreObraCliente} onChange={e => setNombreObraCliente(e.target.value)} />
+                      </div>
+                      <button className="btn btn-primary" disabled={convirtiendoCliente} onClick={() => confirmarConvertirCliente(p)} style={{ fontSize: 12, padding: '7px 12px' }}>
+                        {convirtiendoCliente ? 'Creando...' : 'Confirmar'}
+                      </button>
+                      <button className="btn btn-secondary" onClick={() => setConvirtiendoPresId(null)} style={{ fontSize: 12, padding: '7px 12px' }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+            Obra{obrasCliente.length !== 1 ? 's' : ''}
+          </p>
+          {obrasCliente.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Todavía no tiene ninguna obra.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {obrasCliente.map(o => (
+                <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 600 }}>{o.nombre}</span>
+                  <span className="badge badge-otro" style={{ fontSize: 11 }}>{ESTADO_OBRA_LABELS[o.estado_obra]}</span>
+                  <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{o.presupuesto_total != null ? fmtMoney(o.presupuesto_total) : '—'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+            Cuentas por cobrar
+          </p>
+          {cuentasCliente.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Todavía no tiene ninguna cuenta por cobrar.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {cuentasCliente.map(cu => {
+                const abonado = abonosCliente.filter(a => a.cuenta_id === cu.id).reduce((s, a) => s + a.monto, 0)
+                const restante = cu.total_presupuesto - abonado
+                return (
+                  <div key={cu.id} style={{ background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600 }}>{cu.concepto}</span>
+                      {cu.obra && <span style={{ color: 'var(--muted)', fontSize: 12 }}>{cu.obra}</span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
+                      <span>Presupuesto: <strong>{fmtMoney(cu.total_presupuesto)}</strong></span>
+                      <span style={{ color: 'var(--success)' }}>Abonado: <strong>{fmtMoney(abonado)}</strong></span>
+                      <span style={{ color: restante > 0 ? 'var(--danger)' : 'var(--success)' }}>Resta: <strong>{fmtMoney(restante)}</strong></span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+            Facturas y boletas emitidas
+          </p>
+          {facturasCliente.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Todavía no hay facturas ni boletas registradas para este cliente.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {facturasCliente.map(f => (
+                <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
+                  <span className="badge badge-otro" style={{ fontSize: 11 }}>{f.tipo === 'boleta' ? 'Boleta' : 'Factura'}</span>
+                  <span style={{ color: 'var(--muted)' }}>{new Date(f.fecha + 'T00:00:00').toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
+                  <span style={{ fontWeight: 700 }}>{fmtMoney(f.monto)}</span>
+                  {f.archivo_url && (
+                    <a href={f.archivo_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, marginLeft: 'auto' }}>
+                      Ver archivo →
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>

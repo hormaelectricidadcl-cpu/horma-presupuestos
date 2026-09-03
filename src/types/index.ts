@@ -51,6 +51,18 @@ export interface NuevoPendiente {
   destinatario: Destinatario
 }
 
+export interface ClienteFactura {
+  id: string
+  created_at: string
+  cliente_id: string | null
+  cliente_nombre: string
+  pendiente_id: string | null
+  fecha: string
+  monto: number
+  archivo_url: string | null
+  tipo: 'factura' | 'boleta'
+}
+
 export interface ReporteTrabajadorDia {
   id: string
   fecha: string
@@ -275,6 +287,7 @@ export interface Obra {
   id: string
   nombre: string
   cliente: string | null
+  cliente_id?: string | null
   presupuesto_total: number | null
   presupuesto_id?: string | null
   estado_obra: EstadoObra
@@ -296,6 +309,7 @@ export interface Trabajador {
 export interface CuentaPorCobrar {
   id: string
   pagador: string
+  cliente_id?: string | null
   concepto: string
   obra: string | null
   total_presupuesto: number

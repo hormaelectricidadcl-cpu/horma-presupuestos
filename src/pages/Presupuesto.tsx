@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { generatePDF } from '../utils/pdfGenerator';
 import { calculateTotals } from '../utils/calculationUtils';
 import type { Item } from '../utils/calculationUtils';
@@ -24,6 +24,39 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [clientData, setClientData] = useState<Client>({ name: '', rut: '', email: '', address: '' });
   const [overheadPercentage, setOverheadPercentage] = useState(10);
+  const [clienteIdPrefill, setClienteIdPrefill] = useState<string | null>(null);
+  const [pendienteOrigenNombre, setPendienteOrigenNombre] = useState<string | null>(null);
+
+  // Fase 2 del "orden" (03/09/2026): si el link trae "desde_pendiente", los ítems que ya
+  // generó la IA en el hilo de ese pendiente (Admin -> "Generar ítems con IA") se cargan
+  // solos acá en vez de retipearlos a mano -- y el cliente queda ligado por su cliente_id
+  // real, no solo por el nombre.
+  useEffect(() => {
+    const pendienteId = new URLSearchParams(window.location.search).get('desde_pendiente');
+    if (!pendienteId) return;
+    supabase
+      .from('pendientes')
+      .select('cliente_nombre, cliente_id, direccion, items')
+      .eq('id', pendienteId)
+      .single()
+      .then(({ data }) => {
+        if (!data) return;
+        setClientData(prev => ({ ...prev, name: data.cliente_nombre || prev.name, address: data.direccion || prev.address }));
+        setClienteIdPrefill(data.cliente_id || null);
+        setPendienteOrigenNombre(data.cliente_nombre || null);
+        const itemsPendiente = (data.items || []) as { categoria: string; descripcion: string; cantidad: number; precioUnitario: number }[];
+        if (itemsPendiente.length > 0) {
+          setItems(itemsPendiente.map((it, i) => ({
+            id: Date.now() + i,
+            categoria: it.categoria,
+            description: it.descripcion,
+            quantity: it.cantidad,
+            price: it.precioUnitario,
+            total: it.cantidad * it.precioUnitario,
+          })));
+        }
+      });
+  }, []);
 
   const { subtotal, gastosGenerales, neto, iva, total } = useMemo(() => {
     return calculateTotals(items, overheadPercentage);
@@ -52,7 +85,7 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
       generatePDF(clientData, items, overheadPercentage, referencia);
       const guardadoOk = await guardarPresupuesto(referencia);
       if (guardadoOk) {
-        alert(`PDF generado correctamente — Ref: ${referencia}`);
+        alert(`✓ PDF generado y guardado — Ref: ${referencia}\n\nYa está disponible en "Mis presupuestos" (esta pestaña es independiente de esa vista, así que no viaja sola ahí -- ciérrala y volvé a la pestaña donde tenías Admin/Gustavo para verlo).`);
       } else {
         alert(`El PDF se generó (Ref: ${referencia}), pero no se pudo guardar en Mis presupuestos. Avísale a Alexandra o intenta de nuevo.`);
       }
@@ -64,19 +97,23 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
 
   const guardarPresupuesto = async (referencia: string): Promise<boolean> => {
     try {
-      const clientePayload: { nombre: string; rut?: string; email?: string } = { nombre: clientData.name.trim() };
-      if (clientData.rut.trim()) clientePayload.rut = clientData.rut.trim();
-      if (clientData.email.trim()) clientePayload.email = clientData.email.trim();
+      let clienteId = clienteIdPrefill;
+      if (!clienteId) {
+        const clientePayload: { nombre: string; rut?: string; email?: string } = { nombre: clientData.name.trim() };
+        if (clientData.rut.trim()) clientePayload.rut = clientData.rut.trim();
+        if (clientData.email.trim()) clientePayload.email = clientData.email.trim();
 
-      const { data: cliente, error: clienteErr } = await supabase
-        .from('clientes')
-        .upsert(clientePayload, { onConflict: 'nombre' })
-        .select('id')
-        .single();
-      if (clienteErr) throw clienteErr;
+        const { data: cliente, error: clienteErr } = await supabase
+          .from('clientes')
+          .upsert(clientePayload, { onConflict: 'nombre' })
+          .select('id')
+          .single();
+        if (clienteErr) throw clienteErr;
+        clienteId = cliente?.id ?? null;
+      }
 
       const { error: presupuestoErr } = await supabase.from('presupuestos').insert({
-        cliente_id: cliente?.id ?? null,
+        cliente_id: clienteId,
         cliente_nombre: clientData.name.trim(),
         cliente_email: clientData.email.trim() || null,
         cliente_direccion: clientData.address.trim(),
@@ -124,6 +161,14 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
         <span className="eyebrow">Presupuesto</span>
         <h1>Horma Grup</h1>
       </header>
+
+      {pendienteOrigenNombre && (
+        <div className="card" style={{ padding: '10px 14px', marginBottom: 16, background: '#f0fdf4', borderLeft: '3px solid #16a34a' }}>
+          <p style={{ fontSize: 13, color: '#166534', fontWeight: 600 }}>
+            ✓ Ítems y cliente cargados desde el pendiente de {pendienteOrigenNombre} — revisa antes de generar el PDF.
+          </p>
+        </div>
+      )}
 
       <div className="card config-section">
         <h2>Configuración</h2>

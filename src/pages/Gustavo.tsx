@@ -188,6 +188,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
   const [cardTab, setCardTab] = useState<'responder' | 'hilo' | 'historial' | 'archivos'>('responder')
   const [respuesta, setRespuesta] = useState('')
   const [nota, setNota] = useState('')
+  const [fechaAgendada, setFechaAgendada] = useState(p.fecha_trabajo ? new Date(p.fecha_trabajo).toISOString().slice(0, 16) : '')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
 
@@ -264,6 +265,7 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
       respuesta: texto || '(Solo nota de voz)',
     }
     if (savedAudioUrl) updatePayload.audio_url = savedAudioUrl
+    if (fechaAgendada) updatePayload.fecha_trabajo = new Date(fechaAgendada).toISOString()
 
     const { error } = await supabase.from('pendientes').update(updatePayload).eq('id', p.id)
     if (error) {
@@ -398,6 +400,17 @@ function PendienteCardGustavo({ p, onRespondido }: { p: Pendiente; onRespondido:
         {/* Responder tab */}
         {cardTab === 'responder' && (
           <div>
+            {p.tipo === 'confirmar_visita' && (
+              <div className="field" style={{ marginBottom: 14 }}>
+                <label>¿Cuándo se agenda?</label>
+                <input
+                  type="datetime-local"
+                  value={fechaAgendada}
+                  onChange={e => setFechaAgendada(e.target.value)}
+                  style={{ fontSize: 16 }}
+                />
+              </div>
+            )}
             <div className="field" style={{ marginBottom: 14 }}>
               <label>Tu respuesta</label>
               <textarea

@@ -1,6 +1,17 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-02/03 — Plan de "orden" en 4 fases: cliente_id como eje real, dos puertas de entrada conviven
+Alexandra pidió orden de fondo después de encontrar el caso Patricia Marambio/Mga Abogados: presupuestos, obras, cuentas por cobrar y facturas hoy solo se cruzan por el NOMBRE del cliente escrito como texto libre, nunca por su `clientes.id` real — cada pantalla es una isla. Confirmó que hay DOS puertas de entrada legítimas y que no hace falta forzarlas a ser iguales: (1) la suya, marketing → pendiente con caso+fotos → chat con Gustavo → presupuesto; (2) la de Gustavo, boca a boca → directo a "Hacer presupuesto" sin pasar por un pendiente. Las dos ya convergen en la tabla `presupuestos` — ese es el punto de unificación real, no hace falta unificar la superficie.
+
+Plan acordado, fase por fase (no re-litigar el orden sin volver a hablarlo):
+1. **Fase 1 (en curso, 03/09):** `cliente_id` real en `obras` y `cuentas_por_cobrar` (antes solo `obras.cliente`/`cuentas_por_cobrar.pagador` en texto libre) + arreglar la conversión presupuesto→obra para que copie el `cliente_id` que el presupuesto ya tenía (se perdía justo ahí). Confirmado con Alexandra que **"Ignacio" (cuentas por cobrar) es la misma persona que "Constructora PSG" (obras)** — mismo cliente, dos nombres distintos por escribirse a mano en momentos distintos.
+2. Fase 2: que los ítems que genera la IA en el hilo de un pendiente pasen con un botón directo a "Hacer presupuesto" ya precargados (hoy hay que retipearlos a mano, ver auditoría de flujo del 02/09).
+3. Fase 3: la ficha del cliente (donde ya vive "Facturas emitidas") como panel central real — presupuesto/obra/cobros cruzados ahí por `cliente_id`.
+4. Fase 4: fecha de agenda estructurada para que Gustavo la cargue directo (hoy solo la escribe como texto y Alexandra la copia a mano), y darle a "Boleta" el mismo tratamiento que ya tiene "Factura" (subir archivo, historial en la ficha del cliente).
+
+Cada fase se cierra y se verifica contra Supabase real antes de arrancar la siguiente.
+
 ## 2026-09-01 — Procedimiento para "mover" un adelanto de sueldo fijo de un mes a otro
 Caso real: Fabriel pidió que su adelanto de $100.000 (cargado 14/08) se descontara de
 septiembre en vez de agosto, porque en agosto tuvo que pagar varias cosas. El sistema

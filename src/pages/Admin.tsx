@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { generatePDF } from '../utils/pdfGenerator'
 import { PanelEstadoResultados, PanelPagoSemanal, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelBancoContenido, PanelIdeasContenido, PanelAvanceObras } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
@@ -804,6 +803,24 @@ function EditForm({ p, onSaved, onCancel }: { p: Pendiente; onSaved: () => void;
   )
 }
 
+// El mensaje de un pendiente "Emitir factura" suele traer RUT/razón social/giro/dirección
+// tipeados a mano en ese orden, línea por línea (así se cargó el caso real de Patricia
+// Marambio, 02/09/2026, antes de que esos datos existieran en su ficha). Best-effort: si no
+// calza el patrón, simplemente no completa nada -- nunca pisa un dato ya cargado en la ficha.
+function parsearDatosFiscales(mensaje: string | null | undefined) {
+  if (!mensaje) return {}
+  const lineas = mensaje.split('\n').map(l => l.trim()).filter(Boolean)
+  const esRut = /^\d{1,2}(?:\.\d{3}){2}-[\dkK]$/
+  if (lineas.length === 0 || !esRut.test(lineas[0])) return {}
+  const esOtroCampo = (l?: string) => !l || /^monto a facturar/i.test(l)
+  return {
+    rut: lineas[0],
+    razon_social: !esOtroCampo(lineas[1]) ? lineas[1] : undefined,
+    giro: !esOtroCampo(lineas[2]) ? lineas[2] : undefined,
+    direccion_fiscal: !esOtroCampo(lineas[3]) ? lineas[3] : undefined,
+  }
+}
+
 /* ─── Pendiente card ────────────────────────────────── */
 function PendienteCard({
   p,
@@ -825,9 +842,23 @@ function PendienteCard({
   const [sending, setSending] = useState(false)
   const [aiItems, setAiItems] = useState<ItemPresupuesto[] | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
+  const [mostrarFormFactura, setMostrarFormFactura] = useState(false)
+  const [montoFactura, setMontoFactura] = useState(() => {
+    const m = p.mensaje_cliente?.match(/Monto a facturar:\s*\$?\s*([\d.,]+)/i)
+    return m ? m[1].replace(/[.,]/g, '') : ''
+  })
+  const [archivoUrlFactura, setArchivoUrlFactura] = useState<string | null>(null)
+  const [nombreArchivoFactura, setNombreArchivoFactura] = useState<string | null>(null)
+  const [subiendoFactura, setSubiendoFactura] = useState(false)
+  const [datosIAFactura, setDatosIAFactura] = useState<{ rut: string | null; razon_social: string | null; giro: string | null; direccion: string | null } | null>(null)
+  const [guardandoFactura, setGuardandoFactura] = useState(false)
 
   const dl = formatDeadline(p.fecha_limite)
   const respondido = p.estado === 'respondido'
+  // Fase 4 del "orden" (03/09/2026): "Boleta" recibe el mismo tratamiento que ya tenía
+  // "Factura" -- mismo formulario, misma tabla (`cliente_facturas`, con columna `tipo`).
+  const esDocumentoCliente = p.tipo === 'emitir_factura' || p.tipo === 'emitir_boleta'
+  const tipoDocumento: 'factura' | 'boleta' = p.tipo === 'emitir_boleta' ? 'boleta' : 'factura'
 
   const estadoBadge = {
     pendiente: 'badge badge-pendiente',
@@ -857,6 +888,88 @@ function PendienteCard({
       respondido_at: new Date().toISOString(),
       respuesta: '(Marcado manualmente por Alexandra)',
     }).eq('id', p.id)
+    onUpdate()
+  }
+
+  // Sube el archivo apenas se elige (no espera al "Confirmar y cerrar") y lo manda a leer
+  // con IA -- mismo mecanismo que ya usan Compras/Cobros (/api/parse-comprobante). Así el
+  // monto se completa solo con lo que dice la factura real, y los datos fiscales que trae
+  // el documento (RUT/razón social/giro/dirección del cliente) quedan disponibles para
+  // completar su ficha, en vez de depender solo de lo tipeado a mano en el mensaje.
+  async function subirYLeerFactura(archivo: File) {
+    setSubiendoFactura(true)
+    setNombreArchivoFactura(archivo.name)
+    const filename = `${tipoDocumento}-${p.id}-${Date.now()}-${archivo.name}`
+    const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+    if (error) { alert('No se pudo subir el archivo: ' + error.message); setSubiendoFactura(false); return }
+    const url = supabase.storage.from('audio-notas').getPublicUrl(data.path).data.publicUrl
+    setArchivoUrlFactura(url)
+    try {
+      const res = await fetch('/api/parse-factura-emitida', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const resultado = await res.json()
+      if (res.ok) {
+        if (resultado.monto != null) setMontoFactura(String(resultado.monto))
+        setDatosIAFactura({ rut: resultado.rut, razon_social: resultado.razon_social, giro: resultado.giro, direccion: resultado.direccion })
+      }
+    } catch {
+      // Si la IA falla, el archivo ya quedó subido -- se completa el monto a mano, igual criterio que el resto de la app.
+    }
+    setSubiendoFactura(false)
+  }
+
+  async function registrarFacturaYMarcarRespondido() {
+    const monto = Number(montoFactura)
+    if (!Number.isFinite(monto) || monto <= 0) { alert('Ingresa un monto válido.'); return }
+    setGuardandoFactura(true)
+    const { error: errFactura } = await supabase.from('cliente_facturas').insert({
+      cliente_id: p.cliente_id || null,
+      cliente_nombre: p.cliente_nombre,
+      pendiente_id: p.id,
+      fecha: new Date().toISOString().slice(0, 10),
+      monto,
+      archivo_url: archivoUrlFactura,
+      tipo: tipoDocumento,
+    })
+    if (errFactura) { alert(`No se pudo registrar la ${tipoDocumento}: ` + errFactura.message); setGuardandoFactura(false); return }
+
+    if (p.cliente_id) {
+      const datosTexto = parsearDatosFiscales(p.mensaje_cliente)
+      const datos = {
+        rut: datosIAFactura?.rut || datosTexto.rut,
+        razon_social: datosIAFactura?.razon_social || datosTexto.razon_social,
+        giro: datosIAFactura?.giro || datosTexto.giro,
+        direccion_fiscal: datosIAFactura?.direccion || datosTexto.direccion_fiscal,
+      }
+      if (datos.rut || datos.razon_social || datos.giro || datos.direccion_fiscal) {
+        const { data: clienteActual } = await supabase
+          .from('clientes')
+          .select('rut, razon_social, giro, direccion_fiscal')
+          .eq('id', p.cliente_id)
+          .single()
+        if (clienteActual) {
+          const patch: Record<string, string> = {}
+          if (!clienteActual.rut && datos.rut) patch.rut = datos.rut
+          if (!clienteActual.razon_social && datos.razon_social) patch.razon_social = datos.razon_social
+          if (!clienteActual.giro && datos.giro) patch.giro = datos.giro
+          if (!clienteActual.direccion_fiscal && datos.direccion_fiscal) patch.direccion_fiscal = datos.direccion_fiscal
+          if (Object.keys(patch).length > 0) {
+            await supabase.from('clientes').update(patch).eq('id', p.cliente_id)
+          }
+        }
+      }
+    }
+
+    await supabase.from('pendientes').update({
+      estado: 'respondido',
+      respondido_at: new Date().toISOString(),
+      respuesta: '(Marcado manualmente por Alexandra)',
+    }).eq('id', p.id)
+    setGuardandoFactura(false)
+    setMostrarFormFactura(false)
     onUpdate()
   }
 
@@ -1091,24 +1204,17 @@ function PendienteCard({
                                   ✕ Descartar
                                 </button>
                               )}
-                              <button
+                              <a
                                 className="btn btn-primary"
-                                style={{ fontSize: 13, padding: '7px 14px' }}
-                                onClick={() => {
-                                  generatePDF(
-                                    { name: p.cliente_nombre, rut: '', email: '', address: '' },
-                                    itemsActivos.map((it, i) => ({
-                                      id: i, categoria: it.categoria,
-                                      description: it.descripcion, price: it.precioUnitario,
-                                      quantity: it.cantidad, total: it.cantidad * it.precioUnitario,
-                                    })),
-                                    10
-                                  )
-                                  registrarAccion('pdf_generado').then(onUpdate)
-                                }}
+                                style={{ fontSize: 13, padding: '7px 14px', textDecoration: 'none' }}
+                                href={`/?t=${import.meta.env.VITE_PRESUPUESTO_TOKEN}&desde_pendiente=${p.id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => registrarAccion('pdf_generado').then(onUpdate)}
+                                title="Abre Hacer presupuesto con estos ítems y el cliente ya cargados -- ahí se completa dirección/email, se genera el PDF branding y queda guardado en Mis presupuestos"
                               >
-                                Generar PDF
-                              </button>
+                                Usar en presupuesto →
+                              </a>
                             </div>
                           </div>
                           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
@@ -1174,9 +1280,15 @@ function PendienteCard({
                     <button className="btn btn-secondary" onClick={enviarRecordatorio} disabled={sending} style={{ fontSize: 13, padding: '7px 14px' }}>
                       {sending ? '...' : 'Recordatorio'}
                     </button>
-                    <button className="btn btn-secondary" onClick={marcarRespondido} style={{ fontSize: 13, padding: '7px 14px', color: 'var(--success)' }}>
-                      ✓ Marcar respondido
-                    </button>
+                    {esDocumentoCliente ? (
+                      <button className="btn btn-secondary" onClick={() => setMostrarFormFactura(v => !v)} style={{ fontSize: 13, padding: '7px 14px', color: 'var(--success)' }}>
+                        {mostrarFormFactura ? 'Cancelar' : '✓ Marcar respondido'}
+                      </button>
+                    ) : (
+                      <button className="btn btn-secondary" onClick={marcarRespondido} style={{ fontSize: 13, padding: '7px 14px', color: 'var(--success)' }}>
+                        ✓ Marcar respondido
+                      </button>
+                    )}
                   </>
                 )}
                 {/* Historial y seguimiento */}
@@ -1201,6 +1313,37 @@ function PendienteCard({
                   Eliminar
                 </button>
               </div>
+
+              {mostrarFormFactura && (
+                <div className="card" style={{ padding: 12, marginTop: 10, background: 'var(--surface-alt)' }}>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div className="field" style={{ flex: 1, minWidth: 200 }}>
+                      <label>Archivo de la {tipoDocumento}</label>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        disabled={subiendoFactura}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) subirYLeerFactura(f) }}
+                      />
+                    </div>
+                    <div className="field" style={{ width: 140 }}>
+                      <label>Monto</label>
+                      <input type="number" min="0" value={montoFactura} onChange={e => setMontoFactura(e.target.value)} placeholder="0" />
+                    </div>
+                    <button className="btn btn-primary" onClick={registrarFacturaYMarcarRespondido} disabled={guardandoFactura || subiendoFactura} style={{ fontSize: 13, padding: '8px 16px' }}>
+                      {guardandoFactura ? 'Guardando...' : 'Confirmar y cerrar'}
+                    </button>
+                  </div>
+                  {subiendoFactura && (
+                    <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>Subiendo y leyendo la {tipoDocumento} con IA...</p>
+                  )}
+                  {!subiendoFactura && nombreArchivoFactura && (
+                    <p style={{ fontSize: 12, color: 'var(--success)', marginTop: 8 }}>
+                      ✓ {nombreArchivoFactura} — {datosIAFactura?.rut ? `datos leídos (RUT ${datosIAFactura.rut})` : 'monto y datos leídos por la app, revisa antes de confirmar'}
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
 
