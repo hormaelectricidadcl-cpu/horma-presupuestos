@@ -122,6 +122,7 @@ export interface ReporteCobroDia {
   obra: string | null
   cliente: string
   monto: number
+  comprobante_url?: string | null
 }
 
 export interface ReporteSubcontratoDia {

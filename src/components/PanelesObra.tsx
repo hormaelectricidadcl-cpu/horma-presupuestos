@@ -3014,6 +3014,11 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
                 <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
                 <span style={{ flex: 1 }}>{c.cliente}</span>
                 <span style={{ fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(c.monto)}</span>
+                {c.comprobante_url && (
+                  <a href={c.comprobante_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
+                    Ver comprobante
+                  </a>
+                )}
               </div>
             ))}
           </div>
