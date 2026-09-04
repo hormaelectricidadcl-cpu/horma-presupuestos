@@ -5268,7 +5268,7 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
                   }}>
                     {h.estado === 'respondido' ? '✓' : '•'}
                   </div>
-                  <div style={{ background: 'var(--white)', borderRadius: 12, padding: '12px 14px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                  <div style={{ background: 'var(--white)', color: 'var(--text)', borderRadius: 12, padding: '12px 14px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                       <span style={{
                         fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
