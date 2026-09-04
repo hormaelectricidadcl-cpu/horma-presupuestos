@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
+import { generatePDF } from '../utils/pdfGenerator'
+import { generatePDFEtapas } from '../utils/pdfGeneratorEtapas'
 import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador, ObraItem, ObraFase, ObraAvanceRegistro, PresupuestoItemSimple, PresupuestoEtapa, ClienteFactura } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
@@ -4045,6 +4047,22 @@ export function PanelPresupuestos() {
     setCargandoDetalle(false)
   }
 
+  // Para que Gustavo pueda descargar y compartir el presupuesto (ej. por WhatsApp) sin
+  // depender de que Alexandra se lo pase -- mismo generador que ya usa el presupuestador
+  // al crearlo, así el PDF descargado desde acá es idéntico al que se le mandó al cliente.
+  function descargarPdfDetalle(d: PresupuestoDetalle) {
+    if (d.tipo === 'etapas') {
+      const client = { name: d.cliente_nombre || '', telefono: d.cliente_telefono || '', email: d.cliente_email || '', address: d.cliente_direccion || '' }
+      generatePDFEtapas(client, d.etapas || [], { pct: d.gg_pct || 0, amount: d.gg_amount || 0 }, d.referencia || undefined)
+    } else {
+      // El RUT del cliente no se guarda en `presupuestos` (solo en la ficha de `clientes`) --
+      // el PDF generado desde acá sale sin ese dato, igual que cualquier otro campo que no
+      // se haya cargado al crear el presupuesto original.
+      const client = { name: d.cliente_nombre || '', rut: '', email: d.cliente_email || '', address: d.cliente_direccion || '' }
+      generatePDF(client, d.items || [], d.gg_pct ?? 10, d.referencia || undefined)
+    }
+  }
+
   async function eliminarPresupuesto(id: string, clienteNombre: string | null) {
     if (!window.confirm(`¿Seguro que quieres borrar el presupuesto de "${clienteNombre || 'sin nombre'}"? No se puede deshacer.`)) return
     const { error } = await supabase.from('presupuestos').delete().eq('id', id)
@@ -4335,7 +4353,14 @@ export function PanelPresupuestos() {
                       {new Date(detalle.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}
                     </p>
                   </div>
-                  <button onClick={() => { setDetalleId(null); setDetalle(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--muted)' }}>✕</button>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+                    {detalle.tipo !== 'externo' && (
+                      <button className="btn btn-primary" onClick={() => descargarPdfDetalle(detalle)} style={{ fontSize: 12, padding: '6px 12px' }}>
+                        Descargar PDF
+                      </button>
+                    )}
+                    <button onClick={() => { setDetalleId(null); setDetalle(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--muted)' }}>✕</button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, color: 'var(--muted)', marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
