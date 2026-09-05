@@ -1,7 +1,22 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 03/09/2026 (sesión muy larga) — orden de clientes en 5 fases, Facturas/Boletas emitidas, caso real de Alexis, 3 bugs reales encontrados y corregidos en Reporte Diario
+## Última actualización: 05/09/2026 (sesión corta) — 2 pedidos de Alexandra probando la ficha de Alexis en vivo
+
+**Todo pusheado a `main` y verificado** (`2fb0c7c`, `6713fbb`), `tsc --noEmit` limpio en cada paso. Sesión arrancó con Alexandra mandando capturas reales de la ficha de Alexis (cliente de la sesión del 03/09) mientras la usaba en producción.
+
+1. **Bug de contraste — historial de la ficha de cliente ilegible (`2fb0c7c`).** Alexandra mandó captura: la tarjeta de "Respuesta:" en el historial de Alexis se veía en blanco sobre blanco. Es el mismo bug sistémico ya documentado 4 veces antes (memoria `project_bug_contraste_fondo_claro_sin_color`): un contenedor de fondo claro sin `color` propio hereda el texto claro de la app. Encontrado en la tarjeta de cada evento del historial dentro de `PanelClientes` (`src/components/PanelesObra.tsx:5271`). Fix: agregado `color: 'var(--text)'` al contenedor. **Verificado en navegador (panel de Gustavo, `/g`) contra el historial real de Alexis** — confirmado por JS que el texto pasó de `rgb(251,250,247)` (invisible) a `rgb(20,33,61)` (legible) sobre fondo blanco real.
+
+2. **Botón "Descargar PDF" en el detalle de un presupuesto guardado (`6713fbb`).** Alexandra pidió que desde "Mis presupuestos" → Detalle se pudiera descargar el PDF para que Gustavo lo comparta con quien haga falta (antes el PDF solo se generaba una vez, al crear el presupuesto — si se cerraba esa pantalla sin descargarlo, se perdía). Agregado botón junto a la ✕ del modal (`PanelPresupuestos` en `PanelesObra.tsx`), que llama a `generatePDF`/`generatePDFEtapas` (los mismos generadores que ya usa el presupuestador) según `detalle.tipo`. No aparece para presupuestos "externos" (esos ya tienen su propio archivo subido, visible en el mismo modal vía `GaleriaArchivos`). **Nota real encontrada al implementar:** el RUT del cliente nunca se guarda en la tabla `presupuestos` (solo vive en la ficha de `clientes`), así que el PDF regenerado desde el detalle sale sin ese campo — no es un bug nuevo, es un dato que nunca se persistió ahí.
+   - **Verificado con datos reales de Alexis** (panel de Gustavo, Vite local): al clickear "Descargar PDF" se generaron los 12 ítems correctos y el total calculado dio exacto `$2.510.662`, igual al guardado en Supabase (confirmado por consola: `Totales calculados en PDF: {..., total: 2510662}`).
+   - **Límite de esta verificación:** el navegador de prueba (sandbox) bloquea la descarga real del archivo — se confirmó que el cálculo y el render corren bien con datos reales, pero no que el archivo `.pdf` efectivamente se guarda en un dispositivo real. Pendiente que Gustavo lo pruebe una vez en producción y confirme que el archivo descarga y se puede compartir (ej. por WhatsApp).
+
+### Pendiente para la próxima sesión
+- Confirmar con Gustavo/Alexandra que "Descargar PDF" funciona de punta a punta en un dispositivo real (celular o PC), no solo que se genera bien en el simulador.
+- Sigue sin tocar: seguridad de fondo de Supabase (RLS `anon full access` en casi todas las tablas de negocio, conversación abierta desde el 28/08) y RLS deshabilitado en tablas `seo_*`.
+- Caso de Alexis sigue como referencia de fondo: falta que Gustavo confirme el depósito viendo el comprobante y se le facture/emita boleta cuando corresponda.
+
+## Última actualización anterior: 03/09/2026 (sesión muy larga) — orden de clientes en 5 fases, Facturas/Boletas emitidas, caso real de Alexis, 3 bugs reales encontrados y corregidos en Reporte Diario
 
 **Todo pusheado a `main` y verificado en producción real** (`dae18db`, `6094041`, `75ada28`, `be6b931`), `tsc --noEmit` limpio en cada paso. Sesión arrancó con un pedido puntual de Alexandra ("hay que extraer los datos de este presupuesto") y terminó en una reorganización de fondo de cómo se conectan cliente/presupuesto/obra/cobro/factura en toda la app, probada con un caso real de punta a punta (Alexis, obra nueva con depósito real de $350.000).
 
