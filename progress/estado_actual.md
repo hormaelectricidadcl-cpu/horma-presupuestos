@@ -72,6 +72,28 @@ compra "Peaje" idéntica — descripción, $6.100, obra, destino, pagado_por, re
 a uno contra la fila real; sin `compra_items` asociados. El resto de los borrados son de secciones vacías ese
 día. Verificado también en producción con el deploy ya arriba.
 
+### 5. Ver el presupuesto de la obra desde Obras → Detalle (pedido de Alexandra)
+El vínculo ya existía en los datos (`obras.presupuesto_id`, se guarda al convertir un presupuesto en obra)
+pero no se mostraba en ningún lado del panel de Obras. Nuevo bloque **"Presupuesto de esta obra"** arriba del
+detalle: línea colapsada con referencia, fecha y total, que se abre y muestra los ítems (o las etapas, o el
+archivo si es un presupuesto externo), el desglose subtotal/GG/IVA/total, y botón **"Descargar PDF"**.
+
+Muestra el presupuesto **original** (lo que se le vendió al cliente), no `obra_items` — esos son la copia de
+trabajo que se edita en "Avance de obra" y puede alejarse de lo presupuestado a medida que la obra avanza.
+
+`descargarPdfDetalle` se sacó de adentro de `PanelPresupuestos` y quedó como `descargarPdfPresupuesto`
+exportada, para que el PDF salga idéntico desde "Mis presupuestos" y desde el detalle de la obra.
+
+**Verificado en navegador con las 3 obras reales que cubren los 3 casos** (toda escritura de red bloqueada):
+- Alexis (`simple`): los 12 ítems con categorías y el total $2.510.662, igual al dato en Supabase. El botón
+  descargó el PDF real ("Presupuesto Alexis - 07-09-2026.pdf"), sin errores de consola.
+- Camino turístico (`externo`): muestra "presupuesto externo", total $11.731.258 (igual a Supabase) y el
+  archivo subido; sin botón de PDF, porque esos ya traen su propio documento.
+- Luis Carrera 2700 (sin `presupuesto_id`): "Esta obra no tiene un presupuesto vinculado".
+
+**Pendiente si Alexandra lo pide:** no existe forma de vincular un presupuesto ya guardado a una obra que
+nació sin él (como Luis Carrera 2700) — hoy el vínculo solo se crea al convertir el presupuesto en obra.
+
 ### Pendiente para la próxima sesión
 - **Alexandra: abrir Reporte Diario → 05/09/2026 y guardar** para que los tres
   trabajadores queden con `viatico=false`. Es el paso que baja la semana de $890.000 a $860.000. No hace

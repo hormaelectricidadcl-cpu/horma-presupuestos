@@ -937,6 +937,7 @@ export function PanelObras() {
         <HistorialObraModal
           obra={historialObra}
           obraId={obrasMaestro.find(o => o.nombre === historialObra)?.id}
+          presupuestoId={obrasMaestro.find(o => o.nombre === historialObra)?.presupuesto_id ?? null}
           diarios={diarios}
           compras={compras}
           cobros={cobros}
@@ -2904,6 +2905,133 @@ function HistorialPeriodosTrabajador({ vista, trabajador, diariosTrabajador, aju
   )
 }
 
+/* ─── Presupuesto vinculado a una obra, dentro del detalle de la obra ──── */
+// Muestra el presupuesto ORIGINAL (lo que se le vendió al cliente), no los ítems de
+// trabajo: esos viven en "Avance de obra" (`obra_items`), se editan a medida que la obra
+// avanza y por eso pueden dejar de coincidir con lo presupuestado. Acá interesa el
+// documento tal como se envió -- por eso también se puede volver a bajar el PDF.
+function PresupuestoDeLaObra({ presupuestoId }: { presupuestoId: string | null }) {
+  const [presupuesto, setPresupuesto] = useState<PresupuestoDetalle | null>(null)
+  const [cargando, setCargando] = useState(false)
+  const [abierto, setAbierto] = useState(false)
+
+  useEffect(() => {
+    if (!presupuestoId) { setPresupuesto(null); return }
+    let cancelado = false
+    setCargando(true)
+    supabase.from('presupuestos').select('*').eq('id', presupuestoId).single().then(({ data }) => {
+      if (cancelado) return
+      setPresupuesto((data as PresupuestoDetalle) || null)
+      setCargando(false)
+    })
+    return () => { cancelado = true }
+  }, [presupuestoId])
+
+  return (
+    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '45vh', overflowY: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Presupuesto de esta obra
+        </p>
+        {presupuesto && presupuesto.tipo !== 'externo' && (
+          <button className="btn btn-ghost" onClick={() => descargarPdfPresupuesto(presupuesto)} style={{ fontSize: 12 }}>
+            Descargar PDF
+          </button>
+        )}
+      </div>
+
+      {!presupuestoId ? (
+        <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+          Esta obra no tiene un presupuesto vinculado — se creó a mano, sin partir de uno guardado.
+        </p>
+      ) : cargando ? (
+        <div className="spinner" />
+      ) : !presupuesto ? (
+        <p style={{ fontSize: 13, color: 'var(--muted)' }}>No se pudo cargar el presupuesto vinculado.</p>
+      ) : (
+        <>
+          <button
+            onClick={() => setAbierto(x => !x)}
+            style={{
+              width: '100%', background: 'var(--surface-alt)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: 'var(--text)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 13, minWidth: 0 }}>
+              <strong>{presupuesto.referencia || 'Sin referencia'}</strong>
+              <span style={{ color: 'var(--muted)' }}>
+                {' · '}{new Date(presupuesto.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}
+                {presupuesto.tipo === 'externo' ? ' · presupuesto externo' : ''}
+              </span>
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <strong style={{ fontSize: 14 }}>{fmtMoney(presupuesto.total || 0)}</strong>
+              <span style={{ color: 'var(--muted)', fontSize: 12 }}>{abierto ? '▲' : '▼'}</span>
+            </span>
+          </button>
+
+          {abierto && (
+            <div style={{ marginTop: 12 }}>
+              {presupuesto.tipo === 'simple' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(presupuesto.items || []).map((item, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ flex: 1 }}>
+                        <span style={{ color: 'var(--muted)', fontSize: 11 }}>{item.categoria}</span><br />
+                        {item.description} × {item.quantity}
+                      </span>
+                      <span style={{ fontWeight: 600, flexShrink: 0 }}>{fmtMoney(item.total)}</span>
+                    </div>
+                  ))}
+                  {(!presupuesto.items || presupuesto.items.length === 0) && (
+                    <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin ítems cargados.</p>
+                  )}
+                </div>
+              ) : presupuesto.tipo === 'externo' ? (
+                presupuesto.archivo_url
+                  ? <GaleriaArchivos urls={[presupuesto.archivo_url]} />
+                  : <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin archivo cargado.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {(presupuesto.etapas || []).map((etapa, i) => (
+                    <div key={i}>
+                      <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{etapa.numero} — {etapa.nombre}</p>
+                      {etapa.items.map((item, j) => (
+                        <div key={j} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, padding: '4px 0' }}>
+                          <span style={{ flex: 1, color: 'var(--muted)' }}>[{item.tipo}] {item.descripcion} × {item.cantidad}</span>
+                          <span style={{ flexShrink: 0 }}>{fmtMoney(item.total)}</span>
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 12, fontWeight: 700, marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
+                        Subtotal etapa: {fmtMoney(etapa.total)}
+                      </div>
+                    </div>
+                  ))}
+                  {(!presupuesto.etapas || presupuesto.etapas.length === 0) && (
+                    <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin etapas cargadas.</p>
+                  )}
+                </div>
+              )}
+
+              {presupuesto.tipo !== 'externo' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span>{fmtMoney(presupuesto.subtotal || 0)}</span></div>
+                  {presupuesto.gg_amount != null && presupuesto.gg_amount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gastos generales ({presupuesto.gg_pct}%)</span><span>{fmtMoney(presupuesto.gg_amount)}</span></div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>IVA</span><span>{fmtMoney(presupuesto.iva || 0)}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}><span>Total</span><span>{fmtMoney(presupuesto.total || 0)}</span></div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ─── Bloque de contenido de un período (reutilizable) ── */
 function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontratosObra, tarifas, onMarcarReembolsado }: {
   diariosObra: ReporteTrabajadorDia[]
@@ -3286,6 +3414,7 @@ function GaleriaObra({ obraId }: { obraId: string }) {
 export function HistorialObraModal({
   obra,
   obraId,
+  presupuestoId = null,
   diarios,
   compras,
   cobros,
@@ -3302,6 +3431,7 @@ export function HistorialObraModal({
 }: {
   obra: string
   obraId?: string
+  presupuestoId?: string | null
   diarios: ReporteTrabajadorDia[]
   compras: ReporteCompraDia[]
   cobros: ReporteCobroDia[]
@@ -3350,6 +3480,8 @@ export function HistorialObraModal({
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
         </div>
+
+        <PresupuestoDeLaObra presupuestoId={presupuestoId} />
 
         {obraId && <GaleriaObra obraId={obraId} />}
 
@@ -3987,6 +4119,24 @@ export function PanelFacturas() {
   )
 }
 
+// Para que Gustavo pueda descargar y compartir el presupuesto (ej. por WhatsApp) sin
+// depender de que Alexandra se lo pase -- mismo generador que ya usa el presupuestador
+// al crearlo, así el PDF descargado desde acá es idéntico al que se le mandó al cliente.
+// Vive suelta (no dentro de PanelPresupuestos) porque también se usa desde el detalle de
+// una obra, y el PDF tiene que salir igual desde los dos lados.
+export function descargarPdfPresupuesto(d: PresupuestoDetalle) {
+  if (d.tipo === 'etapas') {
+    const client = { name: d.cliente_nombre || '', telefono: d.cliente_telefono || '', email: d.cliente_email || '', address: d.cliente_direccion || '' }
+    generatePDFEtapas(client, d.etapas || [], { pct: d.gg_pct || 0, amount: d.gg_amount || 0 }, d.referencia || undefined)
+  } else {
+    // El RUT del cliente no se guarda en `presupuestos` (solo en la ficha de `clientes`) --
+    // el PDF generado desde acá sale sin ese dato, igual que cualquier otro campo que no
+    // se haya cargado al crear el presupuesto original.
+    const client = { name: d.cliente_nombre || '', rut: '', email: d.cliente_email || '', address: d.cliente_direccion || '' }
+    generatePDF(client, d.items || [], d.gg_pct ?? 10, d.referencia || undefined)
+  }
+}
+
 export function PanelPresupuestos() {
   const [presupuestos, setPresupuestos] = useState<PresupuestoGuardado[]>([])
   const [loading, setLoading] = useState(true)
@@ -4050,22 +4200,6 @@ export function PanelPresupuestos() {
     const { data } = await supabase.from('presupuestos').select('*').eq('id', id).single()
     setDetalle(data as PresupuestoDetalle)
     setCargandoDetalle(false)
-  }
-
-  // Para que Gustavo pueda descargar y compartir el presupuesto (ej. por WhatsApp) sin
-  // depender de que Alexandra se lo pase -- mismo generador que ya usa el presupuestador
-  // al crearlo, así el PDF descargado desde acá es idéntico al que se le mandó al cliente.
-  function descargarPdfDetalle(d: PresupuestoDetalle) {
-    if (d.tipo === 'etapas') {
-      const client = { name: d.cliente_nombre || '', telefono: d.cliente_telefono || '', email: d.cliente_email || '', address: d.cliente_direccion || '' }
-      generatePDFEtapas(client, d.etapas || [], { pct: d.gg_pct || 0, amount: d.gg_amount || 0 }, d.referencia || undefined)
-    } else {
-      // El RUT del cliente no se guarda en `presupuestos` (solo en la ficha de `clientes`) --
-      // el PDF generado desde acá sale sin ese dato, igual que cualquier otro campo que no
-      // se haya cargado al crear el presupuesto original.
-      const client = { name: d.cliente_nombre || '', rut: '', email: d.cliente_email || '', address: d.cliente_direccion || '' }
-      generatePDF(client, d.items || [], d.gg_pct ?? 10, d.referencia || undefined)
-    }
   }
 
   async function eliminarPresupuesto(id: string, clienteNombre: string | null) {
@@ -4360,7 +4494,7 @@ export function PanelPresupuestos() {
                   </div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
                     {detalle.tipo !== 'externo' && (
-                      <button className="btn btn-primary" onClick={() => descargarPdfDetalle(detalle)} style={{ fontSize: 12, padding: '6px 12px' }}>
+                      <button className="btn btn-primary" onClick={() => descargarPdfPresupuesto(detalle)} style={{ fontSize: 12, padding: '6px 12px' }}>
                         Descargar PDF
                       </button>
                     )}
