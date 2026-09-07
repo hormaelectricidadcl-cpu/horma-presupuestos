@@ -166,6 +166,11 @@ export default function Reporte({ token, embedded = false }: Props) {
   // CUALQUIER otra cosa (un cobro, una compra) exigiría completar la obra de cada trabajador
   // activo aunque nadie haya tocado su fila, incluso en una obra nueva sin gente trabajando aún.
   const [trabajadoresTocados, setTrabajadoresTocados] = useState<Set<string>>(new Set())
+  // Un sábado guardado ANTES de que existiera la regla del viático quedó con viatico=true en
+  // la base. La pantalla ya lo muestra como "sin viático" (así se va a guardar), pero Pago
+  // Semanal sigue leyendo el dato viejo hasta que se guarde el día -- si no se avisa, las dos
+  // pantallas se contradicen sin explicación. Ver decisiones.md 2026-09-07.
+  const [viaticoViejoEsteDia, setViaticoViejoEsteDia] = useState(false)
   // Mismo criterio para Cobros -- solo los de origen 'reportes_cobros' (editables acá);
   // los de 'abono_cuenta' ya se muestran de solo lectura, sin formulario que colapsar.
   const [cobrosColapsados, setCobrosColapsados] = useState<Set<string>>(new Set())
@@ -211,6 +216,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     setTrabajadores(base)
     setTrabajadoresColapsados(new Set((dia || []).map(row => row.trabajador)))
     setTrabajadoresTocados(new Set((dia || []).map(row => row.trabajador)))
+    setViaticoViejoEsteDia((dia || []).some(row => row.presente && row.viatico))
 
     const comprasDia = (compr || []) as { id: string; descripcion: string; monto: number; obra: string | null; destino: 'stock' | 'trabajo_puntual' | null; pagado_por: string | null; reembolsado: boolean | null; foto_boleta_url: string | null }[]
     let itemsPorCompra: Record<string, CompraItemRow[]> = {}
@@ -907,6 +913,16 @@ export default function Reporte({ token, embedded = false }: Props) {
 
             {/* Trabajadores */}
             <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Trabajadores</h2>
+            {esSabado(fecha) && viaticoViejoEsteDia && (
+              <div style={{
+                background: '#fef3c7', border: '1px solid #fde68a', color: 'var(--text)',
+                borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, lineHeight: 1.5,
+              }}>
+                Este sábado quedó guardado <strong>con viático</strong> de antes. Acá abajo ya se ve
+                corregido, pero Pago Semanal va a seguir contándolo hasta que toques
+                <strong> "Guardar reporte del día"</strong>.
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
               {trabajadorNombres.map(nombre => {
                 const t = trabajadores[nombre]
