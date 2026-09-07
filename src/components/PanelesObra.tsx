@@ -390,7 +390,14 @@ export function calcularResumenObras(
     }, 0)
     const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0) + cobradoManual
-    const saldo = cobrado - gastoCompras - pagadoSubcontratos - adelantos - pagosSemanales
+    // Saldo = lo cobrado menos lo que costó la obra. La mano de obra entra como costo
+    // (días × tarifa + viático) y por eso NO se restan aparte los adelantos ni los pagos
+    // semanales cargados contra la obra: esos son el PAGO de esa misma mano de obra, no un
+    // costo aparte -- restarlos además la contaría dos veces (Ohiggins tiene $3.615.000 de
+    // mano de obra y $1.595.000 cargados como pagos). Antes no se restaba la mano de obra
+    // en absoluto, así que el saldo daba de más. Decidido con Alexandra, ver decisiones.md
+    // 2026-09-07.
+    const saldo = cobrado - gastoCompras - pagadoSubcontratos - manoDeObra
     // Si la obra tiene cuenta(s) por cobrar, el presupuesto real es la SUMA de
     // esas cuentas — no el campo suelto de la obra, que puede quedar
     // desactualizado (ej. alguien lo edita a mano reflejando solo una parte,
@@ -860,17 +867,15 @@ export function PanelObras() {
                     )}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
                       <StatTile label="Presupuesto" valor={o.presupuestoTotal != null ? fmtMoney(o.presupuestoTotal) : 'sin definir'} />
-                      <StatTile label="Facturado" valor={fmtMoney(o.cobrado)} tono="positivo" />
+                      <StatTile label="Abonado" valor={fmtMoney(o.cobrado)} tono="positivo" />
                       <StatTile
-                        label="Por facturar"
+                        label="Por abonar"
                         valor={o.faltaPorCobrar != null ? fmtMoney(o.faltaPorCobrar) : 'sin presupuesto'}
                         tono={o.faltaPorCobrar == null ? 'neutral' : o.faltaPorCobrar > 0 ? 'alerta' : 'positivo'}
                       />
                       <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
                       <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
                       <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
-                      <StatTile label="Adelantos" valor={fmtMoney(o.adelantos)} />
-                      <StatTile label="Pagos semana" valor={fmtMoney(o.pagosSemanales)} />
                       <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
                     </div>
                     <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -894,7 +899,7 @@ export function PanelObras() {
                       )}
                       {o.cobradoManual > 0 && (
                         <span>
-                          De lo facturado, <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobradoManual)}</strong> viene de la cuenta por cobrar manual (no del Reporte Diario).
+                          De lo abonado, <strong style={{ color: 'var(--success)' }}>{fmtMoney(o.cobradoManual)}</strong> viene de la cuenta por cobrar manual (no del Reporte Diario).
                         </span>
                       )}
                       {o.gastoSubcontratos !== o.pagadoSubcontratos && (
@@ -2019,13 +2024,9 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Mano de obra', texto: 'Lo que cuesta el trabajo de los trabajadores en esta obra: días trabajados × su tarifa diaria, más el viático de los días que corresponda.' },
   { titulo: 'Compras', texto: 'Materiales y otros gastos que la empresa pagó directamente para esta obra.' },
   { titulo: 'Subcontratos', texto: 'Lo pagado a subcontratistas externos, como un pintor, que no son parte del equipo fijo.' },
-  { titulo: 'Adelantos', texto: 'Plata adelantada a un trabajador a cuenta de lo que se le debe. No es su pago completo de la semana.' },
-  { titulo: 'Pagos semana', texto: 'La liquidación semanal completa que ya se le pagó a un trabajador.' },
-  { titulo: 'Cobrado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual.' },
-  { titulo: 'Falta por cobrar', texto: 'Cuánto le queda debiendo el cliente por esta obra, en total — suma todo lo pendiente de sus cuentas por cobrar (puedes ver el detalle de cada una en "Detalle").' },
-  { titulo: 'Saldo', texto: 'Cobrado menos todo lo gastado (mano de obra, compras, subcontratos, adelantos y pagos de semana). Es la plata en caja de la obra hoy, no cuánto falta que pague el cliente — para eso mira "Falta por cobrar".' },
-  { titulo: 'Facturado', texto: 'El total que ya se le facturó formalmente al cliente por esta obra, sume o no coincida con lo cobrado (a veces se cobra antes de facturar, o se factura antes de cobrar).' },
-  { titulo: 'Por facturar', texto: 'Presupuesto total menos lo facturado — cuánto le queda al cliente por facturarle en total. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto total cargado.' },
+  { titulo: 'Abonado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual. No es lo facturado: una factura es un documento aparte, que se carga en la ficha del cliente.' },
+  { titulo: 'Por abonar', texto: 'Cuánto le queda debiendo el cliente por esta obra. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto cargado.' },
+  { titulo: 'Saldo', texto: 'Lo abonado menos lo que costó la obra: mano de obra, compras y subcontratos. Los adelantos y pagos de semana no se restan aparte, porque son el pago de esa misma mano de obra y se contarían dos veces.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
 
@@ -3243,8 +3244,8 @@ function CuentaMiniCard({ cuenta, abonos, onAgregarAbono, onEliminarAbono, onEli
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         <StatTile label="Presupuesto" valor={fmtMoney(cuenta.total_presupuesto)} />
-        <StatTile label="Facturado" valor={fmtMoney(totalAbonado)} tono="positivo" />
-        <StatTile label="Por facturar" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
+        <StatTile label="Abonado" valor={fmtMoney(totalAbonado)} tono="positivo" />
+        <StatTile label="Por abonar" valor={fmtMoney(restante)} tono={restante > 0 ? 'negativo' : 'positivo'} />
       </div>
       {abonosCuenta.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
@@ -5325,13 +5326,28 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
             <p style={{ color: 'var(--muted)', fontSize: 13 }}>Todavía no tiene ninguna obra.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {obrasCliente.map(o => (
-                <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 600 }}>{o.nombre}</span>
-                  <span className="badge badge-otro" style={{ fontSize: 11 }}>{ESTADO_OBRA_LABELS[o.estado_obra]}</span>
-                  <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{o.presupuesto_total != null ? fmtMoney(o.presupuesto_total) : '—'}</span>
-                </div>
-              ))}
+              {obrasCliente.map(o => {
+                // Mismo criterio que la pestaña Obras: si la obra tiene cuentas por cobrar,
+                // el presupuesto real es la SUMA de esas cuentas, no el campo suelto de la
+                // obra -- ese queda desactualizado cuando aparecen adicionales (Luis Carrera
+                // mostraba $2.722.500 acá y $4.831.150 en Obras). Ver decisiones.md 2026-09-07.
+                const cuentasDeLaObra = cuentasCliente.filter(c => c.obra === o.nombre && c.activa)
+                const total = cuentasDeLaObra.length > 0
+                  ? cuentasDeLaObra.reduce((s, c) => s + c.total_presupuesto, 0)
+                  : o.presupuesto_total
+                return (
+                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600 }}>{o.nombre}</span>
+                    <span className="badge badge-otro" style={{ fontSize: 11 }}>{ESTADO_OBRA_LABELS[o.estado_obra]}</span>
+                    {cuentasDeLaObra.length > 1 && (
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        presupuesto original + {cuentasDeLaObra.length - 1} adicional{cuentasDeLaObra.length - 1 !== 1 ? 'es' : ''}
+                      </span>
+                    )}
+                    <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{total != null ? fmtMoney(total) : '—'}</span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
