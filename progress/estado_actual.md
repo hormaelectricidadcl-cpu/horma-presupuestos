@@ -59,8 +59,21 @@ su adelanto de $80.000 se cargó después de subir el comprobante). Ahora compar
 - Pago Semanal simulando el sábado ya corregido: total $860.000, Henry $350.000 y Manuel $215.000, los dos
   en "✓ Coincide".
 
+### 4. Aviso cuando un sábado sigue guardado con viático (`cbe5230`)
+Alexandra reportó las dos pantallas contradiciéndose: Reporte Diario decía "sin viático" el 05/09 y Pago
+Semanal seguía contando los $10.000. **No era un bug de sincronización** (las dos leen `reportes_diarios`):
+el punto 2 aplicó la regla al MOSTRAR, pero el dato guardado sigue en `viatico=true` hasta que se guarde ese
+día, y nada lo decía. Ahora, si la fecha es sábado y ese día quedó guardado con viático, aparece un aviso
+arriba de Trabajadores explicando que hay que tocar "Guardar reporte del día" para que Pago Semanal lo tome.
+
+**Antes de pedirle que guarde ese día se simuló el guardado completo con toda escritura interceptada** (nada
+salió a Supabase) y se revisó operación por operación: corrige el viático de los tres, y borra+reinserta la
+compra "Peaje" idéntica — descripción, $6.100, obra, destino, pagado_por, reembolsado y foto verificados uno
+a uno contra la fila real; sin `compra_items` asociados. El resto de los borrados son de secciones vacías ese
+día. Verificado también en producción con el deploy ya arriba.
+
 ### Pendiente para la próxima sesión
-- **Alexandra: abrir Reporte Diario → 05/09/2026 y guardar** (una vez desplegado) para que los tres
+- **Alexandra: abrir Reporte Diario → 05/09/2026 y guardar** para que los tres
   trabajadores queden con `viatico=false`. Es el paso que baja la semana de $890.000 a $860.000. No hace
   falta SQL.
 - **Fabriel, sábado 05/09:** trabajó, pero esta semana no tiene cargado el ajuste por ese sábado. Las dos
