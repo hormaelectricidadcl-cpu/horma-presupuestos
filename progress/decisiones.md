@@ -1,6 +1,52 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-07 — El Saldo de una obra es "lo abonado menos lo que costó", no la caja
+Alexandra encontró que el saldo no restaba la mano de obra: Camino turístico mostraba $965.396, que es
+exactamente lo cobrado menos las compras, con $455.000 de mano de obra sin descontar.
+
+**No alcanzaba con sumarla a la resta** — verificado antes de tocar nada: O'Higgins tiene $3.615.000 de mano
+de obra devengada y además $1.595.000 cargados como adelantos/pagos semanales contra esa misma obra, así que
+restar las dos cosas la contaba dos veces. La decisión de Alexandra fue explícita: "adelantos y pago semana
+deberían salir de obras y quedar mano de obra".
+
+Entonces: **Saldo = abonado − compras − subcontratos − mano de obra devengada**, y los adelantos y pagos
+semanales ya no se restan aparte ni se muestran como tarjetas en Obras (siguen viviendo en Pago Semanal, que
+es donde se cargan y se pagan). La mano de obra es el costo; los adelantos son el pago de ese costo.
+
+**Punta suelta, anotada y sin resolver:** los subcontratos se siguen restando por lo PAGADO, no por lo
+contratado. Con la mano de obra ahora contada como costo devengado, lo coherente sería restar lo contratado.
+No se tocó porque no se pidió, y sí cambia plata: O'Higgins tiene $3.500.000 contratados contra $1.100.000
+pagados, así que su saldo pasaría de $20.707.892 a $18.307.892.
+
+## 2026-09-07 — "Facturado" pasa a ser "Abonado" en Obras y en las cuentas por cobrar
+Pedido de Alexandra: "facturado es cuando se emitió una factura". Las tarjetas de obra y de cuenta por cobrar
+mostraban lo COBRADO bajo la etiqueta "Facturado", que es otra cosa. Ahora dicen "Abonado" y "Por abonar", y
+la palabra "facturado" queda libre para las facturas de verdad (`cliente_facturas`), que son un documento
+aparte y viven en la ficha del cliente.
+
+## 2026-09-07 — La ficha del cliente usa la misma regla de presupuesto que Obras
+La ficha mostraba `obras.presupuesto_total` crudo y Obras mostraba la suma de las cuentas por cobrar de esa
+obra: Luis Carrera decía $2.722.500 en un lado y $4.831.150 en el otro. La regla correcta ya estaba escrita
+en `calcularResumenObras` desde antes ("si la obra tiene cuentas, el presupuesto real es la suma de esas
+cuentas, porque el campo suelto queda desactualizado cuando aparecen adicionales"); la ficha simplemente no
+la usaba. Ahora la usa y aclara "presupuesto original + N adicionales" cuando hay más de una cuenta.
+
+## 2026-09-07 — La marca "con IVA" de una obra no toca ningún cálculo
+Gustavo pidió marcar si una obra se pactó con IVA o sin IVA. Alexandra precisó para qué sirve: "debe aparecer
+una tarjeta que saque lo que corresponde al IVA de lo presupuestado, para saber que ese dinero se tiene que
+transferir a la cuenta de IVA". Se implementó exactamente así: una marca por obra (`obras.con_iva`) y una
+tarjeta "IVA a apartar". **No entra en el saldo, ni en lo abonado, ni en lo por abonar** — no se re-litiga
+esto sin volver a hablarlo, porque cambiaría plata que se le cobra al cliente.
+
+El monto se calcula como `presupuesto × 19/119` y no se guarda: el presupuesto ya viene con IVA incluido
+(subtotal → +GG% → neto → +19%), verificado contra los dos presupuestos reales que tienen el desglose
+guardado — HRM-MTN1YJRT da $52.250 y HRM-MTM3YB3N da $400.862, exacto lo que quedó guardado en cada uno.
+
+**Ojo con una alternativa que NO se eligió:** la tarjeta muestra el IVA de lo PRESUPUESTADO (lo que pidió
+Alexandra), no el de lo ya abonado. Si en la práctica lo que necesitan saber es cuánto de la plata que ya
+entró hay que transferir, es un cambio chico pero hay que decidirlo, no asumirlo.
+
 ## 2026-09-07 — La regla del sábado sin viático se aplica al CARGAR el día, nunca recalculando el pasado
 Cierra la pregunta que había quedado abierta el 31/08 ("¿el formulario debería desmarcar el viático solo
 los sábados?"). Alexandra confirmó la regla sin ambigüedad ("los días sábados nadie tiene viáticos") después

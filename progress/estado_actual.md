@@ -94,8 +94,54 @@ exportada, para que el PDF salga idéntico desde "Mis presupuestos" y desde el d
 **Pendiente si Alexandra lo pide:** no existe forma de vincular un presupuesto ya guardado a una obra que
 nació sin él (como Luis Carrera 2700) — hoy el vínculo solo se crea al convertir el presupuesto en obra.
 
+### 6. Análisis de tres conversaciones grabadas con Gustavo + lista de pendientes
+Alexandra pasó tres conversaciones largas (grabadas el 04/09, mientras usaban la app juntos) y sus propias
+notas. Se analizaron una por una, verificando cada punto de plata contra Supabase antes de opinar. De ahí
+salió una lista consolidada, publicada como artifact compartido (checklist con estado guardado, para
+trabajarla con Gustavo a lo largo de varias sesiones):
+**https://claude.ai/code/artifact/fc54d787-90c4-49fd-93f2-662ca980772e**
+
+Hallazgos que no estaban en el radar de nadie, encontrados verificando:
+- El cobro real de Elsie Goycoolea quedó con el cliente en texto libre ("Elsie Goycoolea") distinto de su
+  ficha ("Elsie Goycoolea propiedades Ltda") — el cobro no engancha con el cliente.
+- La pestaña "Facturas" lee la tabla vieja `facturas` (2 filas, última del 17/08), sin relación con
+  `cliente_facturas`, que es donde viven las facturas reales (1 sola en todo el sistema).
+- La cuenta "Doctora Eloísa Días 5860" ($7.500.000) está bajo Constructora PSG pero su obra figura con otra
+  clienta. Alexandra confirmó: "Doctora Eloísa Díaz es una dirección, esa obra es de Constructora PSG".
+- El chat de IA no puede responder por mes porque el resumen que se le manda solo lleva totales actuales de
+  obras activas; los datos por mes se cargan en el navegador y se descartan antes de enviarlos.
+- La restricción "cada trabajador ve solo su obra" YA está construida (28/08) — lo que falta es asignarles la
+  obra: ninguno de los 5 activos la tiene. Y si un trabajador está en varias obras, hoy no se puede: es una
+  obra o todas.
+
+### 7. Sección "Plata" de esa lista — construida y verificada (`af8f780`, `9af23f7`)
+1. **El saldo ahora resta la mano de obra** (ver `decisiones.md` para por qué no alcanzaba con sumarla).
+   Camino turístico pasó de $965.396 a **$510.396**. Las tarjetas de Adelantos y Pagos semana salieron de
+   Obras, a pedido de Alexandra.
+2. **La ficha del cliente usa la misma regla de presupuesto que Obras.** Luis Carrera muestra $4.831.150 en
+   los dos lados (antes $2.722.500 en la ficha), con la nota "presupuesto original + 2 adicionales".
+3. **"Facturado" → "Abonado", "Por facturar" → "Por abonar"**, en obras y en cuentas por cobrar.
+4. **Marca "con IVA" por obra + tarjeta "IVA a apartar"** (`presupuesto × 19/119`, verificado contra los dos
+   presupuestos reales con desglose). No toca ningún otro cálculo.
+
+**Verificado en navegador con datos reales y toda escritura de red bloqueada**: los saldos, la ficha de
+Constructora PSG y el IVA de la obra de Alexis ($400.862) dan exactamente lo mismo que la consulta directa a
+Supabase.
+
+**Dos migraciones nuevas SIN correr** — Alexandra tiene que pegarlas en el SQL Editor:
+- `sql/20260907_obras_con_iva.sql` (columna `con_iva`; mientras no corra, el checkbox avisa en vez de fallar
+  callado). Después hay que marcar a mano qué obras se pactaron con IVA.
+- `sql/20260907_obras_eloisa_a_psg.sql` (las dos obras "Doctora Eloísa" pasan a Constructora PSG; trae
+  consulta de comprobación y, comentado, el borrado de la ficha que queda vacía).
+
 ### Pendiente para la próxima sesión
-- **Alexandra: abrir Reporte Diario → 05/09/2026 y guardar** para que los tres
+- **Correr las dos migraciones de arriba.**
+- Seguir por la sección "Facturas y clientes" de la lista: que Gustavo pueda subir la factura emitida desde
+  donde trabaja, y que en Clientes se pueda hacer clic para abrir el presupuesto/obra/cuenta.
+- Decisiones abiertas anotadas en el artifact: si un trabajador puede estar en varias obras, el sábado de
+  Fabriel (+$40.000, a confirmar con Gustavo), qué es lo del teléfono que mencionó Gustavo, y si los
+  subcontratos se restan por lo contratado en vez de lo pagado (cambiaría el saldo de O'Higgins en $2.400.000).
+- **Alexandra: abrir Reporte Diario → 05/09/2026 y guardar** — HECHO, verificado el mismo día. Los tres
   trabajadores queden con `viatico=false`. Es el paso que baja la semana de $890.000 a $860.000. No hace
   falta SQL.
 - **Fabriel, sábado 05/09:** trabajó, pero esta semana no tiene cargado el ajuste por ese sábado. Las dos
