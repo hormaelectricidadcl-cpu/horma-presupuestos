@@ -296,6 +296,9 @@ export interface Obra {
   fecha_fin: string | null
   garantia_hasta: string | null
   activa: boolean
+  // El precio pactado incluye IVA. Solo se usa para mostrar cuánto de lo presupuestado
+  // hay que apartar para la cuenta de IVA -- ver sql/20260907_obras_con_iva.sql.
+  con_iva?: boolean
 }
 
 export interface Trabajador {

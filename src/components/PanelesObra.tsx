@@ -413,8 +413,18 @@ export function calcularResumenObras(
       ? pendienteManual
       : (presupuestoTotal != null ? Math.max(presupuestoTotal - cobrado, 0) : null)
 
+    // Cuánto de lo presupuestado es IVA y por lo tanto no es plata de la empresa: hay que
+    // apartarlo para la cuenta de IVA. El presupuesto ya viene con IVA incluido (subtotal →
+    // +GG% → neto → +19%), así que la parte de IVA es total × 19/119 -- verificado contra
+    // los presupuestos reales, da exacto el mismo monto que quedó guardado en cada uno.
+    // Solo se calcula si la obra está marcada como pactada con IVA.
+    const conIva = maestro?.con_iva ?? false
+    const ivaApartar = conIva && presupuestoTotal != null
+      ? Math.round(presupuestoTotal * 19 / 119)
+      : null
+
     return {
-      obra, obraId: maestro?.id, activa, estadoObra,
+      obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
       tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
@@ -492,6 +502,15 @@ export function PanelObras() {
 
   async function cambiarEstadoObra(obraId: string, estado_obra: EstadoObra) {
     await supabase.from('obras').update({ estado_obra }).eq('id', obraId)
+    cargar()
+  }
+
+  async function guardarConIva(obraId: string, con_iva: boolean) {
+    const { error } = await supabase.from('obras').update({ con_iva }).eq('id', obraId)
+    if (error) {
+      alert('No se pudo guardar. Puede que falte correr la migración sql/20260907_obras_con_iva.sql.')
+      return
+    }
     cargar()
   }
 
@@ -876,6 +895,9 @@ export function PanelObras() {
                       <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
                       <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
                       <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+                      {o.ivaApartar != null && (
+                        <StatTile label="IVA a apartar" valor={fmtMoney(o.ivaApartar)} tono="alerta" />
+                      )}
                       <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
                     </div>
                     <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -890,6 +912,18 @@ export function PanelObras() {
                             <EditablePresupuesto valor={o.presupuestoTotal} onGuardar={monto => guardarPresupuesto(o.obraId as string, monto)} />
                           )}
                           <EditableCliente valor={o.cliente} onGuardar={cliente => guardarCliente(o.obraId as string, cliente)} />
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', width: 'fit-content' }}>
+                            <input
+                              type="checkbox"
+                              checked={o.conIva}
+                              onChange={e => guardarConIva(o.obraId as string, e.target.checked)}
+                              style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }}
+                            />
+                            <span>
+                              El precio de esta obra incluye IVA
+                              <span style={{ color: 'var(--muted)', fontSize: 12 }}> — muestra cuánto hay que apartar para la cuenta de IVA</span>
+                            </span>
+                          </label>
                           {!o.presupuestoId && (
                             <CargarPresupuestoObra obra={{ id: o.obraId as string, nombre: o.obra, cliente: o.cliente }} onGuardado={cargar} />
                           )}
@@ -2027,6 +2061,7 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Abonado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual. No es lo facturado: una factura es un documento aparte, que se carga en la ficha del cliente.' },
   { titulo: 'Por abonar', texto: 'Cuánto le queda debiendo el cliente por esta obra. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto cargado.' },
   { titulo: 'Saldo', texto: 'Lo abonado menos lo que costó la obra: mano de obra, compras y subcontratos. Los adelantos y pagos de semana no se restan aparte, porque son el pago de esa misma mano de obra y se contarían dos veces.' },
+  { titulo: 'IVA a apartar', texto: 'Cuánto de lo presupuestado es IVA y hay que transferir a la cuenta de IVA — no es plata de la empresa. Aparece solo en las obras marcadas como "el precio incluye IVA".' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
 
