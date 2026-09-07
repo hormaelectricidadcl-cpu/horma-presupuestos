@@ -21,6 +21,22 @@ function viaticoPorObra(obra: string) {
   return obra === OBRA_LIMACHE
 }
 
+// Regla de negocio confirmada por Alexandra (ver decisiones.md 2026-08-31 y 2026-09-07):
+// un sábado trabajado NO lleva viático, ni siquiera en Limache. Ya causó dos veces que el
+// neto de la semana saliera $10.000 de más por persona contra lo realmente transferido.
+// Ojo con el parseo: `new Date('2026-09-05')` se interpreta como UTC y en Chile devuelve
+// el día anterior -- por eso se arma la fecha con los componentes locales.
+function esSabado(fecha: string) {
+  const [y, m, d] = fecha.split('-').map(Number)
+  if (!y || !m || !d) return false
+  return new Date(y, m - 1, d).getDay() === 6
+}
+
+// Si el día es sábado no hay viático, sin importar la obra.
+function viaticoCorresponde(obra: string, fecha: string) {
+  return viaticoPorObra(obra) && !esSabado(fecha)
+}
+
 interface TrabajadorState {
   presente: boolean
   obra: string
@@ -294,7 +310,7 @@ export default function Reporte({ token, embedded = false }: Props) {
       const next = { ...prev }
       for (const nombre of trabajadorNombres) {
         if (next[nombre]?.presente) {
-          next[nombre] = { ...next[nombre], obra: obraGeneral, viatico: viaticoPorObra(obraGeneral) }
+          next[nombre] = { ...next[nombre], obra: obraGeneral, viatico: viaticoCorresponde(obraGeneral, fecha) }
           nombresAfectados.push(nombre)
         }
       }
@@ -511,7 +527,9 @@ export default function Reporte({ token, embedded = false }: Props) {
         presente: t.presente,
         obra: t.presente ? (t.obra || null) : null,
         fraccion_jornada: t.presente ? t.fraccionJornada : 0,
-        viatico: t.presente ? t.viatico : false,
+        // El sábado nunca lleva viático -- se fuerza acá además de en la UI para que un día
+        // ya cargado mal (o el estado arrastrado de otro día) no lo vuelva a guardar en true.
+        viatico: t.presente && !esSabado(fecha) ? t.viatico : false,
         adelanto_monto: t.adelanto.trim() ? Number(t.adelanto) : null,
         tipo_pago: t.tipoPago,
       }
@@ -902,7 +920,7 @@ export default function Reporte({ token, embedded = false }: Props) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
                         <span style={{ color: '#1f6b3f', fontWeight: 800, flexShrink: 0 }}>✓</span>
                         <span style={{ fontSize: 14, fontWeight: 700 }}>{nombre}</span>
-                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t.obra || 'sin obra'} · {jornadaLabel}{t.viatico ? '' : ' · sin viático'}</span>
+                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t.obra || 'sin obra'} · {jornadaLabel}{t.viatico && !esSabado(fecha) ? '' : ' · sin viático'}</span>
                         {t.adelanto.trim() && (
                           <span style={{ fontSize: 13, color: 'var(--muted)' }}>· ${Number(t.adelanto).toLocaleString('es-CL')}</span>
                         )}
@@ -942,7 +960,7 @@ export default function Reporte({ token, embedded = false }: Props) {
                           <label>Obra</label>
                           <select
                             value={t.obra}
-                            onChange={e => actualizarTrabajador(nombre, { obra: e.target.value, viatico: viaticoPorObra(e.target.value) })}
+                            onChange={e => actualizarTrabajador(nombre, { obra: e.target.value, viatico: viaticoCorresponde(e.target.value, fecha) })}
                           >
                             <option value="">Selecciona una obra...</option>
                             {obras.map(o => <option key={o} value={o}>{o}</option>)}
@@ -959,15 +977,21 @@ export default function Reporte({ token, embedded = false }: Props) {
                               <option value={0.5}>Medio día</option>
                             </select>
                           </div>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: t.viatico ? 'var(--text)' : 'var(--danger)', paddingTop: 22, cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={!t.viatico}
-                              onChange={e => actualizarTrabajador(nombre, { viatico: !e.target.checked })}
-                              style={{ width: 18, height: 18, accentColor: 'var(--danger)', cursor: 'pointer' }}
-                            />
-                            Sin viático hoy
-                          </label>
+                          {esSabado(fecha) ? (
+                            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', paddingTop: 22 }}>
+                              Sábado: sin viático
+                            </p>
+                          ) : (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: t.viatico ? 'var(--text)' : 'var(--danger)', paddingTop: 22, cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={!t.viatico}
+                                onChange={e => actualizarTrabajador(nombre, { viatico: !e.target.checked })}
+                                style={{ width: 18, height: 18, accentColor: 'var(--danger)', cursor: 'pointer' }}
+                              />
+                              Sin viático hoy
+                            </label>
+                          )}
                         </div>
                         <div className="field">
                           <label>Monto pagado hoy (opcional)</label>

@@ -1,7 +1,9 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 07/09/2026 (sesión corta) — bug real: no se podía guardar un cobro sin completar asistencia de todos los trabajadores activos
+## Última actualización: 07/09/2026 — cobro bloqueado por la asistencia, regla del sábado sin viático, y el cartel de comprobantes
+
+### 1. No se podía guardar un cobro sin completar la asistencia de todos los trabajadores
 
 Alexandra reportó con captura real: al intentar guardar un cobro de $350.000 (Alexis Vitacura, obra nueva que recién empieza) en Reporte Diario, saltaba "Falta indicar la obra de algún trabajador presente" — sin haber tocado la sección Trabajadores para nada.
 
@@ -15,8 +17,57 @@ Alexandra reportó con captura real: al intentar guardar un cobro de $350.000 (A
 
 `tsc --noEmit` limpio. Cambio sin commitear/pushear todavía — pendiente confirmar con Alexandra antes de subir a producción.
 
+**Pusheado como `c5cb0e4`.**
+
+### 2. Regla del sábado sin viático — ahora en el código (volvió a pasar, segunda vez)
+Alexandra mandó capturas de Pago Semanal (semana 31/08-06/09): el total daba $890.000 y varias filas
+decían "No coincide" contra lo transferido. Es la misma regla ya documentada el 31/08 y nunca implementada.
+
+**Verificado contra Supabase antes de tocar código** — el sábado 05/09 quedó con `viatico=true` para
+Fabriel, Henry y Manuel. Números reales de la semana:
+
+| Trabajador | Mostraba | Corregido | Transferido |
+|---|---|---|---|
+| Fabriel (sueldo fijo) | $60.000 | $50.000 | (sin comprobante) |
+| Henry | $360.000 | $350.000 | $350.000 ✓ |
+| Manuel | $225.000 | $215.000 | $215.000 ✓ |
+| Misael | $175.000 | $175.000 | $175.000 ✓ |
+| Samuel | $70.000 | $70.000 | $70.000 ✓ |
+| **Total** | **$890.000** | **$860.000** | |
+
+**Fix (`Reporte.tsx`):** `esSabado(fecha)` — si el día es sábado no hay viático: se guarda `viatico=false`
+(forzado también en el guardado, no solo en la UI) y la tarjeta muestra "Sábado: sin viático" en lugar del
+checkbox. Ojo con el parseo de fechas: `new Date('2026-09-05')` se interpreta como UTC y en Chile devuelve
+viernes — se arma con componentes locales.
+
+**Decisión importante, ver `decisiones.md` 2026-09-07: NO se aplicó recalculando el pasado.** Las semanas
+viejas ya se cuadraron a mano con ajustes que descuentan ese mismo viático (Manuel 03/08: −$10.000 "Anoté de
+más un día de viático", etc.) — recalcular restaría dos veces y rompería semanas que hoy coinciden exacto
+con las transferencias.
+
+### 3. El cartel "No coincide" comparaba contra una foto vieja del monto
+`monto_calculado` se congela al subir la captura, así que cualquier cambio posterior dejaba el cartel en
+rojo sobre cuentas correctas (caso real: Samuel decía "comprobante $70.000 · calculado $150.000" solo porque
+su adelanto de $80.000 se cargó después de subir el comprobante). Ahora compara contra el neto en vivo.
+**Verificado en navegador con datos reales:** Samuel pasó a "✓ Coincide" sin tocar su comprobante.
+
+**Verificación de los puntos 2 y 3** (Playwright, interceptando toda escritura de red):
+- Sábado 05/09 en Reporte Diario: la tarjeta muestra "Sábado: sin viático" y el guardado manda
+  `viatico=false` para Fabriel, Henry y Manuel.
+- Viernes 04/09 (regresión): el viático sigue funcionando igual — true para el equipo de Limache, false
+  para el de Santiago.
+- Pago Semanal simulando el sábado ya corregido: total $860.000, Henry $350.000 y Manuel $215.000, los dos
+  en "✓ Coincide".
+
 ### Pendiente para la próxima sesión
-- Commitear y pushear este fix si Alexandra lo confirma.
+- **Alexandra: abrir Reporte Diario → 05/09/2026 y guardar** (una vez desplegado) para que los tres
+  trabajadores queden con `viatico=false`. Es el paso que baja la semana de $890.000 a $860.000. No hace
+  falta SQL.
+- **Fabriel, sábado 05/09:** trabajó, pero esta semana no tiene cargado el ajuste por ese sábado. Las dos
+  veces anteriores se cargó a mano (24/08: +$40.000 "Trabajó Sábado"; 17/08: +$50.000 "Trabajo sábado +
+  viático"). Como es sueldo fijo, ese sábado solo se le paga vía ajuste. **Alexandra lo va a confirmar con
+  Gustavo antes de cargar nada.**
+- Confirmar que el deploy de Cloudflare llegó a producción (el de `c5cb0e4` tardó más de lo habitual).
 - Seguir con lo pendiente de sesiones anteriores (ver abajo).
 
 ## Última actualización anterior: 05/09/2026 (sesión corta) — 2 pedidos de Alexandra probando la ficha de Alexis en vivo

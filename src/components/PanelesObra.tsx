@@ -2266,8 +2266,13 @@ function ComprobanteCelda({ trabajador, semanaKey, montoCalculado, comprobante, 
     }
   }
 
-  const coincide = comprobante?.monto_leido != null && comprobante?.monto_calculado != null
-    ? Math.round(comprobante.monto_leido) === Math.round(comprobante.monto_calculado)
+  // Se compara contra el neto que corresponde HOY (`montoCalculado`), no contra
+  // `comprobante.monto_calculado`, que es la foto del monto al momento de subir la captura.
+  // Esa foto queda vieja apenas se carga un adelanto, se corrige un día o cambia una regla
+  // después de haber subido el comprobante, y el cartel avisaba "No coincide" sobre cuentas
+  // que en realidad estaban bien. `monto_calculado` se sigue guardando como historial.
+  const coincide = comprobante?.monto_leido != null
+    ? Math.round(comprobante.monto_leido) === Math.round(montoCalculado)
     : null
 
   return (
@@ -2290,7 +2295,7 @@ function ComprobanteCelda({ trabajador, semanaKey, montoCalculado, comprobante, 
             }}
             title="Ver captura"
           >
-            ⚠ No coincide: comprobante {fmtMoney(comprobante.monto_leido!)} · calculado {fmtMoney(comprobante.monto_calculado!)}
+            ⚠ No coincide: comprobante {fmtMoney(comprobante.monto_leido!)} · calculado {fmtMoney(montoCalculado)}
           </a>
         ) : (
           <a

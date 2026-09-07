@@ -1,6 +1,38 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-07 — La regla del sábado sin viático se aplica al CARGAR el día, nunca recalculando el pasado
+Cierra la pregunta que había quedado abierta el 31/08 ("¿el formulario debería desmarcar el viático solo
+los sábados?"). Alexandra confirmó la regla sin ambigüedad ("los días sábados nadie tiene viáticos") después
+de que volviera a pasar: la semana 31/08-06/09 salía $890.000 cuando correspondían $860.000.
+
+**Decidido: la regla vive en el formulario de Reporte Diario** (`esSabado()` en `Reporte.tsx` — si la fecha
+es sábado no hay viático, se guarda `viatico=false` y la UI muestra "Sábado: sin viático" en vez del
+checkbox). **Explícitamente NO se aplicó recalculando el viático de los datos ya guardados**, aunque era la
+opción más tentadora (arreglaba todo de una vez, sin tocar datos).
+
+**Por qué no recalcular el pasado — verificado contra Supabase antes de descartarlo:** las semanas viejas ya
+se cuadraron a mano con `ajustes_pago_semanal` que YA descuentan ese viático de más. Ejemplos reales:
+Manuel semana 03/08 tiene un ajuste de −$10.000 "Anoté de más un día de viático", Fabriel −$10.000
+"Anote de más un día de viático", Henry −$70.000 que incluye "un día de viático". Si el cálculo además
+ignorara el viático del sábado, esas semanas restarían dos veces el mismo error y quedarían por debajo de
+lo que realmente se transfirió (hoy coinciden exacto con los comprobantes). El historial ya reconciliado
+se deja intacto: la regla solo afecta lo que se cargue de acá en adelante.
+
+**Corolario:** un día ya guardado con el error se corrige abriendo esa fecha en Reporte Diario y guardando
+de nuevo (el guardado fuerza `viatico=false` si es sábado), no con un UPDATE masivo.
+
+## 2026-09-07 — El comprobante de pago semanal se compara contra el neto de hoy, no contra la foto vieja
+`pago_semanal_comprobantes.monto_calculado` guardaba el neto al momento de subir la captura, y el cartel
+"✓ Coincide / ⚠ No coincide" comparaba contra ese número congelado. Cualquier cosa que pasara después
+—cargar un adelanto, corregir un día, aplicar la regla del sábado— dejaba el cartel en rojo sobre cuentas
+que en realidad estaban bien. Caso real que lo destapó: Samuel, semana 31/08, decía "comprobante $70.000 ·
+calculado $150.000" solo porque su adelanto de $80.000 se cargó DESPUÉS de subir el comprobante; los
+$70.000 transferidos eran exactamente lo que correspondía.
+
+Decidido con Alexandra: el cartel compara contra el neto calculado en vivo. `monto_calculado` se sigue
+guardando en la tabla como historial de lo que se veía al subir la captura, pero ya no es lo que se compara.
+
 ## 2026-09-02/03 — Plan de "orden" en 4 fases: cliente_id como eje real, dos puertas de entrada conviven
 Alexandra pidió orden de fondo después de encontrar el caso Patricia Marambio/Mga Abogados: presupuestos, obras, cuentas por cobrar y facturas hoy solo se cruzan por el NOMBRE del cliente escrito como texto libre, nunca por su `clientes.id` real — cada pantalla es una isla. Confirmó que hay DOS puertas de entrada legítimas y que no hace falta forzarlas a ser iguales: (1) la suya, marketing → pendiente con caso+fotos → chat con Gustavo → presupuesto; (2) la de Gustavo, boca a boca → directo a "Hacer presupuesto" sin pasar por un pendiente. Las dos ya convergen en la tabla `presupuestos` — ese es el punto de unificación real, no hace falta unificar la superficie.
 
