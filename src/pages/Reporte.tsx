@@ -144,6 +144,12 @@ export default function Reporte({ token, embedded = false }: Props) {
   // -- en vez del formulario completo siempre abierto. Se descolapsa solo si se edita
   // algo de ese trabajador (deja de coincidir con lo guardado), nunca al revés.
   const [trabajadoresColapsados, setTrabajadoresColapsados] = useState<Set<string>>(new Set())
+  // Trabajadores con datos reales para este día: ya tenían fila guardada, o se tocó algo
+  // de su formulario en esta sesión (marcar ausente, elegir obra, "aplicar obra a todos").
+  // "presente" arranca en true por defecto para todos -- si no filtráramos por esto, guardar
+  // CUALQUIER otra cosa (un cobro, una compra) exigiría completar la obra de cada trabajador
+  // activo aunque nadie haya tocado su fila, incluso en una obra nueva sin gente trabajando aún.
+  const [trabajadoresTocados, setTrabajadoresTocados] = useState<Set<string>>(new Set())
   // Mismo criterio para Cobros -- solo los de origen 'reportes_cobros' (editables acá);
   // los de 'abono_cuenta' ya se muestran de solo lectura, sin formulario que colapsar.
   const [cobrosColapsados, setCobrosColapsados] = useState<Set<string>>(new Set())
@@ -188,6 +194,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     }
     setTrabajadores(base)
     setTrabajadoresColapsados(new Set((dia || []).map(row => row.trabajador)))
+    setTrabajadoresTocados(new Set((dia || []).map(row => row.trabajador)))
 
     const comprasDia = (compr || []) as { id: string; descripcion: string; monto: number; obra: string | null; destino: 'stock' | 'trabajo_puntual' | null; pagado_por: string | null; reembolsado: boolean | null; foto_boleta_url: string | null }[]
     let itemsPorCompra: Record<string, CompraItemRow[]> = {}
@@ -277,6 +284,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   function actualizarTrabajador(nombre: string, patch: Partial<TrabajadorState>) {
     setTrabajadores(prev => ({ ...prev, [nombre]: { ...prev[nombre], ...patch } }))
     setTrabajadoresColapsados(prev => { if (!prev.has(nombre)) return prev; const next = new Set(prev); next.delete(nombre); return next })
+    setTrabajadoresTocados(prev => { if (prev.has(nombre)) return prev; const next = new Set(prev); next.add(nombre); return next })
   }
 
   function aplicarObraATodos() {
@@ -293,6 +301,7 @@ export default function Reporte({ token, embedded = false }: Props) {
       return next
     })
     setTrabajadoresColapsados(prev => { const next = new Set(prev); for (const n of nombresAfectados) next.delete(n); return next })
+    setTrabajadoresTocados(prev => { const next = new Set(prev); for (const n of nombresAfectados) next.add(n); return next })
   }
 
   function agregarCompra() {
@@ -494,7 +503,7 @@ export default function Reporte({ token, embedded = false }: Props) {
       return
     }
 
-    const filasDiarias = trabajadorNombres.map(nombre => {
+    const filasDiarias = trabajadorNombres.filter(nombre => trabajadoresTocados.has(nombre)).map(nombre => {
       const t = trabajadores[nombre] || { ...DEFAULT_TRABAJADOR, presente: false }
       return {
         fecha,

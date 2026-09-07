@@ -1,7 +1,25 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## Última actualización: 05/09/2026 (sesión corta) — 2 pedidos de Alexandra probando la ficha de Alexis en vivo
+## Última actualización: 07/09/2026 (sesión corta) — bug real: no se podía guardar un cobro sin completar asistencia de todos los trabajadores activos
+
+Alexandra reportó con captura real: al intentar guardar un cobro de $350.000 (Alexis Vitacura, obra nueva que recién empieza) en Reporte Diario, saltaba "Falta indicar la obra de algún trabajador presente" — sin haber tocado la sección Trabajadores para nada.
+
+**Causa real, encontrada leyendo el código (no asumida):** `DEFAULT_TRABAJADOR.presente = true` en `src/pages/Reporte.tsx` — todo trabajador activo arranca "presente" por defecto cada día, y "Guardar reporte del día" siempre reconstruye una fila de asistencia para los 6 trabajadores activos (Fabriel, Henry, Manuel, Misael, Samuel + el que corresponda), exigiendo que cada uno tenga una obra elegida antes de dejar guardar CUALQUIER cosa del día (cobro, compra, subcontrato), aunque esa persona no tenga nada que ver con lo que se está cargando.
+
+**Fix:** se agregó un Set `trabajadoresTocados` que solo incluye a un trabajador si (a) ya tenía una fila guardada ese día en `reportes_diarios`, o (b) el usuario tocó algo de su fila en esta sesión (marcar ausente, elegir obra, "Aplicar obra a todos"). `filasDiarias` (la validación y el upsert a `reportes_diarios`) ahora se arma solo con los tocados — un trabajador nunca tocado simplemente no se incluye, no bloquea ni se guarda nada inventado sobre su asistencia. La validación real (que un trabajador marcado presente tenga obra) sigue intacta para quien sí se toca.
+
+**Verificado con Playwright (npx, interceptando TODA escritura de red antes de tocar el botón real, regla dura del proyecto) contra el escenario exacto de la captura de Alexandra:**
+- Cobro "Alexis Vitacura" / $350.000 / obra "Camino turístico 11474, Lo Barnechea", sin tocar Trabajadores → Guardar no dispara ningún alert, el POST a `reportes_cobros` sale con los datos correctos, y el POST a `reportes_diarios` sale con body `[]` (no se inventa asistencia de nadie).
+- Prueba de regresión: si se toca a un trabajador (ej. Fabriel) y se lo deja presente sin elegir obra, el guardado SIGUE bloqueado con el mismo mensaje — la validación real de asistencia no se debilitó.
+
+`tsc --noEmit` limpio. Cambio sin commitear/pushear todavía — pendiente confirmar con Alexandra antes de subir a producción.
+
+### Pendiente para la próxima sesión
+- Commitear y pushear este fix si Alexandra lo confirma.
+- Seguir con lo pendiente de sesiones anteriores (ver abajo).
+
+## Última actualización anterior: 05/09/2026 (sesión corta) — 2 pedidos de Alexandra probando la ficha de Alexis en vivo
 
 **Todo pusheado a `main` y verificado** (`2fb0c7c`, `6713fbb`), `tsc --noEmit` limpio en cada paso. Sesión arrancó con Alexandra mandando capturas reales de la ficha de Alexis (cliente de la sesión del 03/09) mientras la usaba en producción.
 
