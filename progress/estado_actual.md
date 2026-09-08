@@ -1,6 +1,36 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
+## POR DÓNDE SEGUIR — cierre del martes 08/09/2026
+
+Lista viva compartida con Alexandra (checklist, estado guardado):
+**https://claude.ai/code/artifact/fc54d787-90c4-49fd-93f2-662ca980772e**
+
+**De las tres conversaciones con Gustavo no queda nada para construir.** Todo lo del 07 y 08/09 está en
+producción, verificado contra datos reales, y las cinco migraciones corridas. Lo que sigue:
+
+1. **Viernes 11/09 — sesión de Alexandra con Gustavo.** Es lo más importante: **nadie usó todavía lo nuevo
+   con un caso real** (0 adicionales creados, 0 facturas vinculadas). Lo que hay que pasar por un caso de
+   verdad: subir una factura eligiendo su presupuesto (la lectura por IA es lo único que no se pudo probar
+   acá — Cloudflare Function, no corre en Vite local), armar un adicional y mandar su PDF, cargar una
+   cantidad que creció en Avance de obra, preguntarle al chat por un mes, y abrir el link de Gabriel con
+   obras asignadas.
+2. **Seguridad etapa 2** — la que arregla el fondo. Ver `decisiones.md` 2026-09-08. Usuarios reales de
+   Supabase con sesión persistente, políticas de `anon` a `authenticated`, reglas por rol. **A propósito no
+   se hizo antes del viernes**: toca cómo entra cada persona a cada panel. La etapa 1 ya está aplicada.
+3. **Cuatro datos que solo esperan que alguien los cargue** (verificado el 08/09, ninguno hecho todavía):
+   marcar qué obras se pactaron con IVA, asignarle las obras a cada trabajador (ninguno tiene, por eso
+   Gabriel ve todas), las fechas de las 5 fases de O'Higgins que están sin fecha, y borrar los 3 clientes de
+   prueba ("Alexandra prueba 3", "Gustavo Castillo", "Eloísa Díaz").
+4. **Dos decisiones abiertas:** el sábado de Fabriel (+$40.000, a confirmar con Gustavo) y qué es lo del
+   teléfono que él mencionó ("en el teléfono no hace el automático", "no quiero que salga WhatsApp, web").
+5. **Alexandra dedica miércoles y jueves a la página web**, no a esta app.
+
+**Contexto de método que conviene no perder:** todo lo de estos dos días se verificó contra Supabase real y
+en el navegador con TODA escritura de red interceptada, nunca dando por bueno que "el código se ve bien".
+Dos veces eso encontró errores propios antes de que llegaran a producción (ver `decisiones.md`: la trampa
+del `select` con una columna que no existe, y el flujo de adicionales que copiaba el presupuesto entero).
+
 ## Última actualización: 07/09/2026 — cobro bloqueado por la asistencia, regla del sábado sin viático, y el cartel de comprobantes
 
 ### 1. No se podía guardar un cobro sin completar la asistencia de todos los trabajadores
