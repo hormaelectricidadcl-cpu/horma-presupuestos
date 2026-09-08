@@ -1,6 +1,44 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-08 — Los adicionales son documentos aparte; el presupuesto original nunca se toca
+Pedido de Gustavo (conversación 04/09): el ítem dice 4, se hicieron 3 y aparecieron 2 más, así que ahora son
+6. Quiere partir del mismo presupuesto, ajustar lo que cambió, agregar las líneas nuevas al final y mandarle
+al cliente un presupuesto con todo. Alexandra pidió investigar cómo lo hacen los sistemas grandes.
+
+**Decidido, y no se re-litiga sin volver a hablarlo: el original NUNCA se modifica ni se reemplaza.** Es el
+criterio de los sistemas de job costing — el original queda como línea base, los adicionales son documentos
+aparte con su propio estado y monto, y se muestra **original + adicionales aprobados = vigente**. Las dos
+razones que dan y que aplican igual acá: pasados los primeros días de obra, comparar contra el original da
+números equivocados porque ya no es el trato real; y en una discusión con el cliente lo único que vale es el
+registro fechado y atribuido de cada cambio.
+
+Implementación: un adicional es un presupuesto más, con `origen_id` apuntando al original
+(`sql/20260908_presupuestos_adicionales.sql`). Con eso se reusa todo lo que ya existía — ítems, PDF con la
+marca, estados, Mis presupuestos — y el histórico sale solo, porque cada adicional tiene su fecha y su
+referencia. "Crear adicionales" abre el presupuestador con una copia editable del original.
+
+**A propósito, la PLATA de un adicional sigue entrando por `cuentas_por_cobrar`**, que es como Alexandra y
+Gustavo ya lo hacen a mano (Luis Carrera tiene tres cuentas: original, materiales y "adicional a evaluar").
+No se creó un segundo camino para el dinero — `origen_id` es solo el documento. Esto es deliberado: todo el
+día 07/09 se estuvo arreglando el daño de tener dos sistemas para lo mismo (cuentas vs. presupuesto_total,
+`facturas` vs. `cliente_facturas`).
+
+**Lo que todavía NO está:** que los ítems de "Avance de obra" acepten que una cantidad crezca (4 → 6). Hoy el
+adicional vive como documento y como cuenta por cobrar, pero `obra_items` sigue con la cantidad original.
+
+## 2026-09-08 — Pedir una columna que no existe rompe la consulta entera (trampa a no repetir)
+Al agregar `origen_id` al `select` de presupuestos, la ficha del cliente y "Mis presupuestos" quedaron **sin
+ningún presupuesto** mientras la migración no estuviera corrida: Supabase falla la consulta completa si se
+pide una columna inexistente, y el código hacía `data || []`, así que se veía como si se hubieran borrado.
+Encontrado probando en el navegador, antes de que llegara a producción.
+
+**Regla:** cuando se agrega una columna nueva a un `select` existente, el código tiene que tolerar que la
+migración todavía no esté corrida — pedirla y reintentar sin ella si falla (`traerPresupuestos`), o usar
+`select('*')`. Lo mismo en los inserts: si el insert con la columna nueva falla, guardar sin ella antes que
+perder el dato, y avisar. Ojo que esto NO aplica igual a `con_iva`, que se leía con `select('*')` y por eso
+degradó bien sin hacer nada.
+
 ## 2026-09-07 — El Saldo de una obra es "lo abonado menos lo que costó", no la caja
 Alexandra encontró que el saldo no restaba la mano de obra: Camino turístico mostraba $965.396, que es
 exactamente lo cobrado menos las compras, con $455.000 de mano de obra sin descontar.

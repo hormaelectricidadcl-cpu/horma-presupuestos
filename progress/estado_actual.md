@@ -168,10 +168,37 @@ abre completo en la ficha de Patricia; la pestaña muestra su factura de $125.44
 la lectura por IA *desde esta puerta nueva* queda sin probar hasta que se use en producción. El archivo se
 sube igual y el monto se puede completar a mano.
 
+### 9. Factura ↔ presupuesto, y ver la boleta de cada compra (`cf77329`)
+Idea de Gustavo: "cuando voy al taller del auto, la factura dice 'factura del presupuesto tal'". Lo que se
+tomó es el **vínculo**: al subir una factura se elige a qué presupuesto corresponde, la fila del presupuesto
+muestra "Facturado $X" y la de la factura dice por qué presupuesto es. Migración
+`sql/20260908_cliente_facturas_presupuesto.sql`, **ya corrida por Alexandra**.
+*(Sobre poner solo "según presupuesto X" como glosa de la factura: el SII pide que el detalle sea
+suficientemente preciso, y la factura electrónica tiene un campo de Referencia propio para el número de
+presupuesto. Es tema del contador, no de la app.)*
+Además, cada compra del detalle de obra que tenga foto ahora muestra "Ver boleta" (pedido de Alexandra).
+
+### 10. Presupuestos de adicionales (`8f32de8`) — el pedido grande de Gustavo
+Ver `decisiones.md` 2026-09-08 para el criterio completo. Resumen: **el original nunca se toca**; un adicional
+es un presupuesto más con `origen_id` apuntando al original, y se muestra original + adicionales aprobados =
+vigente. "Crear adicionales" abre el presupuestador con una copia editable. La plata sigue entrando por
+`cuentas_por_cobrar`, como ya lo hacen a mano — no se creó un segundo camino para el dinero.
+
+**Migración nueva SIN correr: `sql/20260908_presupuestos_adicionales.sql`.**
+
+**Bug propio, encontrado y corregido antes de producción:** pedir `origen_id` en el `select` hacía fallar la
+consulta entera mientras la columna no existiera, dejando la ficha del cliente y "Mis presupuestos" sin
+ningún presupuesto. Ahora se reintenta sin la columna. **Verificado en producción con la migración todavía
+sin correr:** la ficha de Alexis sigue mostrando su presupuesto y "Mis presupuestos" sigue listando.
+
 ### Pendiente para la próxima sesión
-- Seguir por **"Presupuestos y adicionales"** — el pedido grande de Gustavo. El diseño ya está investigado y
-  anotado en `decisiones.md`/el artifact: no se reemplaza el presupuesto, el original queda congelado y los
-  adicionales se cargan aparte (original + aprobados = vigente), con registro fechado.
+- **Correr `sql/20260908_presupuestos_adicionales.sql`.** Hasta entonces se puede crear el adicional pero no
+  queda vinculado al original (avisa en pantalla, no se pierde el presupuesto).
+- **Lo que falta de adicionales:** que los ítems de "Avance de obra" acepten que una cantidad crezca (4 → 6).
+  Hoy el adicional existe como documento y como cuenta por cobrar, pero `obra_items` sigue con la cantidad
+  original.
+- Lo que queda de la lista: chat de IA por mes, cobros del día tomando el cliente de la obra, boletas
+  filtrables por obra, el modal de detalle en pantalla chica, y trabajador en varias obras (decisión abierta).
 - **Para hacer ellos, sin código:** marcar qué obras se pactaron con IVA, asignarle la obra a cada trabajador
   (ninguno la tiene, por eso ven todas), y cargar las fechas de las fases de O'Higgins.
 - Decisiones abiertas anotadas en el artifact: si un trabajador puede estar en varias obras, el sábado de
