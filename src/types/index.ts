@@ -61,6 +61,9 @@ export interface ClienteFactura {
   monto: number
   archivo_url: string | null
   tipo: 'factura' | 'boleta'
+  // Presupuesto que esta factura está cobrando (sql/20260908_cliente_facturas_presupuesto.sql).
+  // Nullable: no toda factura nace de un presupuesto guardado.
+  presupuesto_id?: string | null
 }
 
 export interface ReporteTrabajadorDia {

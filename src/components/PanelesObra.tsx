@@ -2960,8 +2960,9 @@ function HistorialPeriodosTrabajador({ vista, trabajador, diariosTrabajador, aju
 // Esta es la misma máquina que ya usa Admin (mismo bucket, misma lectura por IA, misma
 // tabla), pero disponible donde él trabaja. `pendiente_id` queda en null: esta factura no
 // nace de un pendiente.
-function SubirFacturaCliente({ cliente, onGuardado }: { cliente: Cliente; onGuardado: () => void }) {
+function SubirFacturaCliente({ cliente, presupuestos, onGuardado }: { cliente: Cliente; presupuestos: PresupuestoGuardado[]; onGuardado: () => void }) {
   const [abierto, setAbierto] = useState(false)
+  const [presupuestoId, setPresupuestoId] = useState('')
   const [tipo, setTipo] = useState<'factura' | 'boleta'>('factura')
   const [fecha, setFecha] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date()))
   const [monto, setMonto] = useState('')
@@ -2973,6 +2974,7 @@ function SubirFacturaCliente({ cliente, onGuardado }: { cliente: Cliente; onGuar
 
   function limpiar() {
     setTipo('factura'); setMonto(''); setArchivoUrl(null); setNombreArchivo(''); setDatosIA(null)
+    setPresupuestoId('')
     setAbierto(false)
   }
 
@@ -3011,12 +3013,17 @@ function SubirFacturaCliente({ cliente, onGuardado }: { cliente: Cliente; onGuar
       cliente_id: cliente.id,
       cliente_nombre: cliente.nombre,
       pendiente_id: null,
+      presupuesto_id: presupuestoId || null,
       fecha,
       monto: montoNum,
       archivo_url: archivoUrl,
       tipo,
     })
-    if (error) { alert(`No se pudo registrar la ${tipo}: ` + error.message); setGuardando(false); return }
+    if (error) {
+      alert(`No se pudo registrar la ${tipo}: ${error.message}\n\nSi menciona "presupuesto_id", falta correr la migración sql/20260908_cliente_facturas_presupuesto.sql.`)
+      setGuardando(false)
+      return
+    }
 
     // Igual que en Admin: lo que la IA leyó del documento completa la ficha del cliente,
     // pero NUNCA pisa un dato ya cargado a mano.
@@ -3057,6 +3064,20 @@ function SubirFacturaCliente({ cliente, onGuardado }: { cliente: Cliente; onGuar
           <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
         </div>
       </div>
+
+      {presupuestos.length > 0 && (
+        <div className="field">
+          <label>¿Qué presupuesto está cobrando? (opcional)</label>
+          <select value={presupuestoId} onChange={e => setPresupuestoId(e.target.value)}>
+            <option value="">Ninguno — no sale de un presupuesto guardado</option>
+            {presupuestos.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.referencia || 'Sin referencia'} · {new Date(p.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })} · {p.total != null ? fmtMoney(p.total) : 'sin total'}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <label className="btn btn-secondary" style={{ fontSize: 12, cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1, width: 'fit-content' }}>
         {subiendo ? 'Leyendo el documento...' : archivoUrl ? 'Cambiar archivo' : 'Subir el archivo'}
@@ -3344,6 +3365,19 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
                   </span>
                 )}
                 <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(c.monto)}</span>
+                {/* Pedido de Alexandra (07/09): "en el detalle debe aparecer en compras poder
+                    ver lo que se subió, que se compró o el capture del pago". La foto ya se
+                    guardaba desde el Reporte Diario, pero acá no había forma de mirarla. */}
+                {c.foto_boleta_url && (
+                  <a
+                    href={c.foto_boleta_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary)', textDecoration: 'none', flexShrink: 0 }}
+                  >
+                    Ver boleta →
+                  </a>
+                )}
                 {c.pagado_por && onMarcarReembolsado && (
                   <button
                     onClick={() => onMarcarReembolsado(c.id, !c.reembolsado)}
@@ -5536,6 +5570,17 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
                     <span style={{ color: 'var(--muted)', fontSize: 12 }}>{new Date(p.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
                     {p.referencia && <span style={{ fontWeight: 600 }}>{p.referencia}</span>}
                     <span className="badge badge-otro" style={{ fontSize: 11 }}>{ESTADO_PRESUPUESTO_LABELS[p.estado]}</span>
+                    {(() => {
+                      // Idea de Gustavo (08/09): que se vea qué presupuesto ya está facturado.
+                      const suyas = facturasCliente.filter(f => f.presupuesto_id === p.id)
+                      if (suyas.length === 0) return null
+                      const total = suyas.reduce((s, f) => s + f.monto, 0)
+                      return (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)' }}>
+                          Facturado {fmtMoney(total)}
+                        </span>
+                      )
+                    })()}
                     <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{p.total != null ? fmtMoney(p.total) : '—'}</span>
                     {p.estado === 'aceptado' && (
                       <button className="btn btn-primary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={() => abrirConvertirCliente(p)}>
@@ -5661,7 +5706,7 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
             <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Facturas y boletas emitidas
             </p>
-            <SubirFacturaCliente cliente={seleccionado} onGuardado={() => verCliente(seleccionado)} />
+            <SubirFacturaCliente cliente={seleccionado} presupuestos={presupuestosCliente} onGuardado={() => verCliente(seleccionado)} />
           </div>
           {facturasCliente.length === 0 ? (
             <p style={{ color: 'var(--muted)', fontSize: 13 }}>Todavía no hay facturas ni boletas registradas para este cliente.</p>
@@ -5672,6 +5717,11 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
                   <span className="badge badge-otro" style={{ fontSize: 11 }}>{f.tipo === 'boleta' ? 'Boleta' : 'Factura'}</span>
                   <span style={{ color: 'var(--muted)' }}>{new Date(f.fecha + 'T00:00:00').toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
                   <span style={{ fontWeight: 700 }}>{fmtMoney(f.monto)}</span>
+                  {f.presupuesto_id && (
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      por {presupuestosCliente.find(p => p.id === f.presupuesto_id)?.referencia || 'un presupuesto'}
+                    </span>
+                  )}
                   {f.archivo_url && (
                     <a href={f.archivo_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, marginLeft: 'auto' }}>
                       Ver archivo →
