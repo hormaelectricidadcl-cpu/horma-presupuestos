@@ -3,8 +3,10 @@
 
 ## POR DÓNDE SEGUIR — cierre del martes 08/09/2026
 
-Lista viva compartida con Alexandra (checklist, estado guardado):
-**https://claude.ai/code/artifact/fc54d787-90c4-49fd-93f2-662ca980772e**
+Dos páginas compartidas con Alexandra:
+- **Backlog** (checklist con estado guardado): https://claude.ai/code/artifact/fc54d787-90c4-49fd-93f2-662ca980772e
+- **Guía de novedades** — qué cambió y CÓMO SE USA cada cosa, por pantalla, para la sesión con Gustavo:
+  https://claude.ai/code/artifact/cd78f06d-6298-4d0e-ab66-e034d9b23b76
 
 **De las tres conversaciones con Gustavo no queda nada para construir.** Todo lo del 07 y 08/09 está en
 producción, verificado contra datos reales, y las cinco migraciones corridas. Lo que sigue:
