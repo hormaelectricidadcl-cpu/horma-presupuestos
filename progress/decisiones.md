@@ -14,10 +14,23 @@ Entonces: **Saldo = abonado − compras − subcontratos − mano de obra deveng
 semanales ya no se restan aparte ni se muestran como tarjetas en Obras (siguen viviendo en Pago Semanal, que
 es donde se cargan y se pagan). La mano de obra es el costo; los adelantos son el pago de ese costo.
 
-**Punta suelta, anotada y sin resolver:** los subcontratos se siguen restando por lo PAGADO, no por lo
-contratado. Con la mano de obra ahora contada como costo devengado, lo coherente sería restar lo contratado.
-No se tocó porque no se pidió, y sí cambia plata: O'Higgins tiene $3.500.000 contratados contra $1.100.000
-pagados, así que su saldo pasaría de $20.707.892 a $18.307.892.
+**Cerrado el mismo día (misma sesión):** Alexandra preguntó cuál es la forma profesional y pidió hacerlo así.
+Los subcontratos ahora se restan por lo CONTRATADO, no por lo pagado, y se agregó la tarjeta **"Falta pagar"**
+con lo comprometido que todavía no salió de la cuenta. O'Higgins: saldo $20.707.892 → $18.307.892, falta
+pagar $2.400.000.
+
+El criterio completo, que es el de los sistemas de job costing y no se re-litiga sin volver a hablarlo:
+**un costo cuenta cuando se incurre, no cuando se paga.** La mano de obra cuenta cuando el trabajador
+trabajó; los subcontratos, cuando se firman. Seguir solo lo pagado avisa del sobrecosto cuando ya es tarde.
+Y la contracara es obligatoria: sin "Falta pagar" al lado, el saldo se lee como efectivo disponible, que es
+la confusión clásica entre caja y margen — una obra puede dejar plata y aun así no alcanzar para pagar el
+viernes.
+
+**Lo que deliberadamente NO entra en "Falta pagar":** la mano de obra devengada y no pagada. Los trabajadores
+cobran por semana a través de Pago Semanal, y esos pagos casi nunca se cargan contra una obra, así que
+"devengado − pagado por obra" daría un número inventado (en O'Higgins daría $2.020.000 de deuda con los
+trabajadores, que no existe). El concepto de committed cost aplica a subcontratos y órdenes de compra, no a
+la nómina.
 
 ## 2026-09-07 — "Facturado" pasa a ser "Abonado" en Obras y en las cuentas por cobrar
 Pedido de Alexandra: "facturado es cuando se emitió una factura". Las tarjetas de obra y de cuenta por cobrar

@@ -128,19 +128,29 @@ Hallazgos que no estaban en el radar de nadie, encontrados verificando:
 Constructora PSG y el IVA de la obra de Alexis ($400.862) dan exactamente lo mismo que la consulta directa a
 Supabase.
 
-**Dos migraciones nuevas SIN correr** — Alexandra tiene que pegarlas en el SQL Editor:
+5. **El saldo cuenta los subcontratos por lo contratado, y aparece "Falta pagar"** (`96c7351`). Alexandra
+   preguntó cuál era la forma profesional; se investigó (job costing: committed cost) y se implementó. Ver
+   `decisiones.md`. O'Higgins: saldo $18.307.892, falta pagar $2.400.000. Gerónimo de Alderete no se movió
+   ($241.680) porque no tiene subcontrato firmado. **Verificado en producción.**
+
+**Las dos migraciones ya las corrió Alexandra el mismo día, verificado vía MCP:**
+- `con_iva` existe (ninguna obra marcada todavía — hay que marcarlas a mano).
+- Las dos obras "Doctora Eloísa" quedaron bajo Constructora PSG, que ahora tiene 4 obras. La ficha
+  "Eloísa Díaz" quedó sin obras, presupuestos, cuentas ni facturas — se puede borrar cuando quiera.
+
+**Migraciones de esta sesión (ya corridas):**
 - `sql/20260907_obras_con_iva.sql` (columna `con_iva`; mientras no corra, el checkbox avisa en vez de fallar
   callado). Después hay que marcar a mano qué obras se pactaron con IVA.
 - `sql/20260907_obras_eloisa_a_psg.sql` (las dos obras "Doctora Eloísa" pasan a Constructora PSG; trae
   consulta de comprobación y, comentado, el borrado de la ficha que queda vacía).
 
 ### Pendiente para la próxima sesión
-- **Correr las dos migraciones de arriba.**
 - Seguir por la sección "Facturas y clientes" de la lista: que Gustavo pueda subir la factura emitida desde
   donde trabaja, y que en Clientes se pueda hacer clic para abrir el presupuesto/obra/cuenta.
+- **Para hacer ellos, sin código:** marcar qué obras se pactaron con IVA, asignarle la obra a cada trabajador
+  (ninguno la tiene, por eso ven todas), y cargar las fechas de las fases de O'Higgins.
 - Decisiones abiertas anotadas en el artifact: si un trabajador puede estar en varias obras, el sábado de
-  Fabriel (+$40.000, a confirmar con Gustavo), qué es lo del teléfono que mencionó Gustavo, y si los
-  subcontratos se restan por lo contratado en vez de lo pagado (cambiaría el saldo de O'Higgins en $2.400.000).
+  Fabriel (+$40.000, a confirmar con Gustavo), y qué es lo del teléfono que mencionó Gustavo.
 - **Alexandra: abrir Reporte Diario → 05/09/2026 y guardar** — HECHO, verificado el mismo día. Los tres
   trabajadores queden con `viatico=false`. Es el paso que baja la semana de $890.000 a $860.000. No hace
   falta SQL.
