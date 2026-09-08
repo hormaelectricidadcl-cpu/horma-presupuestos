@@ -191,14 +191,36 @@ consulta entera mientras la columna no existiera, dejando la ficha del cliente y
 ningún presupuesto. Ahora se reintenta sin la columna. **Verificado en producción con la migración todavía
 sin correr:** la ficha de Alexis sigue mostrando su presupuesto y "Mis presupuestos" sigue listando.
 
-### Pendiente para la próxima sesión
-- **Correr `sql/20260908_presupuestos_adicionales.sql`.** Hasta entonces se puede crear el adicional pero no
-  queda vinculado al original (avisa en pantalla, no se pierde el presupuesto).
-- **Lo que falta de adicionales:** que los ítems de "Avance de obra" acepten que una cantidad crezca (4 → 6).
-  Hoy el adicional existe como documento y como cuenta por cobrar, pero `obra_items` sigue con la cantidad
-  original.
-- Lo que queda de la lista: chat de IA por mes, cobros del día tomando el cliente de la obra, boletas
-  filtrables por obra, el modal de detalle en pantalla chica, y trabajador en varias obras (decisión abierta).
+### 11. Cierre de la lista (`d039b7a`, `213d674`, `f96e44a`) — no queda nada de las tres conversaciones
+- **Adicionales, versión segura.** El flujo copiaba el presupuesto entero y estaba a un renglón olvidado de
+  cobrarle dos veces al cliente (12 ítems por $2.510.662 en el de Alexis). Ahora **arranca vacío**, con el
+  original al lado en solo lectura y "+ Agregar" por línea, que la trae como "Adicional — …" con cantidad 1.
+  El PDF dice "ADICIONAL AL PRESUPUESTO", el archivo se llama "Adicional …", y avisa si el adicional suma
+  tanto como el original.
+- **En Avance de obra una cantidad puede crecer** (`obra_items.cantidad_adicional`). Verificado con el ítem
+  real: "Demolición y reparación de vanos de ventanas", 4 presupuestados y 3 hechos → con 2 adicionales pasa
+  a /6 y el avance corrige de 75% a 50%.
+- **Cobros del día:** la obra va primero y completa el cliente sola; el campo pasa a "Quién pagó".
+- **Chat de IA:** ahora recibe el desglose mes a mes y las obras cerradas. Era lo que Gustavo preguntó y falló.
+- **Un trabajador en varias obras** (tabla `trabajador_obras`), con checkboxes en su ficha.
+- Cargar presupuesto desde la ficha del cliente, boletas filtrables por obra, y el modal de obra más alto.
+
+**Las 4 migraciones del 08/09 ya las corrió Alexandra**, verificado vía MCP: `con_iva`, `presupuesto_id`,
+`origen_id`, `cantidad_adicional` y la tabla `trabajador_obras` con su política. Producción verificada
+después de correrlas: la ficha del trabajador y Avance de obra responden **sin errores de consola**.
+
+### Pendiente para la próxima sesión (viernes 11/09, sesión con Gustavo)
+**Nada para construir de las tres conversaciones.** Lo que sigue es usar la app:
+- **Ningún humano usó todavía lo nuevo con un caso real** — 0 adicionales creados, 0 facturas vinculadas.
+  La lectura por IA de la factura desde la ficha del cliente es lo único que no se pudo probar acá
+  (Cloudflare Function, no corre en Vite local).
+- **Cuatro datos que solo esperan que alguien los cargue:** marcar qué obras son con IVA, asignarle las obras
+  a cada trabajador (ninguno tiene, por eso Gabriel ve todas), las fechas de las 5 fases de O'Higgins sin
+  fecha, y borrar los 3 clientes de prueba ("Alexandra prueba 3", "Gustavo Castillo", "Eloísa Díaz").
+- **Dos decisiones abiertas:** el sábado de Fabriel (+$40.000, a confirmar con Gustavo) y qué es lo del
+  teléfono que él mencionó.
+- **Lo de fondo, sin tocar:** la seguridad de Supabase (RLS `anon full access` en casi todas las tablas y el
+  bucket que permite `list`). Abierto desde el 28/08; es lo único de la lista que no se arregla con un commit.
 - **Para hacer ellos, sin código:** marcar qué obras se pactaron con IVA, asignarle la obra a cada trabajador
   (ninguno la tiene, por eso ven todas), y cargar las fechas de las fases de O'Higgins.
 - Decisiones abiertas anotadas en el artifact: si un trabajador puede estar en varias obras, el sábado de
