@@ -27,7 +27,10 @@ export function sanitizarNombreArchivo(nombre: string): string {
   return sinTildes.replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/\s+/g, ' ');
 }
 
-export const generatePDF = (client: Client, items: Item[], porcentajeGastos: number = 10, referencia?: string) => {
+// `adicionalDe`: referencia del presupuesto original cuando este documento es un ADICIONAL.
+// Cambia el título para que el cliente no lo confunda con un presupuesto que reemplaza al
+// anterior -- ver decisiones.md 2026-09-08.
+export const generatePDF = (client: Client, items: Item[], porcentajeGastos: number = 10, referencia?: string, adicionalDe?: string) => {
   console.log('Generando PDF con:', items.length, 'items');
   console.log('Cliente:', client);
   console.log('Items:', items);
@@ -75,7 +78,18 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(17);
   doc.setTextColor(255, 255, 255);
-  doc.text('PRESUPUESTO HORMA GRUP', titleX, 23);
+  // Un adicional tiene que verse como adicional: si sale con el mismo título que un
+  // presupuesto normal, el cliente puede leerlo como si REEMPLAZARA al anterior en vez de
+  // sumarse. Por eso el título lo dice y debajo va de qué presupuesto es.
+  if (adicionalDe) {
+    doc.setFontSize(15);
+    doc.text('ADICIONAL AL PRESUPUESTO', titleX, 19);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.text(`${adicionalDe} — Horma Grup`, titleX, 28);
+  } else {
+    doc.text('PRESUPUESTO HORMA GRUP', titleX, 23);
+  }
 
   yPosition = 52;
 
@@ -349,5 +363,7 @@ export const generatePDF = (client: Client, items: Item[], porcentajeGastos: num
 
   // Save the PDF — nombre de archivo con el cliente para encontrarlo entre varios PDFs
   const nombreArchivo = sanitizarNombreArchivo(client.name) || 'Cliente';
-  doc.save(`Presupuesto ${nombreArchivo} - ${getCurrentDate()}.pdf`);
+  // El nombre del archivo también dice si es un adicional: es lo que Gustavo ve cuando elige
+  // qué mandar por WhatsApp, y dos PDF del mismo cliente el mismo día serían idénticos.
+  doc.save(`${adicionalDe ? 'Adicional' : 'Presupuesto'} ${nombreArchivo} - ${getCurrentDate()}.pdf`);
 };
