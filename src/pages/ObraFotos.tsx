@@ -60,22 +60,42 @@ export default function ObraFotos({ token }: Props) {
 
   useEffect(() => {
     if (!trabajador) return
-    // Si Alexandra/Gustavo le asignaron una obra específica a este trabajador (desde la
-    // card de Trabajadores), su link queda fijo a esa obra -- sin desplegable, sin ver
-    // las demás. Si no tiene asignación (obra_asignada_id null), sigue viendo todas las
-    // obras en curso como antes, para no dejarlo sin poder subir nada.
-    supabase.from('trabajadores').select('obra_asignada_id').eq('nombre', trabajador).maybeSingle().then(({ data }) => {
-      const asignadaId = data?.obra_asignada_id as string | null | undefined
-      if (asignadaId) {
-        supabase.from('obras').select('id, nombre').eq('id', asignadaId).maybeSingle().then(({ data: obra }) => {
-          if (obra) { setObraAsignada(obra as ObraSimple); setObraId((obra as ObraSimple).id) }
-        })
-      } else {
-        supabase.from('obras').select('id, nombre').eq('estado_obra', 'en_curso').order('nombre').then(({ data: lista }) => {
-          setObras((lista as ObraSimple[]) || [])
-        })
+    // Qué obras ve este trabajador en su link, en este orden:
+    //   1. Las que le asignaron en `trabajador_obras` (pueden ser varias).
+    //   2. Si no tiene ninguna ahí pero sí `obra_asignada_id`, esa sola -- el mecanismo
+    //      viejo, que se respeta para no romper lo ya cargado.
+    //   3. Si no tiene nada, todas las obras en curso, como siempre, para no dejarlo sin
+    //      poder subir nada.
+    // Ver sql/20260908_trabajador_varias_obras.sql.
+    async function cargarObras() {
+      const { data: t } = await supabase
+        .from('trabajadores').select('id, obra_asignada_id').eq('nombre', trabajador).maybeSingle()
+      if (!t) return
+
+      // La tabla puede no existir todavía (migración sin correr): degrada al camino viejo.
+      const { data: asignadas } = await supabase
+        .from('trabajador_obras').select('obra_id').eq('trabajador_id', t.id)
+      const ids = (asignadas || []).map((a: { obra_id: string }) => a.obra_id)
+
+      if (ids.length > 0) {
+        const { data: lista } = await supabase.from('obras').select('id, nombre').in('id', ids).order('nombre')
+        const obrasAsignadas = (lista as ObraSimple[]) || []
+        setObras(obrasAsignadas)
+        // Con una sola no tiene sentido hacerlo elegir: queda fija, como antes.
+        if (obrasAsignadas.length === 1) { setObraAsignada(obrasAsignadas[0]); setObraId(obrasAsignadas[0].id) }
+        return
       }
-    })
+
+      if (t.obra_asignada_id) {
+        const { data: obra } = await supabase.from('obras').select('id, nombre').eq('id', t.obra_asignada_id).maybeSingle()
+        if (obra) { setObraAsignada(obra as ObraSimple); setObraId((obra as ObraSimple).id) }
+        return
+      }
+
+      const { data: todas } = await supabase.from('obras').select('id, nombre').eq('estado_obra', 'en_curso').order('nombre')
+      setObras((todas as ObraSimple[]) || [])
+    }
+    cargarObras()
   }, [trabajador])
 
   if (!trabajador) {

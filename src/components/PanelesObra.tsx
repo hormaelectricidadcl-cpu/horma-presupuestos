@@ -3372,7 +3372,7 @@ function PresupuestoDeLaObra({ presupuestoId }: { presupuestoId: string | null }
   }, [presupuestoId])
 
   return (
-    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '45vh', overflowY: 'auto' }}>
+    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '30vh', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           Presupuesto de esta obra
@@ -3775,7 +3775,7 @@ function GaleriaObra({ obraId }: { obraId: string }) {
   }
 
   return (
-    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '35vh', overflowY: 'auto' }}>
+    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '24vh', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           Fotos y videos
@@ -3868,9 +3868,13 @@ export function HistorialObraModal({
         zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
       }}
     >
+      {/* "Esto es muy grande, así no se ven casi las cosas" (Alexandra, conversación 3):
+          en pantalla chica el modal ocupaba casi todo el alto y cada sección se llevaba su
+          parte, así que no entraba nada. Ahora usa más alto disponible y las secciones de
+          arriba se achican, para que el contenido del período tenga lugar. */}
       <div style={{
         background: 'var(--white)', color: 'var(--text)', borderRadius: '16px 16px 0 0',
-        width: '100%', maxWidth: 860, maxHeight: '85vh',
+        width: '100%', maxWidth: 860, maxHeight: '92vh',
         display: 'flex', flexDirection: 'column',
         boxShadow: '0 -4px 32px rgba(0,0,0,0.15)',
       }}>
@@ -3889,7 +3893,7 @@ export function HistorialObraModal({
         {obraId && <GaleriaObra obraId={obraId} />}
 
         {onAgregarAbono && onEliminarAbono && onEliminarCuenta && (
-          <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '40vh', overflowY: 'auto' }}>
+          <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '28vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 Cuentas por cobrar de esta obra
@@ -3993,6 +3997,7 @@ export function PanelTrabajadores() {
   const [guardando, setGuardando] = useState(false)
   const [trabajadorSel, setTrabajadorSel] = useState<string | null>(null)
   const [vistaHistorial, setVistaHistorial] = useState<VistaPeriodo>('semana')
+  const [obrasPorTrabajador, setObrasPorTrabajador] = useState<Record<string, string[]>>({})
 
   const cargar = useCallback(async () => {
     const [{ data: t }, { data: c }, { data: o }, { data: d }, { data: aj }, { data: ad }, { data: gf }] = await Promise.all([
@@ -4011,16 +4016,31 @@ export function PanelTrabajadores() {
     setAjustes((aj as AjustePagoSemanal[]) || [])
     setAdelantos((ad as AdelantoTrabajador[]) || [])
     setGastosFijos((gf as GastoFijo[]) || [])
+    // Obras asignadas a cada trabajador. Si la migración todavía no corrió, la consulta falla
+    // y se queda vacío: se usa el `obra_asignada_id` viejo y nada se rompe.
+    const { data: asignaciones } = await supabase.from('trabajador_obras').select('trabajador_id, obra_id')
+    const mapa: Record<string, string[]> = {}
+    for (const a of (asignaciones as { trabajador_id: string; obra_id: string }[]) || []) {
+      if (!mapa[a.trabajador_id]) mapa[a.trabajador_id] = []
+      mapa[a.trabajador_id].push(a.obra_id)
+    }
+    setObrasPorTrabajador(mapa)
     setLoading(false)
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
 
-  // Restringe el link de /obra-fotos de este trabajador a una sola obra en vez de
-  // dejarle elegir entre todas las que están en curso -- ver conversación 28/08/2026.
-  async function asignarObra(t: Trabajador, obraId: string) {
-    const { error } = await supabase.from('trabajadores').update({ obra_asignada_id: obraId || null }).eq('id', t.id)
-    if (error) { alert('No se pudo guardar. Intenta de nuevo.'); return }
+  // Restringe el link de /obra-fotos de este trabajador a las obras que le tocan, en vez de
+  // dejarle elegir entre todas las que están en curso -- conversación 28/08 y pregunta de
+  // Alexandra del 08/09 ("¿y si está asignado a más de una?"). Sin ninguna marcada, ve todas.
+  async function alternarObraAsignada(t: Trabajador, obraId: string, asignar: boolean) {
+    const { error } = asignar
+      ? await supabase.from('trabajador_obras').insert({ trabajador_id: t.id, obra_id: obraId })
+      : await supabase.from('trabajador_obras').delete().eq('trabajador_id', t.id).eq('obra_id', obraId)
+    if (error) {
+      alert('No se pudo guardar. Puede que falte correr la migración sql/20260908_trabajador_varias_obras.sql.')
+      return
+    }
     cargar()
   }
 
@@ -4108,17 +4128,28 @@ export function PanelTrabajadores() {
           {trabajador.tarifa_diaria > 0 ? `Tarifa diaria: ${fmtMoney(trabajador.tarifa_diaria)}` : 'Sueldo fijo mensual'}
           {trabajador.viatico_diario > 0 ? ` · Viático: ${fmtMoney(trabajador.viatico_diario)}` : ''}
         </p>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
-          Obra asignada
-          <select
-            value={trabajador.obra_asignada_id || ''}
-            onChange={e => asignarObra(trabajador, e.target.value)}
-            style={{ fontSize: 13, padding: '5px 10px', width: 'auto' }}
-          >
-            <option value="">Sin asignar (elige él)</option>
-            {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-          </select>
-        </label>
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Obras asignadas</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+            En su link solo va a ver estas. Si no marcás ninguna, ve todas las obras en curso y elige él.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {obras.map(o => {
+              const asignada = obrasPorTrabajador[trabajador.id]?.includes(o.id) || trabajador.obra_asignada_id === o.id
+              return (
+                <label key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={asignada}
+                    onChange={e => alternarObraAsignada(trabajador, o.id, e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }}
+                  />
+                  {o.nombre}
+                </label>
+              )
+            })}
+          </div>
+        </div>
 
         {sueldoFijo ? (
           <PanelHistorialSueldoFijo
@@ -4230,17 +4261,16 @@ export function PanelTrabajadores() {
                       Reactivar
                     </button>
                   )}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', marginLeft: 'auto' }}>
-                    Obra asignada
-                    <select
-                      value={t.obra_asignada_id || ''}
-                      onChange={e => asignarObra(t, e.target.value)}
-                      style={{ fontSize: 12, padding: '4px 8px', width: 'auto' }}
-                    >
-                      <option value="">Sin asignar (elige él)</option>
-                      {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-                    </select>
-                  </label>
+                  {/* En la lista solo se informa; se asignan desde la ficha, donde entran
+                      varias sin apretar el renglón. */}
+                  <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 'auto' }}>
+                    {(() => {
+                      const ids = obrasPorTrabajador[t.id] || (t.obra_asignada_id ? [t.obra_asignada_id] : [])
+                      if (ids.length === 0) return 'Sin obra asignada — ve todas'
+                      if (ids.length === 1) return obras.find(o => o.id === ids[0])?.nombre || '1 obra asignada'
+                      return `${ids.length} obras asignadas`
+                    })()}
+                  </span>
                 </div>
               </div>
             )
@@ -4276,6 +4306,7 @@ export function PanelBoletas() {
   const [itemsPorCompra, setItemsPorCompra] = useState<Record<string, CompraItem[]>>({})
   const [loading, setLoading] = useState(true)
   const [periodoKey, setPeriodoKey] = useState('')
+  const [obraFiltro, setObraFiltro] = useState('')
   const [expandidoId, setExpandidoId] = useState<string | null>(null)
 
   const cargar = useCallback(async () => {
@@ -4322,7 +4353,12 @@ export function PanelBoletas() {
     return <p style={{ color: 'var(--muted)', fontSize: 14 }}>Todavía no hay compras cargadas.</p>
   }
   const periodo = periodos.find(p => p.key === periodoKey) || periodos.find(p => p.enCurso) || periodos[0]
-  const totalPeriodo = periodo.compras.reduce((s, c) => s + c.monto, 0)
+  // Pedido de Alexandra (conversación 2): "unas subtarjetitas que yo seleccione obra y ver".
+  // Lo marcó como comodidad -- con 24 compras en Ohiggins, buscar la de una obra puntual en
+  // la lista del mes es incómodo.
+  const obrasDelPeriodo = Array.from(new Set(periodo.compras.map(c => c.obra).filter((o): o is string => !!o))).sort()
+  const comprasVisibles = obraFiltro ? periodo.compras.filter(c => c.obra === obraFiltro) : periodo.compras
+  const totalPeriodo = comprasVisibles.reduce((s, c) => s + c.monto, 0)
 
   return (
     <div>
@@ -4343,6 +4379,23 @@ export function PanelBoletas() {
             ))}
           </select>
         </label>
+        {obrasDelPeriodo.length > 1 && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--text-inverse)' }}>
+            Obra:
+            <select
+              value={obraFiltro}
+              onChange={e => setObraFiltro(e.target.value)}
+              style={{
+                width: 'auto', padding: '6px 10px', fontSize: 13, fontWeight: 600, borderRadius: 6,
+                border: '1.5px solid var(--primary)', background: 'var(--white)', color: 'var(--secondary)',
+                cursor: 'pointer', appearance: 'auto',
+              }}
+            >
+              <option value="">Todas</option>
+              {obrasDelPeriodo.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </label>
+        )}
         <button
           onClick={cargar}
           style={{ padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--white)', cursor: 'pointer', color: 'var(--muted)' }}
@@ -4353,11 +4406,11 @@ export function PanelBoletas() {
         <StatTile label="Total compras del mes" valor={fmtMoney(totalPeriodo)} tono="neutral" />
       </div>
 
-      {periodo.compras.length === 0 ? (
+      {comprasVisibles.length === 0 ? (
         <p style={{ color: 'var(--muted)', fontSize: 14 }}>Sin compras cargadas ese mes.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {periodo.compras.map(c => {
+          {comprasVisibles.map(c => {
             const items = itemsPorCompra[c.id] || []
             const expandido = expandidoId === c.id
             return (
@@ -5775,6 +5828,14 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
                       </span>
                     )}
                     <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{total != null ? fmtMoney(total) : '—'}</span>
+                    {/* Lo intentaron desde acá en la conversación 3 y no se podía: el botón
+                        solo estaba en Obras y en Avance de obra. */}
+                    {!o.presupuesto_id && (
+                      <CargarPresupuestoObra
+                        obra={{ id: o.id, nombre: o.nombre, cliente: o.cliente }}
+                        onGuardado={() => seleccionado && verCliente(seleccionado)}
+                      />
+                    )}
                   </div>
                 )
               })}
@@ -6515,8 +6576,38 @@ export function PanelConsultasIA() {
         return { pagador: c.pagador, concepto: c.concepto, totalPresupuesto: c.total_presupuesto, abonado, pendiente: Math.max(c.total_presupuesto - abonado, 0) }
       })
 
+    // Gustavo probó el chat y lo primero que preguntó fue cuánto se gastó en julio: no podía
+    // responder porque el resumen solo llevaba totales actuales, sin nada de tiempo (los
+    // datos por mes se cargaban en el navegador y se descartaban antes de mandarlos).
+    // Esto arma el desglose por mes -- son unas decenas de números, no mueve el costo de la API.
+    const porMes: Record<string, { compras: number; cobros: number; manoDeObra: number; subcontratos: number }> = {}
+    function mesDe(fecha: string) { return fecha.slice(0, 7) }
+    function celdaMes(fecha: string) {
+      const k = mesDe(fecha)
+      if (!porMes[k]) porMes[k] = { compras: 0, cobros: 0, manoDeObra: 0, subcontratos: 0 }
+      return porMes[k]
+    }
+    for (const c of (compras as ReporteCompraDia[]) || []) celdaMes(c.fecha).compras += c.monto
+    for (const c of (cobros as ReporteCobroDia[]) || []) celdaMes(c.fecha).cobros += c.monto
+    for (const s of (subcontratos as ReporteSubcontratoDia[]) || []) celdaMes(s.fecha).subcontratos += s.monto
+    for (const d of diariosT) {
+      if (!d.presente) continue
+      const t = tarifasT.find(x => x.nombre === d.trabajador)
+      celdaMes(d.fecha).manoDeObra += d.fraccion_jornada * (t?.tarifa_diaria || 0) + (d.viatico ? (t?.viatico_diario || 0) : 0)
+    }
+    const gastosPorMes = Object.entries(porMes)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([mes, v]) => ({ mes, ...v, gastoTotal: v.compras + v.manoDeObra + v.subcontratos }))
+
     setContexto({
       fechaHoy: new Date().toISOString().slice(0, 10),
+      gastosPorMes,
+      // Las cerradas también: antes solo iban las activas, así que no podía hablar de una
+      // obra terminada aunque le preguntaran por ella.
+      obrasCerradas: resumenObras.filter(o => !o.activa).map(o => ({
+        nombre: o.obra, cliente: o.cliente, estado: o.estadoObra,
+        presupuestoTotal: o.presupuestoTotal, cobrado: o.cobrado, saldo: o.saldo,
+      })),
       obras: resumenObras.filter(o => o.activa).map(o => ({
         nombre: o.obra, cliente: o.cliente, estado: o.estadoObra,
         presupuestoTotal: o.presupuestoTotal, cobrado: o.cobrado, faltaPorCobrar: o.faltaPorCobrar,

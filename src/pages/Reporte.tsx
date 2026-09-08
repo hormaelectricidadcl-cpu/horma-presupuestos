@@ -146,6 +146,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   const trabajadorNombresRef = useRef<string[]>(TRABAJADORES)
   const [trabajadores, setTrabajadores] = useState<Record<string, TrabajadorState>>(defaultTrabajadores(TRABAJADORES))
   const [obras, setObras] = useState<string[]>(OBRAS_FALLBACK)
+  const [clientePorObra, setClientePorObra] = useState<Record<string, string>>({})
   const [obraGeneral, setObraGeneral] = useState('')
   const [compras, setCompras] = useState<CompraRow[]>([])
   // Compras ya guardadas (con id) se ven como una tarjeta chica y cerrada -- "esto ya
@@ -275,8 +276,18 @@ export default function Reporte({ token, embedded = false }: Props) {
 
   useEffect(() => {
     if (!tokenValido) return
-    supabase.from('obras').select('nombre').eq('activa', true).order('nombre').then(({ data }) => {
-      if (data && data.length) setObras(data.map((o: { nombre: string }) => o.nombre))
+    supabase.from('obras').select('nombre, cliente').eq('activa', true).order('nombre').then(({ data }) => {
+      if (data && data.length) {
+        setObras(data.map((o: { nombre: string }) => o.nombre))
+        // El cliente de cada obra, para completarlo solo al elegir la obra en un cobro.
+        // Gustavo lo definió así (conversación 2): "no me importa quién nos pagó o el nombre
+        // que le coloquemos, pero la obra se va a guardar es de ese cliente".
+        const mapa: Record<string, string> = {}
+        for (const o of data as { nombre: string; cliente: string | null }[]) {
+          if (o.cliente) mapa[o.nombre] = o.cliente
+        }
+        setClientePorObra(mapa)
+      }
     })
     supabase.from('materiales').select('id, nombre, stock_actual').order('nombre').then(({ data }) => {
       setMateriales(data || [])
@@ -1272,16 +1283,29 @@ export default function Reporte({ token, embedded = false }: Props) {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div className="field">
-                        <label>Cliente</label>
-                        <input
-                          type="text"
-                          placeholder="Nombre del cliente"
-                          value={c.cliente}
-                          onChange={e => actualizarCobro(idx, { cliente: e.target.value })}
-                        />
-                      </div>
+                      {/* La obra va primero porque es la que manda: al elegirla se completa
+                          solo el cliente, y el nombre de abajo pasa a ser solo "quién pagó".
+                          Antes había que escribir el cliente a mano y quedaba distinto del de
+                          su ficha (pasó de verdad: "Elsie Goycoolea" contra "Elsie Goycoolea
+                          propiedades Ltda"). Ver decisiones.md 2026-09-08. */}
                       <div style={{ display: 'flex', gap: 10 }}>
+                        <div className="field" style={{ flex: 1 }}>
+                          <label>Obra</label>
+                          <select
+                            value={c.obra}
+                            onChange={e => {
+                              const obra = e.target.value
+                              const clienteDeLaObra = clientePorObra[obra]
+                              // Solo completa si está vacío o si tenía el cliente de la obra
+                              // anterior: nunca pisa un nombre escrito a mano.
+                              const pisable = !c.cliente.trim() || c.cliente === clientePorObra[c.obra]
+                              actualizarCobro(idx, pisable && clienteDeLaObra ? { obra, cliente: clienteDeLaObra } : { obra })
+                            }}
+                          >
+                            <option value="">Selecciona...</option>
+                            {obras.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </div>
                         <div className="field" style={{ flex: 1 }}>
                           <label>Monto</label>
                           <input
@@ -1292,13 +1316,22 @@ export default function Reporte({ token, embedded = false }: Props) {
                             onChange={e => actualizarCobro(idx, { monto: e.target.value })}
                           />
                         </div>
-                        <div className="field" style={{ flex: 1 }}>
-                          <label>Obra</label>
-                          <select value={c.obra} onChange={e => actualizarCobro(idx, { obra: e.target.value })}>
-                            <option value="">Selecciona...</option>
-                            {obras.map(o => <option key={o} value={o}>{o}</option>)}
-                          </select>
-                        </div>
+                      </div>
+                      <div className="field">
+                        <label>Quién pagó</label>
+                        <input
+                          type="text"
+                          placeholder="Nombre de quien transfirió"
+                          value={c.cliente}
+                          onChange={e => actualizarCobro(idx, { cliente: e.target.value })}
+                        />
+                        {c.obra && clientePorObra[c.obra] && (
+                          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                            {c.cliente === clientePorObra[c.obra]
+                              ? `Cliente de la obra: ${clientePorObra[c.obra]}`
+                              : `Se guarda igual para ${clientePorObra[c.obra]}, que es el cliente de esta obra.`}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <label className="btn btn-secondary" style={{ display: 'inline-block', fontSize: 13, cursor: subiendoComprobante === `cobro-${idx}` ? 'default' : 'pointer', opacity: subiendoComprobante === `cobro-${idx}` ? 0.6 : 1 }}>
