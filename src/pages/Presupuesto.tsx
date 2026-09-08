@@ -26,6 +26,11 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
   const [overheadPercentage, setOverheadPercentage] = useState(10);
   const [clienteIdPrefill, setClienteIdPrefill] = useState<string | null>(null);
   const [pendienteOrigenNombre, setPendienteOrigenNombre] = useState<string | null>(null);
+  // Adicionales (08/09/2026): si el link trae "desde_presupuesto", se abre una copia
+  // editable del presupuesto original para armar el de adicionales. El original queda
+  // intacto -- lo que se guarde acá es un presupuesto NUEVO que lo apunta con origen_id.
+  const [origenId, setOrigenId] = useState<string | null>(null);
+  const [origenReferencia, setOrigenReferencia] = useState<string | null>(null);
 
   // Fase 2 del "orden" (03/09/2026): si el link trae "desde_pendiente", los ítems que ya
   // generó la IA en el hilo de ese pendiente (Admin -> "Generar ítems con IA") se cargan
@@ -54,6 +59,38 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
             price: it.precioUnitario,
             total: it.cantidad * it.precioUnitario,
           })));
+        }
+      });
+  }, []);
+
+  // Copia editable de un presupuesto existente, para armar el de adicionales.
+  useEffect(() => {
+    const presupuestoId = new URLSearchParams(window.location.search).get('desde_presupuesto');
+    if (!presupuestoId) return;
+    supabase
+      .from('presupuestos')
+      .select('id, referencia, cliente_id, cliente_nombre, cliente_email, cliente_direccion, gg_pct, items, tipo')
+      .eq('id', presupuestoId)
+      .single()
+      .then(({ data }) => {
+        if (!data) return;
+        if (data.tipo !== 'simple') {
+          alert('Solo se puede partir de un presupuesto simple. Este es de otro tipo (por etapas o externo), así que los ítems hay que cargarlos a mano.');
+          return;
+        }
+        setOrigenId(data.id);
+        setOrigenReferencia(data.referencia || null);
+        setClienteIdPrefill(data.cliente_id || null);
+        setClientData(prev => ({
+          ...prev,
+          name: data.cliente_nombre || prev.name,
+          email: data.cliente_email || prev.email,
+          address: data.cliente_direccion || prev.address,
+        }));
+        if (data.gg_pct != null) setOverheadPercentage(data.gg_pct);
+        const itemsOriginales = (data.items || []) as Item[];
+        if (itemsOriginales.length > 0) {
+          setItems(itemsOriginales.map((it, i) => ({ ...it, id: Date.now() + i })));
         }
       });
   }, []);
@@ -112,7 +149,7 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
         clienteId = cliente?.id ?? null;
       }
 
-      const { error: presupuestoErr } = await supabase.from('presupuestos').insert({
+      const base = {
         cliente_id: clienteId,
         cliente_nombre: clientData.name.trim(),
         cliente_email: clientData.email.trim() || null,
@@ -126,7 +163,22 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
         subtotal,
         iva,
         total,
-      });
+      };
+
+      // Si esto salió de "Crear adicionales", queda apuntando al original -- que no se toca
+      // nunca, este es un documento nuevo. Si la migración de adicionales todavía no está
+      // corrida, la columna no existe y el insert falla ENTERO: en ese caso se guarda sin el
+      // vínculo antes que perder el presupuesto, y se avisa para poder engancharlo después.
+      if (origenId) {
+        const { error: errConOrigen } = await supabase.from('presupuestos').insert({ ...base, origen_id: origenId });
+        if (!errConOrigen) return true;
+        const { error: errSinOrigen } = await supabase.from('presupuestos').insert(base);
+        if (errSinOrigen) throw errSinOrigen;
+        alert('El presupuesto se guardó, pero no quedó vinculado como adicional del original. Falta correr la migración sql/20260908_presupuestos_adicionales.sql — avisale a Alexandra.');
+        return true;
+      }
+
+      const { error: presupuestoErr } = await supabase.from('presupuestos').insert(base);
       if (presupuestoErr) throw presupuestoErr;
       return true;
     } catch (error) {
@@ -166,6 +218,19 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
         <div className="card" style={{ padding: '10px 14px', marginBottom: 16, background: '#f0fdf4', borderLeft: '3px solid #16a34a' }}>
           <p style={{ fontSize: 13, color: '#166534', fontWeight: 600 }}>
             ✓ Ítems y cliente cargados desde el pendiente de {pendienteOrigenNombre} — revisa antes de generar el PDF.
+          </p>
+        </div>
+      )}
+
+      {origenId && (
+        <div className="card" style={{ padding: '10px 14px', marginBottom: 16, background: '#fef3c7', borderLeft: '3px solid #b45309', color: '#1f2937' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+            Presupuesto de adicionales, partiendo de {origenReferencia || 'el presupuesto original'}
+          </p>
+          <p style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+            Esta es una copia editable. El presupuesto original <strong>no se toca</strong>: lo que generes acá
+            queda como un documento nuevo, apuntando a él. Ajustá las cantidades que cambiaron, agregá las
+            líneas nuevas al final, y sacá lo que no corresponda cobrar de nuevo.
           </p>
         </div>
       )}

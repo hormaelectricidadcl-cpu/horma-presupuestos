@@ -3112,6 +3112,25 @@ function SubirFacturaCliente({ cliente, presupuestos, onGuardado }: { cliente: C
   )
 }
 
+/* ─── Traer presupuestos tolerando que falte la migración de adicionales ──── */
+// Supabase falla la consulta ENTERA si se pide una columna que no existe, así que pedir
+// `origen_id` antes de correr sql/20260908_presupuestos_adicionales.sql dejaba la ficha del
+// cliente y "Mis presupuestos" sin ningún presupuesto -- se veía como si se hubieran
+// borrado. Se intenta con la columna y, si falla, se reintenta sin ella.
+const COLUMNAS_PRESUPUESTO = 'id, created_at, cliente_id, cliente_nombre, cliente_telefono, cliente_email, cliente_direccion, referencia, tipo, estado, subtotal, iva, total'
+
+// clienteId opcional: sin él trae todos (Mis presupuestos); con él, los de ese cliente.
+async function traerPresupuestos(clienteId?: string): Promise<PresupuestoGuardado[]> {
+  async function pedir(columnas: string) {
+    const q = supabase.from('presupuestos').select(columnas).order('created_at', { ascending: false })
+    return clienteId ? await q.eq('cliente_id', clienteId) : await q
+  }
+  const conOrigen = await pedir(`${COLUMNAS_PRESUPUESTO}, origen_id`)
+  if (!conOrigen.error) return (conOrigen.data as unknown as PresupuestoGuardado[]) || []
+  const sinOrigen = await pedir(COLUMNAS_PRESUPUESTO)
+  return (sinOrigen.data as unknown as PresupuestoGuardado[]) || []
+}
+
 /* ─── Cuerpo de un presupuesto: ítems (o etapas, o el archivo) y sus totales ──── */
 // Compartido por el detalle de la obra y la ficha del cliente, para que el presupuesto se
 // vea igual en los dos lados y no haya dos versiones que se puedan separar con el tiempo.
@@ -3178,7 +3197,7 @@ function CuerpoPresupuesto({ presupuesto }: { presupuesto: PresupuestoDetalle })
 // referencia, estado y total como texto muerto: para ver los ítems había que salir a
 // "Mis presupuestos" y buscarlo de nuevo. Se carga el detalle completo recién al abrir,
 // porque la ficha trae solo el resumen de cada presupuesto.
-function PresupuestoDeLaFicha({ presupuesto }: { presupuesto: PresupuestoGuardado }) {
+function PresupuestoDeLaFicha({ presupuesto, adicionales = [] }: { presupuesto: PresupuestoGuardado; adicionales?: PresupuestoGuardado[] }) {
   const [abierto, setAbierto] = useState(false)
   const [detalle, setDetalle] = useState<PresupuestoDetalle | null>(null)
   const [cargando, setCargando] = useState(false)
@@ -3204,7 +3223,55 @@ function PresupuestoDeLaFicha({ presupuesto }: { presupuesto: PresupuestoGuardad
             Descargar PDF
           </button>
         )}
+        {/* Adicionales (08/09): abre el presupuestador con una copia editable de este
+            presupuesto. El original no se toca -- lo que se guarde es un documento nuevo
+            que lo apunta. Solo para los "simple": los de etapas y los externos no tienen
+            ítems que copiar de esta forma. */}
+        {presupuesto.tipo === 'simple' && (
+          <a
+            className="btn btn-ghost"
+            href={`/?t=${import.meta.env.VITE_PRESUPUESTO_TOKEN}&desde_presupuesto=${presupuesto.id}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 12, textDecoration: 'none' }}
+            title="Abre una copia editable de este presupuesto para armar el de adicionales. El original queda intacto."
+          >
+            Crear adicionales →
+          </a>
+        )}
       </div>
+
+      {adicionales.length > 0 && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+            Adicionales de este presupuesto
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {adicionales.map(a => (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--muted)' }}>{new Date(a.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
+                {a.referencia && <span style={{ fontWeight: 600 }}>{a.referencia}</span>}
+                <span className="badge badge-otro" style={{ fontSize: 10 }}>{ESTADO_PRESUPUESTO_LABELS[a.estado]}</span>
+                <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{a.total != null ? fmtMoney(a.total) : '—'}</span>
+              </div>
+            ))}
+          </div>
+          {(() => {
+            // Lo que muestran los sistemas de job costing: original, adicionales aprobados,
+            // y el vigente que es la suma. Solo cuentan los aceptados o ya convertidos --
+            // un adicional enviado y sin respuesta todavía no es plata acordada.
+            const aprobados = adicionales.filter(a => a.estado === 'aceptado' || a.estado === 'convertido')
+            const sumaAprobados = aprobados.reduce((s, a) => s + (a.total || 0), 0)
+            if (sumaAprobados === 0) return null
+            return (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontWeight: 700 }}>
+                <span>Vigente (original + {aprobados.length} adicional{aprobados.length !== 1 ? 'es' : ''} aprobado{aprobados.length !== 1 ? 's' : ''})</span>
+                <span>{fmtMoney((presupuesto.total || 0) + sumaAprobados)}</span>
+              </div>
+            )
+          })()}
+        </div>
+      )}
       {abierto && (
         cargando ? <div className="spinner" />
           : detalle ? <div style={{ marginTop: 10 }}><CuerpoPresupuesto presupuesto={detalle} /></div>
@@ -4437,11 +4504,7 @@ export function PanelPresupuestos() {
   const [incluirItemsExterno, setIncluirItemsExterno] = useState(true)
 
   const cargar = useCallback(async () => {
-    const { data } = await supabase
-      .from('presupuestos')
-      .select('id, created_at, cliente_id, cliente_nombre, cliente_telefono, cliente_email, cliente_direccion, referencia, tipo, estado, subtotal, iva, total')
-      .order('created_at', { ascending: false })
-    setPresupuestos((data as PresupuestoGuardado[]) || [])
+    setPresupuestos(await traerPresupuestos())
     setLoading(false)
   }, [])
 
@@ -4704,7 +4767,12 @@ export function PanelPresupuestos() {
             <div key={p.id} className="card" style={{ padding: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
                 <div>
-                  <p style={{ fontWeight: 700, fontSize: 15 }}>{p.cliente_nombre || 'Sin nombre'}</p>
+                  <p style={{ fontWeight: 700, fontSize: 15 }}>
+                    {p.cliente_nombre || 'Sin nombre'}
+                    {p.origen_id && (
+                      <span className="badge badge-otro" style={{ fontSize: 10, marginLeft: 8, verticalAlign: 'middle' }}>Adicional</span>
+                    )}
+                  </p>
                   <p style={{ fontSize: 12, color: 'var(--muted)' }}>
                     {p.referencia ? `${p.referencia} · ` : ''}
                     {new Date(p.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}
@@ -5391,16 +5459,16 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
     setSeleccionado(c)
     setDraft(draftDeCliente(c))
     setLoadingH(true)
-    const [{ data }, { data: fac }, { data: pres }, { data: obr }, { data: cuentas }] = await Promise.all([
+    const [{ data }, { data: fac }, pres, { data: obr }, { data: cuentas }] = await Promise.all([
       supabase.from('pendientes').select('*').eq('cliente_nombre', c.nombre).order('created_at', { ascending: true }),
       supabase.from('cliente_facturas').select('*').eq('cliente_nombre', c.nombre).order('fecha', { ascending: false }),
-      supabase.from('presupuestos').select('id, created_at, cliente_id, cliente_nombre, cliente_telefono, cliente_email, cliente_direccion, referencia, tipo, estado, subtotal, iva, total').eq('cliente_id', c.id).order('created_at', { ascending: false }),
+      traerPresupuestos(c.id),
       supabase.from('obras').select('*').eq('cliente_id', c.id).order('created_at', { ascending: false }),
       supabase.from('cuentas_por_cobrar').select('*').eq('cliente_id', c.id).order('created_at', { ascending: false }),
     ])
     setHistorial((data as Pendiente[]) || [])
     setFacturasCliente((fac as ClienteFactura[]) || [])
-    setPresupuestosCliente((pres as PresupuestoGuardado[]) || [])
+    setPresupuestosCliente(pres)
     setObrasCliente((obr as Obra[]) || [])
     const cuentasList = (cuentas as CuentaPorCobrar[]) || []
     setCuentasCliente(cuentasList)
@@ -5564,7 +5632,10 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
             <p style={{ color: 'var(--muted)', fontSize: 13 }}>Todavía no tiene ningún presupuesto.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {presupuestosCliente.map(p => (
+              {/* Los adicionales no se listan sueltos: se muestran anidados bajo el
+                  presupuesto del que nacieron, que es lo que deja ver original + adicionales
+                  = vigente de un vistazo. */}
+              {presupuestosCliente.filter(p => !p.origen_id).map(p => (
                 <div key={p.id} style={{ background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <span style={{ color: 'var(--muted)', fontSize: 12 }}>{new Date(p.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
@@ -5588,7 +5659,7 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
                       </button>
                     )}
                   </div>
-                  <PresupuestoDeLaFicha presupuesto={p} />
+                  <PresupuestoDeLaFicha presupuesto={p} adicionales={presupuestosCliente.filter(x => x.origen_id === p.id)} />
                   {convirtiendoPresId === p.id && (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
                       <div className="field" style={{ flex: 1, minWidth: 180 }}>

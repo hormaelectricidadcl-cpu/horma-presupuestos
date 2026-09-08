@@ -161,6 +161,9 @@ export interface PresupuestoGuardado {
   subtotal: number | null
   iva: number | null
   total: number | null
+  // Si está lleno, este presupuesto es un ADICIONAL del que apunta -- el original nunca se
+  // modifica (sql/20260908_presupuestos_adicionales.sql).
+  origen_id?: string | null
 }
 
 export interface PresupuestoItemSimple {
