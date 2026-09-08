@@ -1007,6 +1007,16 @@ export function PanelObras() {
 }
 
 /* ─── Avance de obra — cantidad parcial por ítem + agenda por fase (carta Gantt) ──── */
+// Un ítem puede crecer después de presupuestado ("se colocaron cuatro, se agregaron dos
+// más"). `cantidad` es la línea base y nunca se edita; los adicionales viven aparte. Estas
+// dos funciones son la única forma de leer "cuánto hay que hacer" y "cuánto vale", para que
+// ninguna pantalla se quede mirando la cantidad vieja.
+function cantidadAEjecutar(item: ObraItem): number {
+  return item.cantidad + (item.cantidad_adicional || 0)
+}
+function totalConAdicionales(item: ObraItem): number {
+  return item.total + (item.cantidad_adicional || 0) * item.precio_unitario
+}
 
 function lunesDe(fecha: Date): Date {
   const d = new Date(fecha)
@@ -1083,7 +1093,7 @@ function GanttSemanal({ fases, items }: { fases: ObraFase[]; items: ObraItem[] }
               {tieneFechas ? (() => {
                 const itemsFase = items.filter(it => (it.fase || '') === f.nombre)
                 const totalFase = itemsFase.reduce((s, it) => s + it.total, 0)
-                const hechoFase = itemsFase.reduce((s, it) => s + (it.cantidad > 0 ? (it.cantidad_completada / it.cantidad) * it.total : 0), 0)
+                const hechoFase = itemsFase.reduce((s, it) => { const aEj = cantidadAEjecutar(it); return s + (aEj > 0 ? (it.cantidad_completada / aEj) * totalConAdicionales(it) : 0) }, 0)
                 const pctFase = totalFase > 0 ? Math.round((hechoFase / totalFase) * 100) : 0
                 return (
                   <div style={{
@@ -1107,28 +1117,43 @@ function GanttSemanal({ fases, items }: { fases: ObraFase[]; items: ObraItem[] }
   )
 }
 
-function ItemAvanceRow({ item, fases, onCantidad, onFase, onBorrar, mostrarPrecio = true }: {
+function ItemAvanceRow({ item, fases, onCantidad, onFase, onBorrar, onAdicional, mostrarPrecio = true }: {
   item: ObraItem
   fases?: ObraFase[]
   onCantidad: (cantidad: number) => void
   onFase?: (fase: string | null) => void
   onBorrar?: () => void
+  // Solo lo pasa el panel de gestión: en el de campo el trabajador marca avance, no cambia
+  // lo que hay que hacer.
+  onAdicional?: (cantidadAdicional: number) => void
   mostrarPrecio?: boolean
 }) {
   const [valor, setValor] = useState(String(item.cantidad_completada))
   useEffect(() => { setValor(String(item.cantidad_completada)) }, [item.cantidad_completada])
+  const [editandoAdicional, setEditandoAdicional] = useState(false)
+  const [valorAdicional, setValorAdicional] = useState(String(item.cantidad_adicional || 0))
+  useEffect(() => { setValorAdicional(String(item.cantidad_adicional || 0)) }, [item.cantidad_adicional])
 
-  const pct = item.cantidad > 0 ? Math.min(100, Math.round((item.cantidad_completada / item.cantidad) * 100)) : 0
-  const completo = item.cantidad_completada >= item.cantidad
+  const aEjecutar = cantidadAEjecutar(item)
+  const adicional = item.cantidad_adicional || 0
+  const pct = aEjecutar > 0 ? Math.min(100, Math.round((item.cantidad_completada / aEjecutar) * 100)) : 0
+  const completo = item.cantidad_completada >= aEjecutar
   const colorPct = completo ? 'var(--success)' : 'var(--primary)'
-  // Con cantidad=1 (el caso más común: "instalar el tablero", no "50 metros de cable")
-  // un checkbox es más claro que escribir un número -- mismo mecanismo de guardado.
-  const esBinario = item.cantidad === 1
+  // Con una sola unidad a ejecutar (el caso más común: "instalar el tablero", no "50 metros
+  // de cable") un checkbox es más claro que escribir un número -- mismo guardado.
+  const esBinario = aEjecutar === 1
 
   function guardar() {
     const n = Number(valor)
     if (!Number.isFinite(n) || n < 0) { setValor(String(item.cantidad_completada)); return }
-    onCantidad(Math.min(n, item.cantidad))
+    onCantidad(Math.min(n, aEjecutar))
+  }
+
+  function guardarAdicional() {
+    const n = Number(valorAdicional)
+    if (!Number.isFinite(n) || n < 0) { setValorAdicional(String(adicional)); setEditandoAdicional(false); return }
+    setEditandoAdicional(false)
+    if (n !== adicional) onAdicional?.(n)
   }
 
   return (
@@ -1138,34 +1163,39 @@ function ItemAvanceRow({ item, fases, onCantidad, onFase, onBorrar, mostrarPreci
           <input
             type="checkbox"
             checked={completo}
-            onChange={e => onCantidad(e.target.checked ? item.cantidad : 0)}
+            onChange={e => onCantidad(e.target.checked ? aEjecutar : 0)}
             style={{ width: 18, height: 18, flexShrink: 0, accentColor: 'var(--primary)', cursor: 'pointer' }}
           />
         )}
         <span style={{ flex: 1, fontSize: 13, textDecoration: completo ? 'line-through' : 'none', color: completo ? 'var(--muted)' : 'var(--text)' }}>
           {item.descripcion}
+          {adicional > 0 && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}> · +{adicional} adicional{adicional !== 1 ? 'es' : ''}</span>
+          )}
         </span>
         {mostrarPrecio && (
-          <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtMoney(item.total)}</span>
+          <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtMoney(totalConAdicionales(item))}</span>
         )}
       </div>
       {!esBinario && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <input
-            type="number" min={0} max={item.cantidad} step="any"
+            type="number" min={0} max={aEjecutar} step="any"
             value={valor}
             onChange={e => setValor(e.target.value)}
             onBlur={guardar}
             style={{ width: 56, padding: '4px 6px', fontSize: 12.5, textAlign: 'right' }}
           />
-          <span style={{ fontSize: 11.5, color: 'var(--muted)', flexShrink: 0 }}>/ {item.cantidad}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--muted)', flexShrink: 0 }} title={adicional > 0 ? `${item.cantidad} presupuestados + ${adicional} adicionales` : undefined}>
+            / {aEjecutar}
+          </span>
           <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${pct}%`, background: colorPct, transition: 'width 0.2s' }} />
           </div>
           <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: colorPct, width: 30, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
           {!completo && (
             <button
-              onClick={() => onCantidad(item.cantidad)}
+              onClick={() => onCantidad(aEjecutar)}
               style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
             >
               Listo
@@ -1173,7 +1203,7 @@ function ItemAvanceRow({ item, fases, onCantidad, onFase, onBorrar, mostrarPreci
           )}
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
         {onFase && fases && fases.length > 0 && (
           <select
             value={item.fase || ''}
@@ -1183,6 +1213,32 @@ function ItemAvanceRow({ item, fases, onCantidad, onFase, onBorrar, mostrarPreci
             <option value="">Sin fase</option>
             {fases.map(f => <option key={f.id} value={f.nombre}>{f.nombre}</option>)}
           </select>
+        )}
+        {/* "Se colocaron cuatro, se agregaron dos más": acá se carga ese 2. Lo presupuestado
+            (item.cantidad) no se toca nunca. */}
+        {onAdicional && (
+          editandoAdicional ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5 }}>
+              <span style={{ color: 'var(--muted)' }}>{item.cantidad} presupuestados +</span>
+              <input
+                type="number" min={0} step="any" autoFocus
+                value={valorAdicional}
+                onChange={e => setValorAdicional(e.target.value)}
+                onBlur={guardarAdicional}
+                onKeyDown={e => { if (e.key === 'Enter') guardarAdicional() }}
+                style={{ width: 52, padding: '3px 5px', fontSize: 11.5, textAlign: 'right' }}
+              />
+              <span style={{ color: 'var(--muted)' }}>adicionales</span>
+            </span>
+          ) : (
+            <button
+              onClick={() => setEditandoAdicional(true)}
+              style={{ fontSize: 11, fontWeight: 700, color: adicional > 0 ? 'var(--primary)' : 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              title="Se hicieron más unidades de las presupuestadas"
+            >
+              {adicional > 0 ? `Adicionales: ${adicional}` : '+ Se hicieron más'}
+            </button>
+          )
         )}
         {onBorrar && (
           <button onClick={onBorrar} style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -1208,7 +1264,7 @@ function calcularAtrasoFase(fase: ObraFase, items: ObraItem[], registros: ObraAv
   const registrosFase = registros.filter(r => itemIds.has(r.item_id))
   if (registrosFase.length === 0) return null
 
-  const faseCompleta = itemsFase.every(it => it.cantidad_completada >= it.cantidad)
+  const faseCompleta = itemsFase.every(it => it.cantidad_completada >= cantidadAEjecutar(it))
   const fechaFinPlan = parseFechaObra(fase.fecha_fin)
 
   let fechaComparar: Date
@@ -1300,6 +1356,17 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
     if (error) { alert('No se pudo actualizar. Intenta de nuevo.'); cargar() }
   }
 
+  // Cuántas unidades se agregaron después de presupuestar. `cantidad` no se toca: se guarda
+  // aparte para que siempre se pueda ver "4 presupuestados + 2 adicionales".
+  async function actualizarAdicional(item: ObraItem, cantidadAdicional: number) {
+    setItems(prev => prev.map(x => x.id === item.id ? { ...x, cantidad_adicional: cantidadAdicional } : x))
+    const { error } = await supabase.from('obra_items').update({ cantidad_adicional: cantidadAdicional }).eq('id', item.id)
+    if (error) {
+      alert('No se pudo guardar. Puede que falte correr la migración sql/20260908_obra_items_cantidad_adicional.sql.')
+      cargar()
+    }
+  }
+
   // Cubre el caso más común de esta obra en particular: presupuestos "externos" (PDF/foto
   // subida a mano) solo traen el monto total, nunca el detalle línea por línea -- así que
   // no hay nada que copiar automáticamente. Esto deja cargar los ítems a mano, para no
@@ -1365,8 +1432,8 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
 
   if (loading) return <div className="spinner" style={{ margin: '16px auto' }} />
 
-  const totalMonto = items.reduce((s, it) => s + it.total, 0)
-  const montoCompletado = items.reduce((s, it) => s + (it.cantidad > 0 ? (it.cantidad_completada / it.cantidad) * it.total : 0), 0)
+  const totalMonto = items.reduce((s, it) => s + totalConAdicionales(it), 0)
+  const montoCompletado = items.reduce((s, it) => { const aEj = cantidadAEjecutar(it); return s + (aEj > 0 ? (it.cantidad_completada / aEj) * totalConAdicionales(it) : 0) }, 0)
   const pct = totalMonto > 0 ? Math.round((montoCompletado / totalMonto) * 100) : 0
   const colorPct = pct >= 100 ? 'var(--success)' : 'var(--primary)'
 
@@ -1482,6 +1549,7 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
                     onCantidad={c => actualizarCantidad(it, c)}
                     onFase={f => actualizarFaseItem(it, f)}
                     onBorrar={() => borrarItem(it)}
+                    onAdicional={c => actualizarAdicional(it, c)}
                   />
                 ))}
               </div>

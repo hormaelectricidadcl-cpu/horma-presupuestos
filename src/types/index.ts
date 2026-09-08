@@ -213,6 +213,10 @@ export interface ObraItem {
   precio_unitario: number
   total: number
   cantidad_completada: number
+  // Cantidad que se sumó DESPUÉS de presupuestar. La cantidad real a ejecutar es
+  // cantidad + cantidad_adicional; `cantidad` nunca se edita, para no perder la línea base
+  // (sql/20260908_obra_items_cantidad_adicional.sql).
+  cantidad_adicional?: number
   orden: number
 }
 
