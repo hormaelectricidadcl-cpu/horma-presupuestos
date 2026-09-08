@@ -4249,104 +4249,114 @@ export function PanelBoletas() {
 }
 
 /* ─── Facturas emitidas ───────────────────────────────── */
+// Esta pestaña leía la tabla `facturas` (fecha + obra + monto, cargados a mano), que quedó
+// abandonada: 2 filas, la última del 17/08. Las facturas de verdad -- con el documento y
+// los datos leídos por IA -- viven en `cliente_facturas` desde el 02/09. Eran dos sistemas
+// que no se hablaban, y eso hizo que Gustavo y Alexandra marcaran una obra como facturada
+// y no vieran nada acá (conversación del 04/09).
+// Ahora muestra las facturas reales. Los registros viejos no se borran -- se muestran
+// aparte y etiquetados, mismo criterio que ya se usó con los pendientes y los trabajadores:
+// nunca se destruye historial, se lo saca del camino.
 export function PanelFacturas() {
-  const [facturas, setFacturas] = useState<{ id: string; fecha: string; obra: string | null; monto: number }[]>([])
-  const [obras, setObras] = useState<string[]>([])
+  const [emitidas, setEmitidas] = useState<ClienteFactura[]>([])
+  const [viejas, setViejas] = useState<{ id: string; fecha: string; obra: string | null; monto: number }[]>([])
+  const [verViejas, setVerViejas] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [mostrarForm, setMostrarForm] = useState(false)
-  const [nuevaFecha, setNuevaFecha] = useState(() => new Date().toISOString().slice(0, 10))
-  const [nuevaObra, setNuevaObra] = useState('')
-  const [nuevoMonto, setNuevoMonto] = useState('')
-  const [guardando, setGuardando] = useState(false)
 
   const cargar = useCallback(async () => {
-    const [{ data: f }, { data: o }] = await Promise.all([
+    const [{ data: emit }, { data: old }] = await Promise.all([
+      supabase.from('cliente_facturas').select('*').order('fecha', { ascending: false }),
       supabase.from('facturas').select('*').order('fecha', { ascending: false }),
-      supabase.from('obras').select('nombre').order('nombre'),
     ])
-    setFacturas(f || [])
-    setObras((o || []).map((x: { nombre: string }) => x.nombre))
+    setEmitidas((emit as ClienteFactura[]) || [])
+    setViejas(old || [])
     setLoading(false)
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
 
-  async function agregarFactura() {
-    if (!nuevaFecha || !nuevoMonto.trim()) { alert('Completa la fecha y el monto.'); return }
-    const monto = Number(nuevoMonto)
-    if (!Number.isFinite(monto) || monto <= 0) { alert('El monto no es válido.'); return }
-    setGuardando(true)
-    const { error } = await supabase.from('facturas').insert({ fecha: nuevaFecha, obra: nuevaObra || null, monto })
-    setGuardando(false)
-    if (error) { alert('No se pudo guardar. Intenta de nuevo.'); return }
-    setNuevaObra(''); setNuevoMonto(''); setMostrarForm(false)
-    cargar()
-  }
-
-  async function borrarFactura(id: string) {
-    if (!window.confirm('¿Borrar esta factura? No se puede deshacer.')) return
+  async function borrarVieja(id: string) {
+    if (!window.confirm('¿Borrar este registro viejo? Es del sistema anterior, no tiene documento asociado. No se puede deshacer.')) return
     const { error } = await supabase.from('facturas').delete().eq('id', id)
     if (error) { alert('No se pudo borrar. Intenta de nuevo.'); return }
-    setFacturas(prev => prev.filter(f => f.id !== id))
+    setViejas(prev => prev.filter(f => f.id !== id))
   }
 
   if (loading) return <div className="spinner" />
 
-  const totalGeneral = facturas.reduce((s, f) => s + f.monto, 0)
+  const totalFacturas = emitidas.filter(f => f.tipo !== 'boleta').reduce((s, f) => s + f.monto, 0)
+  const totalBoletas = emitidas.filter(f => f.tipo === 'boleta').reduce((s, f) => s + f.monto, 0)
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-        <button className="btn btn-primary" onClick={() => setMostrarForm(v => !v)} style={{ fontSize: 13, padding: '7px 14px' }}>
-          {mostrarForm ? 'Cancelar' : '+ Agregar factura'}
-        </button>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <StatTile label="Facturas emitidas" valor={fmtMoney(totalFacturas)} tono="neutral" />
+        {totalBoletas > 0 && <StatTile label="Boletas emitidas" valor={fmtMoney(totalBoletas)} tono="neutral" />}
+        <StatTile label="Documentos" valor={String(emitidas.length)} tono="neutral" />
       </div>
 
-      {mostrarForm && (
-        <div className="card" style={{ padding: 14, marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div className="field" style={{ width: 160 }}>
-            <label>Fecha</label>
-            <input type="date" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} />
-          </div>
-          <div className="field" style={{ flex: 1, minWidth: 160 }}>
-            <label>Obra (opcional)</label>
-            <select value={nuevaObra} onChange={e => setNuevaObra(e.target.value)}>
-              <option value="">Sin obra</option>
-              {obras.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div className="field" style={{ width: 160 }}>
-            <label>Monto</label>
-            <input type="number" min="0" value={nuevoMonto} onChange={e => setNuevoMonto(e.target.value)} placeholder="0" />
-          </div>
-          <button className="btn btn-primary" onClick={agregarFactura} disabled={guardando} style={{ fontSize: 13, padding: '8px 16px' }}>
-            {guardando ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
-      )}
+      <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+        Cada factura o boleta se carga desde la ficha de su cliente, en <strong>Clientes</strong> — ahí se sube
+        el documento y la IA lee el monto y los datos fiscales. Acá se ven todas juntas.
+      </p>
 
-      <div style={{ marginBottom: 18 }}>
-        <StatTile label="Total facturado" valor={fmtMoney(totalGeneral)} tono="neutral" />
-      </div>
-
-      {facturas.length === 0 ? (
-        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>Todavía no hay facturas cargadas.</p>
+      {emitidas.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>
+          Todavía no hay ninguna factura ni boleta cargada.
+        </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {facturas.map(f => (
+          {emitidas.map(f => (
             <div key={f.id} className="card" style={{ padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <div>
-                <p style={{ fontWeight: 700, fontSize: 14 }}>{f.obra || 'Sin obra asignada'}</p>
-                <p style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(f.fecha + 'T00:00:00').toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</p>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontWeight: 700, fontSize: 14 }}>{f.cliente_nombre}</p>
+                <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  <span className="badge badge-otro" style={{ fontSize: 11, marginRight: 6 }}>{f.tipo === 'boleta' ? 'Boleta' : 'Factura'}</span>
+                  {new Date(f.fecha + 'T00:00:00').toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}
+                </p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
                 <p style={{ fontWeight: 700, fontSize: 15 }}>{fmtMoney(f.monto)}</p>
-                <button onClick={() => borrarFactura(f.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--danger)', fontWeight: 600, padding: 0 }}>
-                  Borrar
-                </button>
+                {f.archivo_url && (
+                  <a href={f.archivo_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: 13 }}>
+                    Ver archivo →
+                  </a>
+                )}
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {viejas.length > 0 && (
+        <div style={{ marginTop: 26, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <button className="btn btn-ghost" onClick={() => setVerViejas(v => !v)} style={{ fontSize: 12 }}>
+            {verViejas ? 'Ocultar' : `Ver ${viejas.length} registro${viejas.length !== 1 ? 's' : ''} viejo${viejas.length !== 1 ? 's' : ''}`} del sistema anterior {verViejas ? '▲' : '▼'}
+          </button>
+          {verViejas && (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '10px 0' }}>
+                Cargados a mano antes de que existiera el circuito de facturas: solo tienen fecha, obra y monto,
+                sin documento. Se dejan acá para no perder el dato; se pueden borrar cuando ya no sirvan.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {viejas.map(f => (
+                  <div key={f.id} style={{ background: 'var(--surface-alt)', color: 'var(--text)', borderRadius: 8, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13 }}>
+                    <span>
+                      <strong>{f.obra || 'Sin obra asignada'}</strong>
+                      <span style={{ color: 'var(--muted)' }}> · {new Date(f.fecha + 'T00:00:00').toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <strong>{fmtMoney(f.monto)}</strong>
+                      <button onClick={() => borrarVieja(f.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--danger)', fontWeight: 600, padding: 0 }}>
+                        Borrar
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
