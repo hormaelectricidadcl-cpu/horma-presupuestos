@@ -1,6 +1,36 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-08 — Seguridad etapa 1: achicar el daño, sin cambiar todavía cómo entra nadie
+Conversación abierta desde el 28/08. Antes de tocar nada se midió el estado real (no se asumió):
+- **La clave pública de Supabase está dentro del JS del sitio** — confirmado buscándola en el bundle
+  desplegado. Los tokens de los paneles (`VITE_GUSTAVO_TOKEN`, `VITE_REPORTE_TOKEN`,
+  `VITE_PRESUPUESTO_TOKEN`) también: los links "privados" están a la vista de cualquiera que abra el código.
+- Con esa clave, 28 tablas del negocio tenían `ALL / using(true) / check(true)`.
+- El bucket `audio-notas` se podía **enumerar entero**: 123 archivos, con nombres que ya cuentan cosas
+  ("adelanto-Fabriel-...").
+
+**Lo que se hizo (`sql/20260908_seguridad_etapa1.sql`, corrido por Alexandra y verificado):**
+1. Se sacó la política de SELECT de `storage.objects` para anon. **Comprobado antes de proponerlo** que los
+   archivos se sirven sin ninguna clave (HTTP 200 sin apikey), así que esa política no era lo que hacía que
+   se vieran las fotos: lo único que habilitaba era enumerar. Después del cambio, listar devuelve `[]` y las
+   fotos siguen cargando (Banco de contenido muestra 31 miniaturas).
+2. En las 9 tablas donde la app **nunca** borra, la política única `ALL` se reemplazó por SELECT + INSERT +
+   UPDATE: `reportes_diarios` (el historial de nómina), `pago_semanal_comprobantes`, `trabajadores`,
+   `cliente_facturas`, `gastos_fijos`, `materiales`, `obra_avance_registros`, `subcontratos_master`,
+   `pendiente_mensajes`. Verificado que RLS está encendido y que quedaron 0 políticas que permitan borrar.
+
+**Por qué esas nueve y no más:** se buscó `.delete()` en todo el código y la app borra de 23 tablas; ninguna
+de las nueve aparece en ningún camino de borrado. Sacarles DELETE no le quita nada a la app y convierte
+"alguien te vacía la nómina" en "alguien te la ensucia", que con los backups del 31/08 es recuperable.
+
+**Lo que esto NO arregla, y hay que decirlo:** el fondo sigue igual. La base no sabe quién es quién; los
+tokens son cosmética de la interfaz y la base nunca los ve. Cualquiera con la clave sigue pudiendo leer y
+escribir todo. Eso es la **etapa 2: usuarios reales de Supabase con sesión persistente** (cada uno entra una
+vez en su teléfono y la sesión se refresca sola, así no pierden la comodidad del link), políticas de `anon`
+a `authenticated`, y recién ahí reglas por rol — que Fabriel vea solo su obra de verdad y no por convención.
+Es una sesión dedicada; deliberadamente NO se hizo antes de la prueba con Gustavo del viernes 11/09.
+
 ## 2026-09-08 — Los adicionales son documentos aparte; el presupuesto original nunca se toca
 Pedido de Gustavo (conversación 04/09): el ítem dice 4, se hicieron 3 y aparecieron 2 más, así que ahora son
 6. Quiere partir del mismo presupuesto, ajustar lo que cambió, agregar las líneas nuevas al final y mandarle

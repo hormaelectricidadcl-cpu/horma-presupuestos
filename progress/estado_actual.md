@@ -219,8 +219,13 @@ después de correrlas: la ficha del trabajador y Avance de obra responden **sin 
   fecha, y borrar los 3 clientes de prueba ("Alexandra prueba 3", "Gustavo Castillo", "Eloísa Díaz").
 - **Dos decisiones abiertas:** el sábado de Fabriel (+$40.000, a confirmar con Gustavo) y qué es lo del
   teléfono que él mencionó.
-- **Lo de fondo, sin tocar:** la seguridad de Supabase (RLS `anon full access` en casi todas las tablas y el
-  bucket que permite `list`). Abierto desde el 28/08; es lo único de la lista que no se arregla con un commit.
+- **Seguridad — etapa 1 HECHA el 08/09** (ver `decisiones.md`): cerrado el listado del bucket (listar
+  devuelve `[]`, las fotos siguen cargando) y sacado el permiso de borrar en las 9 tablas donde la app nunca
+  borra, incluida la asistencia diaria. Verificado contra la base y en producción, sin efecto en la app.
+- **Seguridad — etapa 2, PENDIENTE y es la que arregla el fondo:** usuarios reales de Supabase con sesión
+  persistente, políticas de `anon` a `authenticated`, y reglas por rol. Hoy la clave pública y los tokens de
+  los paneles viajan en el JS del sitio, así que cualquiera puede leer y escribir todo. Es una sesión
+  dedicada; a propósito no se hizo antes de la prueba del viernes.
 - **Para hacer ellos, sin código:** marcar qué obras se pactaron con IVA, asignarle la obra a cada trabajador
   (ninguno la tiene, por eso ven todas), y cargar las fechas de las fases de O'Higgins.
 - Decisiones abiertas anotadas en el artifact: si un trabajador puede estar en varias obras, el sábado de
