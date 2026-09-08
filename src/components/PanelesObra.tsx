@@ -2952,6 +2952,247 @@ function HistorialPeriodosTrabajador({ vista, trabajador, diariosTrabajador, aju
   )
 }
 
+/* ─── Subir una factura o boleta emitida, desde la ficha del cliente ──── */
+// Hasta ahora una factura emitida solo se podía cargar desde el pendiente "Emitir factura"
+// del panel de Admin, que es de Alexandra. Gustavo, que es quien las emite, no tenía por
+// dónde: en la conversación del 04/09 la buscó en Obras, en Facturas y en Clientes y no
+// estaba en ninguna. Resultado real: una sola factura cargada en todo el sistema.
+// Esta es la misma máquina que ya usa Admin (mismo bucket, misma lectura por IA, misma
+// tabla), pero disponible donde él trabaja. `pendiente_id` queda en null: esta factura no
+// nace de un pendiente.
+function SubirFacturaCliente({ cliente, onGuardado }: { cliente: Cliente; onGuardado: () => void }) {
+  const [abierto, setAbierto] = useState(false)
+  const [tipo, setTipo] = useState<'factura' | 'boleta'>('factura')
+  const [fecha, setFecha] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date()))
+  const [monto, setMonto] = useState('')
+  const [archivoUrl, setArchivoUrl] = useState<string | null>(null)
+  const [nombreArchivo, setNombreArchivo] = useState('')
+  const [subiendo, setSubiendo] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [datosIA, setDatosIA] = useState<{ rut: string | null; razon_social: string | null; giro: string | null; direccion: string | null } | null>(null)
+
+  function limpiar() {
+    setTipo('factura'); setMonto(''); setArchivoUrl(null); setNombreArchivo(''); setDatosIA(null)
+    setAbierto(false)
+  }
+
+  async function subirYLeer(archivo: File) {
+    setSubiendo(true)
+    setNombreArchivo(archivo.name)
+    const filename = `${tipo}-cliente-${cliente.id}-${Date.now()}-${archivo.name}`
+    const { data, error } = await supabase.storage.from('audio-notas').upload(filename, archivo, { contentType: archivo.type })
+    if (error) { alert('No se pudo subir el archivo: ' + error.message); setSubiendo(false); return }
+    const url = supabase.storage.from('audio-notas').getPublicUrl(data.path).data.publicUrl
+    setArchivoUrl(url)
+    try {
+      const res = await fetch('/api/parse-factura-emitida', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const resultado = await res.json()
+      if (res.ok) {
+        if (resultado.monto != null) setMonto(String(resultado.monto))
+        setDatosIA({ rut: resultado.rut, razon_social: resultado.razon_social, giro: resultado.giro, direccion: resultado.direccion })
+      }
+    } catch {
+      // Si la IA falla, el archivo ya quedó subido -- se completa el monto a mano, mismo
+      // criterio que el resto de la app.
+    }
+    setSubiendo(false)
+  }
+
+  async function guardar() {
+    const montoNum = Number(monto)
+    if (!Number.isFinite(montoNum) || montoNum <= 0) { alert('Ingresa un monto válido.'); return }
+    if (!fecha) { alert('Ingresa la fecha del documento.'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('cliente_facturas').insert({
+      cliente_id: cliente.id,
+      cliente_nombre: cliente.nombre,
+      pendiente_id: null,
+      fecha,
+      monto: montoNum,
+      archivo_url: archivoUrl,
+      tipo,
+    })
+    if (error) { alert(`No se pudo registrar la ${tipo}: ` + error.message); setGuardando(false); return }
+
+    // Igual que en Admin: lo que la IA leyó del documento completa la ficha del cliente,
+    // pero NUNCA pisa un dato ya cargado a mano.
+    if (datosIA) {
+      const patch: Record<string, string> = {}
+      if (!cliente.rut && datosIA.rut) patch.rut = datosIA.rut
+      if (!cliente.razon_social && datosIA.razon_social) patch.razon_social = datosIA.razon_social
+      if (!cliente.giro && datosIA.giro) patch.giro = datosIA.giro
+      if (!cliente.direccion_fiscal && datosIA.direccion) patch.direccion_fiscal = datosIA.direccion
+      if (Object.keys(patch).length > 0) await supabase.from('clientes').update(patch).eq('id', cliente.id)
+    }
+
+    setGuardando(false)
+    limpiar()
+    onGuardado()
+  }
+
+  if (!abierto) {
+    return (
+      <button className="btn btn-ghost" onClick={() => setAbierto(true)} style={{ fontSize: 12 }}>
+        + Subir factura o boleta
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ width: '100%', background: 'var(--surface-alt)', color: 'var(--text)', borderRadius: 8, padding: 12, marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div className="field" style={{ flex: '1 1 130px' }}>
+          <label>Tipo</label>
+          <select value={tipo} onChange={e => setTipo(e.target.value as 'factura' | 'boleta')}>
+            <option value="factura">Factura</option>
+            <option value="boleta">Boleta</option>
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 150px' }}>
+          <label>Fecha del documento</label>
+          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
+        </div>
+      </div>
+
+      <label className="btn btn-secondary" style={{ fontSize: 12, cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1, width: 'fit-content' }}>
+        {subiendo ? 'Leyendo el documento...' : archivoUrl ? 'Cambiar archivo' : 'Subir el archivo'}
+        <input
+          type="file"
+          accept="image/*,application/pdf"
+          style={{ display: 'none' }}
+          disabled={subiendo}
+          onChange={e => { const a = e.target.files?.[0]; e.target.value = ''; if (a) subirYLeer(a) }}
+        />
+      </label>
+      {nombreArchivo && (
+        <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+          {nombreArchivo}
+          {archivoUrl && ' — subido'}
+          {datosIA && ' · la IA leyó el documento, revisá el monto antes de guardar'}
+        </p>
+      )}
+
+      <div className="field">
+        <label>Monto</label>
+        <input type="number" min="0" placeholder="Monto en pesos" value={monto} onChange={e => setMonto(e.target.value)} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" disabled={guardando || subiendo} onClick={guardar} style={{ fontSize: 12, padding: '7px 14px' }}>
+          {guardando ? 'Guardando...' : 'Guardar'}
+        </button>
+        <button className="btn btn-secondary" onClick={limpiar} style={{ fontSize: 12, padding: '7px 14px' }}>Cancelar</button>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Cuerpo de un presupuesto: ítems (o etapas, o el archivo) y sus totales ──── */
+// Compartido por el detalle de la obra y la ficha del cliente, para que el presupuesto se
+// vea igual en los dos lados y no haya dos versiones que se puedan separar con el tiempo.
+function CuerpoPresupuesto({ presupuesto }: { presupuesto: PresupuestoDetalle }) {
+  return (
+    <>
+      {presupuesto.tipo === 'simple' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {(presupuesto.items || []).map((item, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ flex: 1 }}>
+                <span style={{ color: 'var(--muted)', fontSize: 11 }}>{item.categoria}</span><br />
+                {item.description} × {item.quantity}
+              </span>
+              <span style={{ fontWeight: 600, flexShrink: 0 }}>{fmtMoney(item.total)}</span>
+            </div>
+          ))}
+          {(!presupuesto.items || presupuesto.items.length === 0) && (
+            <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin ítems cargados.</p>
+          )}
+        </div>
+      ) : presupuesto.tipo === 'externo' ? (
+        presupuesto.archivo_url
+          ? <GaleriaArchivos urls={[presupuesto.archivo_url]} />
+          : <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin archivo cargado.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {(presupuesto.etapas || []).map((etapa, i) => (
+            <div key={i}>
+              <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{etapa.numero} — {etapa.nombre}</p>
+              {etapa.items.map((item, j) => (
+                <div key={j} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, padding: '4px 0' }}>
+                  <span style={{ flex: 1, color: 'var(--muted)' }}>[{item.tipo}] {item.descripcion} × {item.cantidad}</span>
+                  <span style={{ flexShrink: 0 }}>{fmtMoney(item.total)}</span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 12, fontWeight: 700, marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
+                Subtotal etapa: {fmtMoney(etapa.total)}
+              </div>
+            </div>
+          ))}
+          {(!presupuesto.etapas || presupuesto.etapas.length === 0) && (
+            <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin etapas cargadas.</p>
+          )}
+        </div>
+      )}
+
+      {presupuesto.tipo !== 'externo' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span>{fmtMoney(presupuesto.subtotal || 0)}</span></div>
+          {presupuesto.gg_amount != null && presupuesto.gg_amount > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gastos generales ({presupuesto.gg_pct}%)</span><span>{fmtMoney(presupuesto.gg_amount)}</span></div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>IVA</span><span>{fmtMoney(presupuesto.iva || 0)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}><span>Total</span><span>{fmtMoney(presupuesto.total || 0)}</span></div>
+        </div>
+      )}
+    </>
+  )
+}
+
+/* ─── Un presupuesto de la ficha del cliente, que se abre en el lugar ──── */
+// Alexandra, viendo la ficha: "no podemos hacer clic y ver nada". La fila mostraba
+// referencia, estado y total como texto muerto: para ver los ítems había que salir a
+// "Mis presupuestos" y buscarlo de nuevo. Se carga el detalle completo recién al abrir,
+// porque la ficha trae solo el resumen de cada presupuesto.
+function PresupuestoDeLaFicha({ presupuesto }: { presupuesto: PresupuestoGuardado }) {
+  const [abierto, setAbierto] = useState(false)
+  const [detalle, setDetalle] = useState<PresupuestoDetalle | null>(null)
+  const [cargando, setCargando] = useState(false)
+
+  async function alternar() {
+    if (abierto) { setAbierto(false); return }
+    setAbierto(true)
+    if (detalle) return
+    setCargando(true)
+    const { data } = await supabase.from('presupuestos').select('*').eq('id', presupuesto.id).single()
+    setDetalle((data as PresupuestoDetalle) || null)
+    setCargando(false)
+  }
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button className="btn btn-ghost" onClick={alternar} style={{ fontSize: 12 }}>
+          {abierto ? 'Ocultar detalle ▲' : 'Ver detalle ▼'}
+        </button>
+        {detalle && detalle.tipo !== 'externo' && (
+          <button className="btn btn-ghost" onClick={() => descargarPdfPresupuesto(detalle)} style={{ fontSize: 12 }}>
+            Descargar PDF
+          </button>
+        )}
+      </div>
+      {abierto && (
+        cargando ? <div className="spinner" />
+          : detalle ? <div style={{ marginTop: 10 }}><CuerpoPresupuesto presupuesto={detalle} /></div>
+            : <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 8 }}>No se pudo cargar el detalle.</p>
+      )}
+    </div>
+  )
+}
+
 /* ─── Presupuesto vinculado a una obra, dentro del detalle de la obra ──── */
 // Muestra el presupuesto ORIGINAL (lo que se le vendió al cliente), no los ítems de
 // trabajo: esos viven en "Avance de obra" (`obra_items`), se editan a medida que la obra
@@ -3018,61 +3259,7 @@ function PresupuestoDeLaObra({ presupuestoId }: { presupuestoId: string | null }
             </span>
           </button>
 
-          {abierto && (
-            <div style={{ marginTop: 12 }}>
-              {presupuesto.tipo === 'simple' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {(presupuesto.items || []).map((item, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                      <span style={{ flex: 1 }}>
-                        <span style={{ color: 'var(--muted)', fontSize: 11 }}>{item.categoria}</span><br />
-                        {item.description} × {item.quantity}
-                      </span>
-                      <span style={{ fontWeight: 600, flexShrink: 0 }}>{fmtMoney(item.total)}</span>
-                    </div>
-                  ))}
-                  {(!presupuesto.items || presupuesto.items.length === 0) && (
-                    <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin ítems cargados.</p>
-                  )}
-                </div>
-              ) : presupuesto.tipo === 'externo' ? (
-                presupuesto.archivo_url
-                  ? <GaleriaArchivos urls={[presupuesto.archivo_url]} />
-                  : <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin archivo cargado.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {(presupuesto.etapas || []).map((etapa, i) => (
-                    <div key={i}>
-                      <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{etapa.numero} — {etapa.nombre}</p>
-                      {etapa.items.map((item, j) => (
-                        <div key={j} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, padding: '4px 0' }}>
-                          <span style={{ flex: 1, color: 'var(--muted)' }}>[{item.tipo}] {item.descripcion} × {item.cantidad}</span>
-                          <span style={{ flexShrink: 0 }}>{fmtMoney(item.total)}</span>
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 12, fontWeight: 700, marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
-                        Subtotal etapa: {fmtMoney(etapa.total)}
-                      </div>
-                    </div>
-                  ))}
-                  {(!presupuesto.etapas || presupuesto.etapas.length === 0) && (
-                    <p style={{ fontSize: 13, color: 'var(--muted)' }}>Sin etapas cargadas.</p>
-                  )}
-                </div>
-              )}
-
-              {presupuesto.tipo !== 'externo' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span>{fmtMoney(presupuesto.subtotal || 0)}</span></div>
-                  {presupuesto.gg_amount != null && presupuesto.gg_amount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gastos generales ({presupuesto.gg_pct}%)</span><span>{fmtMoney(presupuesto.gg_amount)}</span></div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>IVA</span><span>{fmtMoney(presupuesto.iva || 0)}</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}><span>Total</span><span>{fmtMoney(presupuesto.total || 0)}</span></div>
-                </div>
-              )}
-            </div>
-          )}
+          {abierto && <div style={{ marginTop: 12 }}><CuerpoPresupuesto presupuesto={presupuesto} /></div>}
         </>
       )}
     </div>
@@ -5120,6 +5307,7 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
   const [obrasCliente, setObrasCliente] = useState<Obra[]>([])
   const [cuentasCliente, setCuentasCliente] = useState<CuentaPorCobrar[]>([])
   const [abonosCliente, setAbonosCliente] = useState<AbonoCuenta[]>([])
+  const [cuentaAbierta, setCuentaAbierta] = useState<string | null>(null)
   const [convirtiendoPresId, setConvirtiendoPresId] = useState<string | null>(null)
   const [nombreObraCliente, setNombreObraCliente] = useState('')
   const [convirtiendoCliente, setConvirtiendoCliente] = useState(false)
@@ -5336,6 +5524,7 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
                 <div key={p.id} style={{ background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <span style={{ color: 'var(--muted)', fontSize: 12 }}>{new Date(p.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
+                    {p.referencia && <span style={{ fontWeight: 600 }}>{p.referencia}</span>}
                     <span className="badge badge-otro" style={{ fontSize: 11 }}>{ESTADO_PRESUPUESTO_LABELS[p.estado]}</span>
                     <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{p.total != null ? fmtMoney(p.total) : '—'}</span>
                     {p.estado === 'aceptado' && (
@@ -5344,6 +5533,7 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
                       </button>
                     )}
                   </div>
+                  <PresupuestoDeLaFicha presupuesto={p} />
                   {convirtiendoPresId === p.id && (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
                       <div className="field" style={{ flex: 1, minWidth: 180 }}>
@@ -5407,19 +5597,48 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {cuentasCliente.map(cu => {
-                const abonado = abonosCliente.filter(a => a.cuenta_id === cu.id).reduce((s, a) => s + a.monto, 0)
+                const abonosDeLaCuenta = abonosCliente
+                  .filter(a => a.cuenta_id === cu.id)
+                  .slice()
+                  .sort((a, b) => b.fecha.localeCompare(a.fecha))
+                const abonado = abonosDeLaCuenta.reduce((s, a) => s + a.monto, 0)
                 const restante = cu.total_presupuesto - abonado
+                const desplegada = cuentaAbierta === cu.id
                 return (
                   <div key={cu.id} style={{ background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
                       <span style={{ fontWeight: 600 }}>{cu.concepto}</span>
                       {cu.obra && <span style={{ color: 'var(--muted)', fontSize: 12 }}>{cu.obra}</span>}
+                      {abonosDeLaCuenta.length > 0 && (
+                        <button
+                          className="btn btn-ghost"
+                          onClick={() => setCuentaAbierta(desplegada ? null : cu.id)}
+                          style={{ fontSize: 12, marginLeft: 'auto' }}
+                        >
+                          {desplegada ? 'Ocultar abonos ▲' : `Ver ${abonosDeLaCuenta.length} abono${abonosDeLaCuenta.length !== 1 ? 's' : ''} ▼`}
+                        </button>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
                       <span>Presupuesto: <strong>{fmtMoney(cu.total_presupuesto)}</strong></span>
                       <span style={{ color: 'var(--success)' }}>Abonado: <strong>{fmtMoney(abonado)}</strong></span>
                       <span style={{ color: restante > 0 ? 'var(--danger)' : 'var(--success)' }}>Resta: <strong>{fmtMoney(restante)}</strong></span>
                     </div>
+                    {desplegada && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                        {abonosDeLaCuenta.map(a => (
+                          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+                            <span style={{ color: 'var(--muted)', width: 78, flexShrink: 0 }}>{a.fecha.split('-').reverse().join('/')}</span>
+                            <span style={{ fontWeight: 600 }}>{fmtMoney(a.monto)}</span>
+                            {a.comprobante_url && (
+                              <a href={a.comprobante_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, marginLeft: 'auto' }}>
+                                Ver comprobante →
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -5428,9 +5647,12 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
         </div>
 
         <div className="card" style={{ padding: '14px 16px', marginBottom: 14 }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
-            Facturas y boletas emitidas
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Facturas y boletas emitidas
+            </p>
+            <SubirFacturaCliente cliente={seleccionado} onGuardado={() => verCliente(seleccionado)} />
+          </div>
           {facturasCliente.length === 0 ? (
             <p style={{ color: 'var(--muted)', fontSize: 13 }}>Todavía no hay facturas ni boletas registradas para este cliente.</p>
           ) : (
