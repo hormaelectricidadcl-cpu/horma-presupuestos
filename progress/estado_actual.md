@@ -144,9 +144,34 @@ Supabase.
 - `sql/20260907_obras_eloisa_a_psg.sql` (las dos obras "Doctora Eloísa" pasan a Constructora PSG; trae
   consulta de comprobación y, comentado, el borrado de la ficha que queda vacía).
 
+### 8. Sección "Facturas y clientes" — construida y verificada (`3f9d9c5`, `c4e906d`)
+1. **Gustavo ya puede subir la factura emitida desde la ficha del cliente.** La maquinaria existía desde el
+   02/09 (tabla `cliente_facturas`, lectura del documento por IA, historial en la ficha), pero la única
+   puerta era el pendiente "Emitir factura" del panel de Admin, que es de Alexandra — él la buscó en Obras,
+   Facturas y Clientes y no estaba en ninguna. Resultado real: UNA sola factura en todo el sistema. Ahora
+   hay "+ Subir factura o boleta" en la ficha, con el mismo bucket, la misma IA y la misma tabla que Admin
+   (`pendiente_id` en null). Lo que la IA lee completa los datos fiscales vacíos y nunca pisa uno cargado.
+2. **En Clientes ya se puede hacer clic** ("no vemos nada, no podemos hacer clic y ver nada"): cada
+   presupuesto abre sus ítems/etapas/archivo y su PDF en el lugar, cada cuenta por cobrar abre sus abonos con
+   el comprobante, y la fila del presupuesto muestra su referencia (HRM-...). El cuerpo del presupuesto quedó
+   en un componente compartido (`CuerpoPresupuesto`) que usan la ficha y el detalle de la obra.
+3. **La pestaña "Facturas" muestra las facturas de verdad** (`cliente_facturas`) en vez de la tabla
+   abandonada `facturas` (2 filas, última del 17/08). Los 2 registros viejos NO se borraron: quedan en un
+   desplegable etiquetado "del sistema anterior" — son montos grandes ($4.733.671 de Luz 2979 y $23.916.092
+   de Ohiggins). Se sacó el formulario "+ Agregar factura", que era lo único que seguía escribiendo ahí.
+
+**Verificado en navegador con datos reales y en producción**, toda escritura bloqueada (no se subió ninguna
+factura de verdad): el presupuesto de Elsie despliega sus 2 ítems con GG, IVA y total exactos; el formulario
+abre completo en la ficha de Patricia; la pestaña muestra su factura de $125.446 con el archivo.
+
+**LÍMITE conocido:** `/api/parse-factura-emitida` es una Cloudflare Function y no corre en Vite local, así que
+la lectura por IA *desde esta puerta nueva* queda sin probar hasta que se use en producción. El archivo se
+sube igual y el monto se puede completar a mano.
+
 ### Pendiente para la próxima sesión
-- Seguir por la sección "Facturas y clientes" de la lista: que Gustavo pueda subir la factura emitida desde
-  donde trabaja, y que en Clientes se pueda hacer clic para abrir el presupuesto/obra/cuenta.
+- Seguir por **"Presupuestos y adicionales"** — el pedido grande de Gustavo. El diseño ya está investigado y
+  anotado en `decisiones.md`/el artifact: no se reemplaza el presupuesto, el original queda congelado y los
+  adicionales se cargan aparte (original + aprobados = vigente), con registro fechado.
 - **Para hacer ellos, sin código:** marcar qué obras se pactaron con IVA, asignarle la obra a cada trabajador
   (ninguno la tiene, por eso ven todas), y cargar las fechas de las fases de O'Higgins.
 - Decisiones abiertas anotadas en el artifact: si un trabajador puede estar en varias obras, el sábado de
