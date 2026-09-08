@@ -390,14 +390,21 @@ export function calcularResumenObras(
     }, 0)
     const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0) + cobradoManual
-    // Saldo = lo cobrado menos lo que costó la obra. La mano de obra entra como costo
-    // (días × tarifa + viático) y por eso NO se restan aparte los adelantos ni los pagos
-    // semanales cargados contra la obra: esos son el PAGO de esa misma mano de obra, no un
-    // costo aparte -- restarlos además la contaría dos veces (Ohiggins tiene $3.615.000 de
-    // mano de obra y $1.595.000 cargados como pagos). Antes no se restaba la mano de obra
-    // en absoluto, así que el saldo daba de más. Decidido con Alexandra, ver decisiones.md
-    // 2026-09-07.
-    const saldo = cobrado - gastoCompras - pagadoSubcontratos - manoDeObra
+    // Saldo = lo cobrado menos lo que CUESTA la obra, no lo que ya salió de la cuenta.
+    // Un costo cuenta cuando se incurre, no cuando se paga:
+    //   * la mano de obra, cuando el trabajador trabajó (días × tarifa + viático);
+    //   * los subcontratos, por lo CONTRATADO (`gastoSubcontratos`), no por lo pagado --
+    //     la plata ya está comprometida aunque la factura no haya llegado.
+    // Por eso NO se restan aparte los adelantos ni los pagos semanales cargados contra la
+    // obra: son el PAGO de esa misma mano de obra, y restarlos además la contaría dos veces
+    // (Ohiggins tiene $3.615.000 de mano de obra y $1.595.000 cargados como pagos).
+    // Es el criterio de "committed cost" que usan los sistemas de job costing: seguir solo
+    // lo pagado te entera del sobrecosto cuando ya es tarde. Ver decisiones.md 2026-09-07.
+    const saldo = cobrado - gastoCompras - gastoSubcontratos - manoDeObra
+    // La otra mitad del mismo criterio: plata ya comprometida que todavía no salió. Sin esto
+    // el saldo se lee como si fuera efectivo disponible, que es la confusión clásica entre
+    // caja y margen -- una obra puede dejar plata y aun así no alcanzar para pagar el viernes.
+    const subcontratosPorPagar = Math.max(gastoSubcontratos - pagadoSubcontratos, 0)
     // Si la obra tiene cuenta(s) por cobrar, el presupuesto real es la SUMA de
     // esas cuentas — no el campo suelto de la obra, que puede quedar
     // desactualizado (ej. alguien lo edita a mano reflejando solo una parte,
@@ -424,7 +431,7 @@ export function calcularResumenObras(
       : null
 
     return {
-      obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar,
+      obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar, subcontratosPorPagar,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
       tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
@@ -895,6 +902,9 @@ export function PanelObras() {
                       <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
                       <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
                       <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+                      {o.subcontratosPorPagar > 0 && (
+                        <StatTile label="Falta pagar" valor={fmtMoney(o.subcontratosPorPagar)} tono="alerta" />
+                      )}
                       {o.ivaApartar != null && (
                         <StatTile label="IVA a apartar" valor={fmtMoney(o.ivaApartar)} tono="alerta" />
                       )}
@@ -2057,10 +2067,11 @@ function getPeriodo(fecha: string, vista: VistaPeriodo): { key: string; label: s
 const GUIA_OBRAS_PASOS = [
   { titulo: 'Mano de obra', texto: 'Lo que cuesta el trabajo de los trabajadores en esta obra: días trabajados × su tarifa diaria, más el viático de los días que corresponda.' },
   { titulo: 'Compras', texto: 'Materiales y otros gastos que la empresa pagó directamente para esta obra.' },
-  { titulo: 'Subcontratos', texto: 'Lo pagado a subcontratistas externos, como un pintor, que no son parte del equipo fijo.' },
+  { titulo: 'Subcontratos', texto: 'Lo CONTRATADO con subcontratistas externos, como un pintor, que no son parte del equipo fijo — el total comprometido, aunque todavía no se les haya pagado todo.' },
+  { titulo: 'Falta pagar', texto: 'De los subcontratos ya contratados, cuánto todavía no salió de la cuenta. Es plata que ya se debe: el saldo la descuenta como costo, pero el dinero sigue estando. Aparece solo si queda algo por pagar.' },
   { titulo: 'Abonado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual. No es lo facturado: una factura es un documento aparte, que se carga en la ficha del cliente.' },
   { titulo: 'Por abonar', texto: 'Cuánto le queda debiendo el cliente por esta obra. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto cargado.' },
-  { titulo: 'Saldo', texto: 'Lo abonado menos lo que costó la obra: mano de obra, compras y subcontratos. Los adelantos y pagos de semana no se restan aparte, porque son el pago de esa misma mano de obra y se contarían dos veces.' },
+  { titulo: 'Saldo', texto: 'Lo abonado menos lo que CUESTA la obra: mano de obra, compras y subcontratos contratados. Un costo cuenta cuando se incurre, no cuando se paga, así que un sobrecosto se ve apenas se contrata y no cuando llega la factura. No es la plata que queda en la cuenta: para eso mira "Falta pagar", que es lo comprometido que todavía no salió.' },
   { titulo: 'IVA a apartar', texto: 'Cuánto de lo presupuestado es IVA y hay que transferir a la cuenta de IVA — no es plata de la empresa. Aparece solo en las obras marcadas como "el precio incluye IVA".' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
