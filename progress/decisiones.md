@@ -1,6 +1,25 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-09 — Avance de obra: el aviso de descuadre tiene que nombrar la causa, no ofrecer inventar un ítem
+Apenas se sumó el adicional a la obra de Alexis, "Avance de obra" empezó a mostrar: *"Los ítems no suman lo
+mismo que el presupuesto de la obra — Ítems: $1.918.000 · Presupuesto: $3.220.140 · Diferencia sin desglosar:
+$1.302.140"*, con un botón para **crear un ítem por esa diferencia**.
+
+Ese botón habría ensuciado la obra: de esos $1.302.140, $191.800 son gastos generales del original, $400.862
+su IVA y $709.478 el adicional entero. Ninguna de las tres cosas es trabajo por ejecutar, y el adicional
+habría quedado contado dos veces. El botón existe para presupuestos externos donde la IA lee el total pero no
+todo el desglose; acá no aplicaba.
+
+**Decidido:** cuando la obra tiene adicionales ya sumados cuyos ítems todavía no están cargados, ese caso se
+detecta primero y se muestra un aviso propio que nombra el adicional, dice que no falta desglosar nada, y
+ofrece **la acción correcta** (traer sus ítems). El botón de inventar un ítem no se muestra en ese caso.
+
+La comparación se hace contra `presupuestos.subtotal` del adicional, que es la suma de sus líneas antes de GG
+e IVA -- exactamente lo que guarda `obra_items`. Verificado: 1.918.000 + 542.000 = 2.460.000, +10% GG +19%
+IVA = 3.220.140, el presupuesto exacto de la obra. Y comprobado en las 10 obras que las demás conservan el
+cartel que ya tenían (verde de GG+IVA, o ninguno).
+
 ## 2026-09-09 — Margen de obra: opción (b), 25% del neto como objetivo, no como comisión
 Gustavo va a subcontratar obras enteras (la de Alexis la ejecuta Cristian) y Horma se gana el 25% del neto
 antes de IVA. Alexandra vio el saldo de esa obra en $889.415 y dijo que ese número estaba mal.

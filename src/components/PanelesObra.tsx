@@ -1381,21 +1381,49 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
   const [nuevaFase, setNuevaFase] = useState('')
   const [nuevoItem, setNuevoItem] = useState({ descripcion: '', cantidad: '1', precio_unitario: '', fase: '' })
   const [guardandoItem, setGuardandoItem] = useState(false)
+  // Adicionales ya sumados a esta obra. Se necesitan acá porque suben el presupuesto de la
+  // obra pero sus ítems son una carga aparte: entre una cosa y la otra, los ítems y el
+  // presupuesto no cuadran y el aviso de abajo tiene que decir POR QUÉ.
+  const [adicionales, setAdicionales] = useState<PresupuestoGuardado[]>([])
+  const [trayendoAdicional, setTrayendoAdicional] = useState<string | null>(null)
 
   const cargar = useCallback(async () => {
-    const [{ data: it }, { data: fa }, { data: reg }] = await Promise.all([
+    const [{ data: it }, { data: fa }, { data: reg }, adic] = await Promise.all([
       supabase.from('obra_items').select('*').eq('obra_id', obraId).order('orden'),
       supabase.from('obra_fases').select('*').eq('obra_id', obraId).order('orden'),
       // Tabla nueva (obra_avance_registros) -- si todavía no se corrió la migración, esto
       // vuelve con error y `reg` queda undefined/null: se degrada a [] sin romper el resto
       // de la pantalla (la Agenda y las fases se siguen viendo, solo sin badges de atraso).
       supabase.from('obra_avance_registros').select('*').eq('obra_id', obraId).order('fecha'),
+      presupuestoId
+        ? supabase.from('presupuestos').select('*').eq('origen_id', presupuestoId).eq('estado', 'convertido')
+        : Promise.resolve({ data: [], error: null }),
     ])
     setItems((it as ObraItem[]) || [])
     setFases((fa as ObraFase[]) || [])
     setRegistros((reg as ObraAvanceRegistro[]) || [])
+    setAdicionales(adic.error ? [] : ((adic.data as unknown as PresupuestoGuardado[]) || []))
     setLoading(false)
-  }, [obraId])
+  }, [obraId, presupuestoId])
+
+  function faseDeAdicional(a: PresupuestoGuardado) { return `Adicional ${a.referencia || ''}`.trim() }
+
+  async function traerItemsDeAdicional(a: PresupuestoGuardado) {
+    setTrayendoAdicional(a.id)
+    try {
+      const { data: det } = await supabase.from('presupuestos').select('tipo, items, etapas').eq('id', a.id).single()
+      if (!det) { alert('No se pudo leer el adicional. Intenta de nuevo.'); return }
+      const ordenDesde = items.reduce((m, x) => Math.max(m, x.orden), -1) + 1
+      await copiarItemsAObra(
+        obraId,
+        det as { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null },
+        { fase: faseDeAdicional(a), ordenDesde },
+      )
+      await cargar()
+    } finally {
+      setTrayendoAdicional(null)
+    }
+  }
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -1532,6 +1560,50 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
           con presupuestos externos, donde la IA lee bien el total pero el desglose que
           encuentra es el neto de materiales/mano de obra, sin el margen ni el impuesto. */}
       {presupuestoTotal != null && items.length > 0 && Math.abs(presupuestoTotal - totalMonto) > 1000 && (() => {
+        // 09/09: un adicional sumado sube el presupuesto de la obra al instante, pero sus
+        // ítems son una carga aparte. En esa ventana el cartel de abajo acusaba un "ítem sin
+        // desglosar" por la diferencia entera -- que en la obra de Alexis eran $1.302.140:
+        // los gastos generales del original, su IVA, y el adicional completo. Y encima
+        // ofrecía inventar un ítem por ese monto, que habría metido el adicional dos veces y
+        // un montón de impuesto como si fuera trabajo por ejecutar. Ahora se detecta primero
+        // esa causa concreta y se manda al botón correcto.
+        //
+        // `subtotal` del adicional es la suma de sus líneas antes de GG e IVA, que es
+        // exactamente con lo que se lo compara acá (obra_items guarda las líneas, sin GG ni
+        // IVA). Verificado: 1.918.000 + 542.000 = 2.460.000, +10% GG +19% IVA = 3.220.140.
+        const pendientes = adicionales.filter(a => !items.some(it => (it.fase || '') === faseDeAdicional(a)))
+        if (pendientes.length > 0) {
+          const faltante = pendientes.reduce((s, a) => s + (a.subtotal || 0), 0)
+          const ggIvaCon = detectarGGeIVA(totalMonto + faltante, presupuestoTotal)
+          return (
+            <div style={{ marginBottom: 16, padding: 12, background: '#fef2e0', border: '1px solid #e8a33d', borderRadius: 8 }}>
+              <p style={{ fontSize: 12.5, fontWeight: 700, color: '#7a5210', marginBottom: 4 }}>
+                Faltan los ítems de {pendientes.length === 1 ? 'un adicional' : `${pendientes.length} adicionales`} que ya se {pendientes.length === 1 ? 'sumó' : 'sumaron'} a la obra
+              </p>
+              <p style={{ fontSize: 12, color: '#7a5210', marginBottom: 8, lineHeight: 1.5 }}>
+                No falta desglosar nada: el presupuesto de la obra ya subió con{' '}
+                {pendientes.map(a => a.referencia || 'el adicional').join(', ')}, pero sus líneas de trabajo
+                todavía no están acá, así que no hay dónde marcarlas como hechas.
+                {ggIvaCon && (
+                  <> Al traerlas, los ítems pasan a {fmtMoney(totalMonto + faltante)} y con gastos generales
+                    ({ggIvaCon.pct}%) más IVA dan {fmtMoney(presupuestoTotal)} — el presupuesto exacto de la obra.</>
+                )}
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {pendientes.map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => traerItemsDeAdicional(a)}
+                    disabled={trayendoAdicional === a.id}
+                    style={{ fontSize: 12, fontWeight: 700, color: '#7a5210', background: 'none', border: '1px solid #e8a33d', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}
+                  >
+                    {trayendoAdicional === a.id ? 'Trayendo...' : `Traer los ítems de ${a.referencia || 'el adicional'}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        }
         const ggIva = detectarGGeIVA(totalMonto, presupuestoTotal)
         return ggIva ? (
           <div style={{ marginBottom: 16, padding: 12, background: '#eaf4ee', border: '1px solid #7fb894', borderRadius: 8 }}>
