@@ -42,24 +42,33 @@ function detectarGGeIVA(subtotal: number, total: number): { pct: number; gg: num
 // ya arranque con la agenda armada. Si era "simple" o "externo", no se crea ninguna fase
 // automática -- decisión tomada con Alexandra el 28/08: las agrupa a mano ella/Gustavo
 // desde el panel, porque esos no traen ninguna estructura de fases de la que partir.
+// `opciones` (09/09) es para los adicionales: sus ítems se agregan a una obra que ya tiene
+// los del original, así que van con un nombre de fase propio ("Adicional HRM-...") para que
+// en Avance de obra se vea qué se presupuestó de entrada y qué se agregó después, y con el
+// orden corrido para no pisar la numeración de los que ya estaban. La agrupación de Avance
+// sale de los propios ítems (no exige una fila en obra_fases), así que esto no necesita
+// ninguna migración.
 export async function copiarItemsAObra(
   obraId: string,
-  presupuesto: { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null }
+  presupuesto: { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null },
+  opciones?: { fase?: string; ordenDesde?: number }
 ) {
   const filas: Omit<ObraItem, 'id' | 'created_at'>[] = []
+  const faseBase = opciones?.fase ?? null
+  const ordenDesde = opciones?.ordenDesde ?? 0
 
   if (presupuesto.tipo !== 'etapas' && presupuesto.items) {
     presupuesto.items.forEach((it, idx) => {
       filas.push({
         obra_id: obraId,
-        fase: null,
+        fase: faseBase,
         descripcion: it.description,
         categoria: it.categoria || null,
         cantidad: it.quantity,
         precio_unitario: it.price,
         total: it.total,
         cantidad_completada: 0,
-        orden: idx,
+        orden: ordenDesde + idx,
       })
     })
   } else if (presupuesto.tipo === 'etapas' && presupuesto.etapas) {
@@ -68,22 +77,26 @@ export async function copiarItemsAObra(
       etapa.items.forEach(it => {
         filas.push({
           obra_id: obraId,
-          fase: etapa.nombre,
+          // En un adicional por etapas, la etapa se cuelga del adicional para no mezclarla
+          // con una etapa del mismo nombre que ya exista en la obra.
+          fase: faseBase ? `${faseBase} — ${etapa.nombre}` : etapa.nombre,
           descripcion: it.descripcion,
           categoria: it.tipo,
           cantidad: it.cantidad,
           precio_unitario: it.precioUnitario,
           total: it.total,
           cantidad_completada: 0,
-          orden: orden++,
+          orden: ordenDesde + orden++,
         })
       })
     })
 
     const fases = presupuesto.etapas.map((etapa, idx) => ({
       obra_id: obraId,
-      nombre: etapa.nombre,
-      orden: idx,
+      // Mismo nombre que se le puso a los ítems arriba, o la agenda quedaría apuntando a
+      // una fase que ningún ítem tiene.
+      nombre: faseBase ? `${faseBase} — ${etapa.nombre}` : etapa.nombre,
+      orden: ordenDesde + idx,
       fecha_inicio: null,
       fecha_fin: null,
     }))
@@ -3260,6 +3273,57 @@ function CuerpoPresupuesto({ presupuesto }: { presupuesto: PresupuestoDetalle })
   )
 }
 
+/* ─── Una fila de adicional, con su detalle desplegable ──── */
+// Compartida por la ficha del cliente y por el detalle de la obra, a propósito: el mismo
+// adicional se ve igual en los dos lados y no puede haber dos versiones que se separen con
+// el tiempo. Antes los adicionales se listaban como texto muerto (fecha, ref, estado,
+// total) y para ver qué tenían adentro había que salir a "Mis presupuestos" y buscarlos
+// de nuevo -- Alexandra 09/09: "necesitamos que todo se comunique".
+function FilaAdicional({ adicional }: { adicional: PresupuestoGuardado }) {
+  const [abierto, setAbierto] = useState(false)
+  const [detalle, setDetalle] = useState<PresupuestoDetalle | null>(null)
+  const [cargando, setCargando] = useState(false)
+
+  async function alternar() {
+    if (abierto) { setAbierto(false); return }
+    setAbierto(true)
+    if (detalle) return
+    setCargando(true)
+    const { data } = await supabase.from('presupuestos').select('*').eq('id', adicional.id).single()
+    setDetalle((data as PresupuestoDetalle) || null)
+    setCargando(false)
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, flexWrap: 'wrap' }}>
+        <span style={{ color: 'var(--muted)' }}>{new Date(adicional.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
+        {adicional.referencia && <span style={{ fontWeight: 600 }}>{adicional.referencia}</span>}
+        <span className="badge badge-otro" style={{ fontSize: 10 }}>
+          {adicional.estado === 'convertido' ? 'Sumado a la obra' : ESTADO_PRESUPUESTO_LABELS[adicional.estado]}
+        </span>
+        <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{adicional.total != null ? fmtMoney(adicional.total) : '—'}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button className="btn btn-ghost" onClick={alternar} style={{ fontSize: 11.5, padding: '2px 6px' }}>
+          {abierto ? 'Ocultar detalle ▲' : 'Ver detalle ▼'}
+        </button>
+        {detalle && detalle.tipo !== 'externo' && (
+          <button className="btn btn-ghost" onClick={() => descargarPdfPresupuesto(detalle)} style={{ fontSize: 11.5, padding: '2px 6px' }}>
+            Descargar PDF
+          </button>
+        )}
+      </div>
+      {abierto && (
+        cargando ? <div className="spinner" />
+          : detalle
+            ? <div style={{ marginTop: 6, paddingLeft: 10, borderLeft: '2px solid var(--border)' }}><CuerpoPresupuesto presupuesto={detalle} /></div>
+            : <p style={{ fontSize: 12.5, color: 'var(--muted)' }}>No se pudo cargar el detalle.</p>
+      )}
+    </div>
+  )
+}
+
 /* ─── Un presupuesto de la ficha del cliente, que se abre en el lugar ──── */
 // Alexandra, viendo la ficha: "no podemos hacer clic y ver nada". La fila mostraba
 // referencia, estado y total como texto muerto: para ver los ítems había que salir a
@@ -3314,17 +3378,8 @@ function PresupuestoDeLaFicha({ presupuesto, adicionales = [] }: { presupuesto: 
           <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
             Adicionales de este presupuesto
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {adicionales.map(a => (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, flexWrap: 'wrap' }}>
-                <span style={{ color: 'var(--muted)' }}>{new Date(a.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
-                {a.referencia && <span style={{ fontWeight: 600 }}>{a.referencia}</span>}
-                <span className="badge badge-otro" style={{ fontSize: 10 }}>
-                  {a.estado === 'convertido' ? 'Sumado a la obra' : ESTADO_PRESUPUESTO_LABELS[a.estado]}
-                </span>
-                <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{a.total != null ? fmtMoney(a.total) : '—'}</span>
-              </div>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {adicionales.map(a => <FilaAdicional key={a.id} adicional={a} />)}
           </div>
           {(() => {
             // Lo que muestran los sistemas de job costing: original, adicionales aprobados,
@@ -3374,22 +3429,69 @@ function PresupuestoDeLaFicha({ presupuesto, adicionales = [] }: { presupuesto: 
 // trabajo: esos viven en "Avance de obra" (`obra_items`), se editan a medida que la obra
 // avanza y por eso pueden dejar de coincidir con lo presupuestado. Acá interesa el
 // documento tal como se envió -- por eso también se puede volver a bajar el PDF.
-function PresupuestoDeLaObra({ presupuestoId }: { presupuestoId: string | null }) {
+function PresupuestoDeLaObra({ presupuestoId, obraId }: { presupuestoId: string | null; obraId?: string | null }) {
   const [presupuesto, setPresupuesto] = useState<PresupuestoDetalle | null>(null)
+  // 09/09: la obra solo conocía su presupuesto original (`obras.presupuesto_id` es un campo
+  // único) y no había forma de ver desde acá los adicionales que la hicieron crecer -- la
+  // obra decía $3.220.140 y el único papel que se podía abrir era el de $2.510.662.
+  const [adicionales, setAdicionales] = useState<PresupuestoGuardado[]>([])
   const [cargando, setCargando] = useState(false)
   const [abierto, setAbierto] = useState(false)
 
   useEffect(() => {
-    if (!presupuestoId) { setPresupuesto(null); return }
+    if (!presupuestoId) { setPresupuesto(null); setAdicionales([]); return }
     let cancelado = false
     setCargando(true)
-    supabase.from('presupuestos').select('*').eq('id', presupuestoId).single().then(({ data }) => {
+    Promise.all([
+      supabase.from('presupuestos').select('*').eq('id', presupuestoId).single(),
+      // Tolera que falte la migración de adicionales, igual que traerPresupuestos: sin la
+      // columna el select falla entero y dejaría la obra sin su presupuesto original.
+      supabase.from('presupuestos').select('*').eq('origen_id', presupuestoId).order('created_at'),
+    ]).then(([orig, adic]) => {
       if (cancelado) return
-      setPresupuesto((data as PresupuestoDetalle) || null)
+      setPresupuesto((orig.data as PresupuestoDetalle) || null)
+      setAdicionales(adic.error ? [] : ((adic.data as unknown as PresupuestoGuardado[]) || []))
       setCargando(false)
     })
     return () => { cancelado = true }
   }, [presupuestoId])
+
+  // Mismo criterio que la ficha del cliente: solo cuenta lo que YA se sumó a la obra, para
+  // que este total no pueda discrepar del presupuesto de la obra.
+  const sumados = adicionales.filter(a => a.estado === 'convertido')
+  const sumaSumados = sumados.reduce((s, a) => s + (a.total || 0), 0)
+
+  // Para los adicionales que se sumaron ANTES de que existiera el copiado automático (o si
+  // ese copiado falló): trae solo los ítems, sin tocar un peso. Es a propósito una acción
+  // aparte y no un reintento de "sumar a la obra" -- volver a sumar duplicaría el
+  // presupuesto, y este boton no puede hacer eso ni por error.
+  const [copiando, setCopiando] = useState<string | null>(null)
+  async function copiarItemsDelAdicional(a: PresupuestoGuardado) {
+    if (!obraId) return
+    const fase = `Adicional ${a.referencia || ''}`.trim()
+    setCopiando(a.id)
+    try {
+      const { data: yaEstan } = await supabase
+        .from('obra_items').select('id').eq('obra_id', obraId).eq('fase', fase).limit(1)
+      if (yaEstan && yaEstan.length > 0) {
+        alert('Los ítems de este adicional ya están cargados en Avance de obra.')
+        return
+      }
+      const { data: det } = await supabase
+        .from('presupuestos').select('tipo, items, etapas').eq('id', a.id).single()
+      if (!det) { alert('No se pudo leer el adicional. Intenta de nuevo.'); return }
+      const { data: ultimo } = await supabase
+        .from('obra_items').select('orden').eq('obra_id', obraId).order('orden', { ascending: false }).limit(1).maybeSingle()
+      await copiarItemsAObra(
+        obraId,
+        det as { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null },
+        { fase, ordenDesde: (ultimo?.orden ?? -1) + 1 },
+      )
+      alert(`Listo: los ítems de ${a.referencia || 'el adicional'} ya están en "Avance de obra", agrupados bajo "${fase}".`)
+    } finally {
+      setCopiando(null)
+    }
+  }
 
   return (
     <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '30vh', overflowY: 'auto' }}>
@@ -3436,6 +3538,38 @@ function PresupuestoDeLaObra({ presupuestoId }: { presupuestoId: string | null }
           </button>
 
           {abierto && <div style={{ marginTop: 12 }}><CuerpoPresupuesto presupuesto={presupuesto} /></div>}
+
+          {adicionales.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+                Adicionales de esta obra
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {adicionales.map(a => (
+                  <div key={a.id}>
+                    <FilaAdicional adicional={a} />
+                    {obraId && a.estado === 'convertido' && (
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => copiarItemsDelAdicional(a)}
+                        disabled={copiando === a.id}
+                        style={{ fontSize: 11.5, padding: '2px 6px' }}
+                        title="Copia los ítems de este adicional a Avance de obra. No toca el presupuesto de la obra."
+                      >
+                        {copiando === a.id ? 'Copiando...' : 'Llevar sus ítems a Avance de obra'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {sumaSumados > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontWeight: 700 }}>
+                  <span>Total de la obra (original + {sumados.length} adicional{sumados.length !== 1 ? 'es' : ''})</span>
+                  <span>{fmtMoney((presupuesto.total || 0) + sumaSumados)}</span>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -3908,7 +4042,7 @@ export function HistorialObraModal({
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
         </div>
 
-        <PresupuestoDeLaObra presupuestoId={presupuestoId} />
+        <PresupuestoDeLaObra presupuestoId={presupuestoId} obraId={obraId} />
 
         {obraId && <GaleriaObra obraId={obraId} />}
 
@@ -4703,6 +4837,29 @@ export function PanelPresupuestos() {
     if (errObra) {
       alert('No se pudo actualizar el presupuesto de la obra. No se cambió nada, intenta de nuevo.')
       return
+    }
+
+    // Los ítems del adicional también tienen que llegar a "Avance de obra": si no, la obra
+    // sube de precio pero el trabajo nuevo no se puede marcar como hecho en ningún lado
+    // (el adicional de Alexis subió la obra a $3.220.140 y sus 5 líneas -- picado, tuberías,
+    // enchufes -- no existían en la obra). Van con la referencia como nombre de fase, así se
+    // distingue lo presupuestado de entrada de lo que se agregó después.
+    // Best-effort a propósito: la plata ya quedó bien, y si esto falla se puede cargar a
+    // mano desde Avance. No vale la pena deshacer el cambio de presupuesto por esto.
+    try {
+      const { data: det } = await supabase
+        .from('presupuestos').select('tipo, items, etapas').eq('id', p.id).single()
+      const { data: ultimo } = await supabase
+        .from('obra_items').select('orden').eq('obra_id', obra.id).order('orden', { ascending: false }).limit(1).maybeSingle()
+      if (det) {
+        await copiarItemsAObra(
+          obra.id,
+          det as { tipo: string; items: PresupuestoItemSimple[] | null; etapas: PresupuestoEtapa[] | null },
+          { fase: `Adicional ${p.referencia || ''}`.trim(), ordenDesde: ((ultimo?.orden ?? -1) + 1) },
+        )
+      }
+    } catch (e) {
+      console.error('El adicional se sumó, pero sus ítems no se copiaron a Avance de obra:', e)
     }
     // El estado se escribe DESPUÉS de la obra a propósito: si fallara al revés, el adicional
     // quedaría marcado como sumado sin haberse sumado, y nadie se enteraría.
