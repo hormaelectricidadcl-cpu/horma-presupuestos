@@ -5102,6 +5102,8 @@ export function PanelPresupuestos() {
   const [guardandoExterno, setGuardandoExterno] = useState(false)
   const [itemsExterno, setItemsExterno] = useState<PresupuestoItemSimple[]>([])
   const [incluirItemsExterno, setIncluirItemsExterno] = useState(true)
+  // Si se llena, el presupuesto externo que se sube es un ADICIONAL del que se elija.
+  const [origenExterno, setOrigenExterno] = useState('')
 
   const cargar = useCallback(async () => {
     setPresupuestos(await traerPresupuestos())
@@ -5329,6 +5331,9 @@ export function PanelPresupuestos() {
       total: monto,
       archivo_url: archivoExternoUrl || null,
       items: incluirItemsExterno && itemsExterno.length > 0 ? itemsExterno : null,
+      // Vacío = presupuesto suelto, como fue siempre. Con valor, queda enganchado como
+      // adicional del original y hereda todo el camino que ya existe.
+      origen_id: origenExterno || null,
     })
     setGuardandoExterno(false)
     if (error) {
@@ -5342,8 +5347,19 @@ export function PanelPresupuestos() {
     setArchivoExternoUrl('')
     setItemsExterno([])
     setIncluirItemsExterno(true)
+    setOrigenExterno('')
     cargar()
   }
+
+  // Candidatos a "original" para el adicional que se está subiendo: los presupuestos de ese
+  // mismo cliente que no son adicionales a su vez -- un adicional de un adicional no tiene
+  // sentido y rompería el anidado de la ficha.
+  const presupuestosDelClienteExterno = clienteExterno.trim()
+    ? presupuestos.filter(p =>
+        !p.origen_id &&
+        (p.cliente_nombre || '').trim().toLowerCase() === clienteExterno.trim().toLowerCase()
+      )
+    : []
 
   const filtrados = presupuestos.filter(p =>
     !busqueda.trim() || (p.cliente_nombre || '').toLowerCase().includes(busqueda.trim().toLowerCase())
@@ -5390,6 +5406,29 @@ export function PanelPresupuestos() {
               </select>
             </div>
           </div>
+
+          {/* 09/09: Gustavo ya tiene adicionales hechos fuera de la app y quiere subirlos a
+              sus obras. Hasta ahora este formulario siempre creaba un presupuesto suelto:
+              el adicional quedaba como un documento más del cliente, sin colgar del
+              original, sin la opción "Sumado a la obra" y sin que sus ítems llegaran a
+              Avance. La única alternativa era retipearlo entero en "Crear adicionales". */}
+          {presupuestosDelClienteExterno.length > 0 && (
+            <div className="field" style={{ marginTop: 10, maxWidth: 420 }}>
+              <label>¿Es un adicional de un presupuesto que ya existe?</label>
+              <select value={origenExterno} onChange={e => setOrigenExterno(e.target.value)}>
+                <option value="">No — es un presupuesto nuevo</option>
+                {presupuestosDelClienteExterno.map(p => (
+                  <option key={p.id} value={p.id}>
+                    Adicional de {p.referencia || 'presupuesto'} · {new Date(p.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })} · {fmtMoney(p.total || 0)}
+                  </option>
+                ))}
+              </select>
+              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                Si lo enganchas, queda colgando de ese presupuesto y después se le puede poner “Sumado a la
+                obra” para que suba el presupuesto de la obra y sus ítems lleguen a Avance.
+              </span>
+            </div>
+          )}
           <div className="field" style={{ marginTop: 10, maxWidth: 320 }}>
             <label>Archivo (PDF o foto)</label>
             <input

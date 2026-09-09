@@ -1,6 +1,16 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-09 — Un adicional hecho fuera de la app también se puede enganchar a su obra
+Gustavo ya tiene adicionales armados fuera de la app y quiere subirlos a sus obras. "Cargar presupuesto
+externo" nunca seteaba `origen_id`: el adicional quedaba como un documento suelto del cliente, sin colgar del
+original, sin la opción "Sumado a la obra" y sin que sus ítems llegaran a Avance. La única alternativa era
+retipearlo entero en "Crear adicionales", teniendo el PDF ya hecho.
+
+**Decidido:** el formulario de presupuesto externo pregunta, cuando el cliente escrito ya tiene presupuestos,
+si es adicional de alguno. Si se engancha, hereda todo el camino que ya existía. Solo se ofrecen presupuestos
+que no son adicionales a su vez -- un adicional de un adicional rompería el anidado de la ficha.
+
 ## 2026-09-09 — Bodega con vales de entrega: separar la compra de la asignación a la obra
 Gustavo compra materiales en bloque, muchas veces para varias obras en una sola boleta, y no va a hacer una
 factura por obra en la caja ("nooh, mucho trabajo"). Con el modelo de hoy —una compra pertenece a UNA obra—
