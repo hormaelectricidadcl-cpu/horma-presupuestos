@@ -19,10 +19,27 @@ adicionales" no existía para presupuestos externos ni por etapas (Nicole/O'Higg
 de cargarlos); y la ficha del cliente mostraba un total distinto al de la pestaña Obras. Los tres arreglados.
 También el contraste de los botones "Volver" del panel, que eran azul oscuro sobre azul oscuro.
 
+**3. Los adicionales ahora se ven desde los tres lados.** El detalle de la obra no sabía nada de ellos
+(`obras.presupuesto_id` es un campo único), en la ficha del cliente eran texto muerto sin poder abrirlos, y
+sus ítems no llegaban a `obra_items` — la obra subía de precio pero el trabajo nuevo no existía en Avance de
+obra. Los tres arreglados, sin migración.
+
+**4. Margen de obra (opción b) y carga de subcontratos.** Ver `decisiones.md` 2026-09-09. El saldo de la obra
+de Alexis no estaba mal calculado: le faltaba el costo de Cristian, y no había ninguna pantalla para cargar
+un contrato de subcontratista aunque la tabla y el cálculo ya existieran. Ahora se cargan desde el detalle de
+la obra, y cada obra muestra su margen (con objetivo 25% en las subcontratadas).
+
 ### Lo que queda pendiente de esta sesión
 - **El adicional de Alexis sigue sin sumarse a la obra.** Ahora es un clic ("Mis presupuestos" → el adicional
   → estado "Sumado a la obra"), pero es una escritura de plata real y la decide Alexandra. La obra "Pasaje
   rinconada 8948" sigue en $2.510.662 y debería quedar en $3.220.140.
+- **Ninguna obra está marcada como "el precio incluye IVA".** Mientras siga así, el margen de una obra
+  subcontratada se muestra más alto de lo real; la app lo avisa en la tarjeta, pero el dato hay que cargarlo.
+- **El contrato de Cristian todavía no está cargado** en la obra de Alexis. Hasta que esté, su saldo y su
+  margen siguen sin reflejar lo que se le debe.
+- **Los ítems del adicional de Alexis todavía no están en Avance de obra** — se sumó antes de que existiera el
+  copiado automático. Hay un botón en el detalle de la obra, "Llevar sus ítems a Avance de obra", que los
+  copia sin tocar la plata.
 - **Nada está deployado todavía**: los cambios están commiteados en `main` local, sin push. Cloudflare no los
   tiene.
 - Sigue en pie todo lo de la lista del 08/09 que está más abajo, en especial la sesión del viernes 11/09 y la

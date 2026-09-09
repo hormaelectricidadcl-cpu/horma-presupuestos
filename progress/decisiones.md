@@ -1,6 +1,43 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-09 — Margen de obra: opción (b), 25% del neto como objetivo, no como comisión
+Gustavo va a subcontratar obras enteras (la de Alexis la ejecuta Cristian) y Horma se gana el 25% del neto
+antes de IVA. Alexandra vio el saldo de esa obra en $889.415 y dijo que ese número estaba mal.
+
+**Lo primero fue verificar, y el diagnóstico no era el esperado.** El $889.415 es exactamente
+`$1.255.331 cobrado − $365.916 compras − $0 subcontratos − $0 mano de obra`. No hay error de cálculo. Y lo
+que Alexandra pedía —"que no cuente la mano de obra que no es nuestra"— **ya funcionaba solo**: la mano de
+obra suma trabajadores marcados presentes EN esa obra, así que da $0 cuando no hay nadie del equipo, y
+empieza a contar sola si Gustavo asigna a alguien. No hacía falta ninguna marca de "subcontratada".
+
+**El problema real era el contrario: el costo de Cristian no estaba registrado en ningún lado.** Por eso el
+saldo se leía como ganancia. Y la app YA tenía el mecanismo correcto (`subcontratos_master`, que el saldo
+descuenta como costo comprometido apenas se contrata) pero **ninguna pantalla para cargar un contrato**: el
+único que existía (Endy, pintura, O'Higgins, $3.5M) se había cargado por SQL a mano.
+
+**Decidido con Alexandra — opción (b), y si hay que cambiarla se cambia:** Horma compra los materiales
+(criterio de Gustavo, para aprovechar el IVA) y le paga al subcontratista su parte; el 25% del neto es el
+**margen objetivo**, no una comisión fija. Entonces:
+- `margen = neto − compras − subcontratos − mano de obra`, con `neto = presupuesto − IVA` (19/119, mismo
+  criterio que `ivaApartar`, y usando la suma de las cuentas por cobrar cuando la obra las tiene).
+- Una obra cuenta como subcontratada **si tiene un contrato cargado**, no por un flag que alguien tenga que
+  mantener y se pueda olvidar. Solo en esas se muestra el objetivo del 25% y se marca en naranja si va por
+  debajo.
+- Se agregó la pantalla para cargar contratos desde el detalle de la obra. Sin borrar, a propósito: la
+  seguridad etapa 1 le sacó DELETE a esa tabla y un botón de borrar fallaría en silencio.
+
+**Trampa que se dejó a la vista en vez de tapar:** si la obra NO está marcada como "el precio incluye IVA",
+el neto queda igual al presupuesto y el margen sale más alto de lo real. En una obra subcontratada eso lleva
+a cobrar de menos, así que la app lo avisa en la tarjeta en vez de mostrar un porcentaje lindo y falso.
+Hoy ninguna obra tiene la marca puesta: sigue pendiente de la lista del 08/09.
+
+Verificado calculando a mano contra Supabase y comparando con la pantalla: Alexis $2.854.224 (88,6%) y
+O'Higgins $29.232.586 (74,8%). La diferencia de $1 en O'Higgins contra el primer cálculo a mano fue del
+propio cálculo, no de la app: esa obra tiene una cuenta por cobrar de $39.063.832, un peso menos que
+`obras.presupuesto_total`, y la app usa la suma de las cuentas cuando existen — que es la regla ya tomada
+el 07/09.
+
 ## 2026-09-09 — El presupuesto se guarda ANTES de generar el PDF (se perdió uno real por el orden)
 Gustavo dijo haber hecho un presupuesto desde la app y no aparecía en "Mis presupuestos". Se verificó, no se
 asumió:

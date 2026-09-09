@@ -341,6 +341,11 @@ const ESTADO_OBRA_LABELS: Record<EstadoObra, string> = {
   cerrada: 'Cerrada',
 }
 
+// Margen que Horma busca dejar en una obra que ejecuta un subcontratista: 25% del neto
+// (antes de IVA). Acordado con Alexandra el 09/09 -- ver decisiones.md. Es un objetivo, no
+// una regla de cálculo: el margen real sale de los costos que se van cargando.
+const MARGEN_OBJETIVO_PCT = 25
+
 // Resumen por obra (cobrado, gastado, saldo, falta por cobrar) -- extraído de
 // PanelObras para que PanelConsultasIA (chat con IA) use exactamente el mismo
 // cálculo, y nunca le muestre a Gustavo un número de saldo distinto al de la
@@ -443,8 +448,27 @@ export function calcularResumenObras(
       ? Math.round(presupuestoTotal * 19 / 119)
       : null
 
+    // Margen de la obra. Acordado con Alexandra el 09/09 (opción "b"): Horma compra los
+    // materiales -- para aprovechar el IVA, criterio de Gustavo -- y le paga al
+    // subcontratista su parte, así que el margen es lo que sobra del neto DESPUÉS de todos
+    // los costos, no una comisión fija. El objetivo es 25% del neto.
+    //
+    // El neto es el presupuesto sin IVA, con el mismo criterio que `ivaApartar` (19/119).
+    // OJO: si la obra no está marcada como pactada con IVA, `ivaApartar` es null y el neto
+    // queda igual al presupuesto -- el margen se ve MEJOR de lo que es. Por eso más abajo se
+    // avisa cuando una obra subcontratada no tiene la marca puesta, en vez de mostrar un
+    // porcentaje lindo y falso.
+    const neto = presupuestoTotal != null ? presupuestoTotal - (ivaApartar ?? 0) : null
+    const margen = neto != null ? neto - gastoCompras - gastoSubcontratos - manoDeObra : null
+    const margenPct = neto != null && neto > 0 && margen != null ? Math.round((margen / neto) * 1000) / 10 : null
+    // "Subcontratada" no es una marca que alguien tenga que mantener: la obra lo es si tiene
+    // un contrato de subcontratista cargado. Así no hay un flag que se pueda olvidar.
+    const esSubcontratada = contratosObra.length > 0
+    const margenObjetivo = neto != null ? Math.round(neto * MARGEN_OBJETIVO_PCT / 100) : null
+
     return {
       obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar, subcontratosPorPagar,
+      neto, margen, margenPct, esSubcontratada, margenObjetivo,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
       tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
@@ -921,6 +945,17 @@ export function PanelObras() {
                       {o.ivaApartar != null && (
                         <StatTile label="IVA a apartar" valor={fmtMoney(o.ivaApartar)} tono="alerta" />
                       )}
+                      {o.margen != null && (
+                        <StatTile
+                          label={o.esSubcontratada ? `Margen (objetivo ${MARGEN_OBJETIVO_PCT}%)` : 'Margen'}
+                          valor={`${fmtMoney(o.margen)}${o.margenPct != null ? ` · ${o.margenPct}%` : ''}`}
+                          tono={
+                            o.margen < 0 ? 'negativo'
+                              : o.esSubcontratada && o.margenPct != null && o.margenPct < MARGEN_OBJETIVO_PCT ? 'alerta'
+                                : 'positivo'
+                          }
+                        />
+                      )}
                       <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
                     </div>
                     <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -947,6 +982,16 @@ export function PanelObras() {
                               <span style={{ color: 'var(--muted)', fontSize: 12 }}> — muestra cuánto hay que apartar para la cuenta de IVA</span>
                             </span>
                           </label>
+                          {/* Sin esta marca el neto queda igual al presupuesto y el margen se
+                              ve mejor de lo que es -- en una obra subcontratada, que es donde
+                              el margen se mira de verdad, eso lleva a cobrar de menos. */}
+                          {o.esSubcontratada && !o.conIva && (
+                            <p style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, lineHeight: 1.45 }}>
+                              Esta obra está subcontratada y no está marcada como “incluye IVA”, así que el margen
+                              de arriba se calcula sobre el precio completo y sale más alto de lo real. Marca la
+                              casilla si el precio pactado lleva IVA.
+                            </p>
+                          )}
                           {!o.presupuestoId && (
                             <CargarPresupuestoObra obra={{ id: o.obraId as string, nombre: o.obra, cliente: o.cliente }} onGuardado={cargar} />
                           )}
@@ -1013,6 +1058,7 @@ export function PanelObras() {
           onEliminarAbono={eliminarAbono}
           onEliminarCuenta={eliminarCuenta}
           onCrearCuentaObra={(pagador, concepto, monto) => crearCuenta(pagador, concepto, historialObra, monto)}
+          onCambioSubcontratos={cargar}
         />
       )}
     </>
@@ -2154,6 +2200,7 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Por abonar', texto: 'Cuánto le queda debiendo el cliente por esta obra. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto cargado.' },
   { titulo: 'Saldo', texto: 'Lo abonado menos lo que CUESTA la obra: mano de obra, compras y subcontratos contratados. Un costo cuenta cuando se incurre, no cuando se paga, así que un sobrecosto se ve apenas se contrata y no cuando llega la factura. No es la plata que queda en la cuenta: para eso mira "Falta pagar", que es lo comprometido que todavía no salió.' },
   { titulo: 'IVA a apartar', texto: 'Cuánto de lo presupuestado es IVA y hay que transferir a la cuenta de IVA — no es plata de la empresa. Aparece solo en las obras marcadas como "el precio incluye IVA".' },
+  { titulo: 'Margen', texto: 'Lo que queda del neto (el precio sin IVA) después de restar mano de obra, compras y subcontratos. En las obras que ejecuta un subcontratista dice además el objetivo —25% del neto— y se pone naranja si el margen real va por debajo. Si la obra está subcontratada pero no marcaste "incluye IVA", el porcentaje sale más alto de lo real y la app te lo avisa.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
 
@@ -3576,6 +3623,108 @@ function PresupuestoDeLaObra({ presupuestoId, obraId }: { presupuestoId: string 
   )
 }
 
+/* ─── Contratos de subcontratistas de una obra ──── */
+// 09/09: `subcontratos_master` ya existía y el saldo la usaba como costo comprometido, pero
+// NO había ninguna pantalla para cargar un contrato -- el único que existía (Endy, pintura,
+// O'Higgins) se había cargado por SQL a mano. Por eso la obra de Alexis mostraba
+// Subcontratos $0 y un saldo de $889.415 que se leía como ganancia, cuando en realidad
+// todavía le deben a Cristian casi toda su parte: el número no mentía, le faltaba el dato.
+//
+// No se ofrece borrar a propósito: la seguridad etapa 1 (08/09) le sacó DELETE a esta tabla
+// y un botón de borrar fallaría en silencio. Para sacar uno, se corrige el monto o se avisa.
+function SubcontratosDeLaObra({ obra, onCambio }: { obra: string; onCambio?: () => void }) {
+  const [filas, setFilas] = useState<SubcontratoMaster[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [mostrarNuevo, setMostrarNuevo] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [nuevo, setNuevo] = useState({ subcontratista: '', trabajo: '', total_contrato: '' })
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('subcontratos_master').select('*').eq('obra', obra).order('created_at')
+    setFilas((data as SubcontratoMaster[]) || [])
+    setCargando(false)
+  }, [obra])
+  useEffect(() => { cargar() }, [cargar])
+
+  async function guardar() {
+    if (!nuevo.subcontratista.trim() || !nuevo.trabajo.trim()) { alert('Completa quién es el subcontratista y qué trabajo hace.'); return }
+    const monto = Number(nuevo.total_contrato)
+    if (!Number.isFinite(monto) || monto <= 0) { alert('El total del contrato tiene que ser un número mayor a cero.'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('subcontratos_master').insert({
+      subcontratista: nuevo.subcontratista.trim(), obra, trabajo: nuevo.trabajo.trim(), total_contrato: monto,
+    })
+    setGuardando(false)
+    if (error) { alert('No se pudo guardar el subcontrato. Intenta de nuevo.'); return }
+    setNuevo({ subcontratista: '', trabajo: '', total_contrato: '' })
+    setMostrarNuevo(false)
+    await cargar()
+    onCambio?.()
+  }
+
+  const totalContratado = filas.reduce((s, f) => s + Number(f.total_contrato), 0)
+
+  return (
+    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Subcontratistas de esta obra
+        </p>
+        <button className="btn btn-ghost" onClick={() => setMostrarNuevo(x => !x)} style={{ fontSize: 12 }}>
+          {mostrarNuevo ? 'Cancelar' : '+ Agregar subcontrato'}
+        </button>
+      </div>
+
+      {mostrarNuevo && (
+        <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="field">
+              <label>¿Quién lo ejecuta?</label>
+              <input type="text" placeholder="Ej: Cristian" value={nuevo.subcontratista} onChange={e => setNuevo(p => ({ ...p, subcontratista: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>¿Qué trabajo?</label>
+              <input type="text" placeholder="Ej: Instalación eléctrica completa" value={nuevo.trabajo} onChange={e => setNuevo(p => ({ ...p, trabajo: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Total del contrato</label>
+              <input type="number" min="0" placeholder="Monto en pesos" value={nuevo.total_contrato} onChange={e => setNuevo(p => ({ ...p, total_contrato: e.target.value }))} />
+              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                Lo pactado con él, completo. Cuenta como costo de la obra desde ahora, aunque todavía no se le
+                haya pagado nada — lo ya pagado se carga día a día en el Reporte Diario.
+              </span>
+            </div>
+            <button className="btn btn-primary" onClick={guardar} disabled={guardando} style={{ fontSize: 13 }}>
+              {guardando ? 'Guardando...' : 'Guardar subcontrato'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {cargando ? <div className="spinner" /> : filas.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+          Esta obra no tiene subcontratistas cargados — la ejecuta el equipo de Horma.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {filas.map(f => (
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600 }}>{f.subcontratista}</span>
+              <span style={{ color: 'var(--muted)' }}>{f.trabajo}</span>
+              <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{fmtMoney(Number(f.total_contrato))}</span>
+            </div>
+          ))}
+          {filas.length > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+              <span>Total contratado</span><span>{fmtMoney(totalContratado)}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Bloque de contenido de un período (reutilizable) ── */
 function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontratosObra, tarifas, onMarcarReembolsado }: {
   diariosObra: ReporteTrabajadorDia[]
@@ -3985,10 +4134,14 @@ export function HistorialObraModal({
   onEliminarAbono,
   onEliminarCuenta,
   onCrearCuentaObra,
+  onCambioSubcontratos,
 }: {
   obra: string
   obraId?: string
   presupuestoId?: string | null
+  // Para que la tarjeta de la obra recalcule saldo y margen apenas se carga un subcontrato,
+  // sin tener que cerrar el detalle y volver a entrar.
+  onCambioSubcontratos?: () => void
   diarios: ReporteTrabajadorDia[]
   compras: ReporteCompraDia[]
   cobros: ReporteCobroDia[]
@@ -4043,6 +4196,8 @@ export function HistorialObraModal({
         </div>
 
         <PresupuestoDeLaObra presupuestoId={presupuestoId} obraId={obraId} />
+
+        <SubcontratosDeLaObra obra={obra} onCambio={onCambioSubcontratos} />
 
         {obraId && <GaleriaObra obraId={obraId} />}
 
