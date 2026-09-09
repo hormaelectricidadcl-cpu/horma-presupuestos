@@ -1,6 +1,51 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-09 — Bodega con vales de entrega: separar la compra de la asignación a la obra
+Gustavo compra materiales en bloque, muchas veces para varias obras en una sola boleta, y no va a hacer una
+factura por obra en la caja ("nooh, mucho trabajo"). Con el modelo de hoy —una compra pertenece a UNA obra—
+eso obliga a elegir obra al pagar, que es justo cuando todavía no se sabe. Además él quiere entregarle los
+materiales al subcontratista desde la oficina con un comprobante, y que lo entregado al equipo propio sí
+cuente en el avance.
+
+**Decidido: se separa la COMPRA de la ASIGNACIÓN.** Se compra a bodega sin obra; la obra se decide después,
+cuando el material sale con un vale. Ese momento posterior es exactamente el que Gustavo quiere controlar, y
+de paso deja medido sin discutirlo cuánto se compra de más: comprado − entregado = lo que queda en bodega.
+
+**Buena parte ya existía y nadie la usaba** (verificado antes de construir): compra con `destino='stock'`,
+catálogo `materiales` con trigger de stock, y `movimientos_stock` con tipo salida y obra. Los datos: 2 compras
+de 39 marcadas como Stock, 2 materiales, **cero salidas**. La estructura estaba; el hábito no.
+
+Lo que se agregó (`sql/20260909_stock_vales_de_entrega.sql`):
+- `movimientos_stock.receptor` — a quién se le entregó. Sin eso no hay vale que Cristian o Fabriel reconozcan.
+- `movimientos_stock.precio_unitario` — **congelado al momento de salir**, a propósito. Si el costo se leyera
+  del catálogo, una compra nueva más cara reescribiría hacia atrás lo que costó una obra ya cerrada.
+- `materiales.precio_unitario` — último precio conocido, solo para proponer y para valorizar la bodega.
+- Inventario manual: Gustavo ya tiene materiales de antes y sin facturas ordenadas para reconstruirlo. Si el
+  catálogo solo se llenara desde compras nuevas, el sistema arrancaría vacío y mostraría faltantes falsos.
+
+**El orden de adopción no es negociable, y es la parte peligrosa:** hasta que la app cuente las salidas como
+costo de la obra, una compra a bodega no le suma costo a NINGUNA obra. Si Gustavo empezara a comprar todo a
+bodega antes de eso, el costo de materiales desaparecería de las obras y el margen se vería mejor de lo que
+es — al revés de lo que se busca, y justo sobre la obra subcontratada donde el margen es lo que importa. Por
+eso `calcularResumenObras` cuenta las salidas valorizadas en el saldo y en el margen **en la misma entrega**.
+
+## 2026-09-09 — El avance de obra mide trabajo, no compras
+Alexandra: "en el avance de obra está tomando como ítems materiales, eso infla el verdadero avance". Tenía
+razón y no era menor: en la obra de Alexis los materiales son el **39,4%** ($970.000 de $2.460.000), así que
+comprar y tildar todo marcaba 39% con cero obra ejecutada.
+
+**Decidido: el porcentaje mide solo mano de obra.** Los materiales se siguen tildando —Gustavo quiere saber
+que el tablero ya está en obra— pero en su propia barra, "Materiales en obra", que no entra en el avance.
+
+Verificado que ese porcentaje no alimenta ningún cálculo de plata: solo la barra, el % por fase de la Gantt y
+el "fase completa". Se puede cambiar sin riesgo financiero.
+
+**Límite real, dejado a la vista:** solo 2 de 5 obras con ítems tienen categoría. Las tres grandes (O'Higgins
+$32,8M, Camino turístico, Geronimo de Alderete — 66 ítems) entraron como PDF externo y el lector guarda la
+categoría vacía. Ahí no hay con qué separar: se sigue midiendo como antes y la pantalla lo dice, en vez de
+inventar una división. Se agregó un selector de categoría por ítem para poder corregirlo.
+
 ## 2026-09-09 — Avance de obra: el aviso de descuadre tiene que nombrar la causa, no ofrecer inventar un ítem
 Apenas se sumó el adicional a la obra de Alexis, "Avance de obra" empezó a mostrar: *"Los ítems no suman lo
 mismo que el presupuesto de la obra — Ítems: $1.918.000 · Presupuesto: $3.220.140 · Diferencia sin desglosar:

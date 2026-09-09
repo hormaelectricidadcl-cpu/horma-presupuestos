@@ -105,6 +105,9 @@ export interface Material {
   nombre: string
   unidad: string | null
   stock_actual: number
+  // Último precio conocido, solo de referencia (sql/20260909_stock_vales_de_entrega.sql).
+  // El costo real de una salida queda congelado en MovimientoStock.precio_unitario.
+  precio_unitario?: number | null
 }
 
 export interface MovimientoStock {
@@ -117,6 +120,10 @@ export interface MovimientoStock {
   obra: string | null
   compra_id: string | null
   nota: string | null
+  // Vale de entrega (sql/20260909_stock_vales_de_entrega.sql): a quién salió y a qué precio
+  // quedó valorizado. Opcionales para que la app siga funcionando si la migración no corrió.
+  receptor?: string | null
+  precio_unitario?: number | null
 }
 
 export interface ReporteCobroDia {

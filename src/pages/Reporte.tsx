@@ -673,23 +673,50 @@ export default function Reporte({ token, embedded = false }: Props) {
         // Si no hay desglose por ítem (compra cargada solo con descripción y monto,
         // sin "Materiales de esta compra"), la compra entera entra como un material.
         if (c.destino === 'stock') {
+          // El precio entra junto con el material (09/09): sin él, cuando ese material se
+          // entregue a una obra no se le puede cargar ningún costo y el margen de esa obra
+          // saldría más alto de lo real. Si no hay desglose, el precio es el monto completo
+          // de la compra, que es lo único que se sabe.
           const materialesAIngresar = itemsValidos.length
-            ? itemsValidos.map(it => ({ nombre: it.descripcion.trim(), cantidad: Number(it.cantidad) > 0 ? Number(it.cantidad) : 1 }))
-            : [{ nombre: c.descripcion.trim(), cantidad: 1 }]
+            ? itemsValidos.map(it => ({
+                nombre: it.descripcion.trim(),
+                cantidad: Number(it.cantidad) > 0 ? Number(it.cantidad) : 1,
+                precio: Number(it.precioUnitario),
+              }))
+            : [{ nombre: c.descripcion.trim(), cantidad: 1, precio: Number(c.monto) }]
           for (const m of materialesAIngresar) {
-            const { data: material } = await supabase
+            // Con precio primero; si la migración sql/20260909_stock_vales_de_entrega.sql
+            // todavía no se corrió, la columna no existe y el upsert falla ENTERO. En ese
+            // caso se guarda sin precio antes que perder la entrada al stock: el reporte
+            // diario no se puede quedar sin guardar por esto.
+            let material: { id: string } | null = null
+            const conPrecio = await supabase
               .from('materiales')
-              .upsert({ nombre: m.nombre }, { onConflict: 'nombre', ignoreDuplicates: false })
+              .upsert({ nombre: m.nombre, precio_unitario: m.precio }, { onConflict: 'nombre', ignoreDuplicates: false })
               .select('id')
               .single()
+            if (!conPrecio.error) {
+              material = conPrecio.data as { id: string }
+            } else {
+              const sinPrecio = await supabase
+                .from('materiales')
+                .upsert({ nombre: m.nombre }, { onConflict: 'nombre', ignoreDuplicates: false })
+                .select('id')
+                .single()
+              material = (sinPrecio.data as { id: string }) || null
+            }
             if (material) {
-              await supabase.from('movimientos_stock').insert({
+              const movimiento = {
                 material_id: material.id,
                 tipo: 'entrada',
                 cantidad: m.cantidad,
                 fecha,
                 compra_id: compraInsertada.id,
-              })
+              }
+              const { error: eConPrecio } = await supabase
+                .from('movimientos_stock')
+                .insert({ ...movimiento, precio_unitario: m.precio })
+              if (eConPrecio) await supabase.from('movimientos_stock').insert(movimiento)
             }
           }
         }

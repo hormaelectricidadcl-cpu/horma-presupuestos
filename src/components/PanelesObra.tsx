@@ -360,6 +360,9 @@ export function calcularResumenObras(
   abonos: AbonoCuenta[],
   subcontratosMaster: SubcontratoMaster[],
   trabajadoresTarifas: Trabajador[],
+  // Salidas de bodega hacia obras (09/09). Opcional para no romper a quien llame sin esto:
+  // sin el dato el resultado es el de antes, no un número a medias.
+  salidasStock: MovimientoStock[] = [],
 ) {
   const nombres = Array.from(new Set([
     ...obrasMaestro.map(o => o.nombre),
@@ -392,6 +395,14 @@ export function calcularResumenObras(
       return sum + Math.max(c.total_presupuesto - abonadoCuenta, 0)
     }, 0)
 
+    // Material que salió de bodega hacia esta obra, valorizado con el precio congelado en
+    // cada salida. Es la otra mitad del modelo de bodega (09/09): una compra marcada como
+    // "Stock" no le suma costo a ninguna obra, porque al pagarla todavía no se sabe a cuál
+    // va -- el costo se le carga a la obra recién cuando el material sale con su vale.
+    // Sin esto, comprar a bodega haría desaparecer el costo de materiales de las obras y el
+    // margen se vería mejor de lo que es.
+    const salidasObra = salidasStock.filter(m => m.tipo === 'salida' && m.obra === obra)
+    const gastoMaterialesBodega = salidasObra.reduce((sum, m) => sum + m.cantidad * (m.precio_unitario || 0), 0)
     const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
     const contratosObra = subcontratosMaster.filter(s => s.obra === obra)
     const gastoSubcontratos = contratosObra.length > 0
@@ -418,7 +429,7 @@ export function calcularResumenObras(
     // (Ohiggins tiene $3.615.000 de mano de obra y $1.595.000 cargados como pagos).
     // Es el criterio de "committed cost" que usan los sistemas de job costing: seguir solo
     // lo pagado te entera del sobrecosto cuando ya es tarde. Ver decisiones.md 2026-09-07.
-    const saldo = cobrado - gastoCompras - gastoSubcontratos - manoDeObra
+    const saldo = cobrado - gastoCompras - gastoMaterialesBodega - gastoSubcontratos - manoDeObra
     // La otra mitad del mismo criterio: plata ya comprometida que todavía no salió. Sin esto
     // el saldo se lee como si fuera efectivo disponible, que es la confusión clásica entre
     // caja y margen -- una obra puede dejar plata y aun así no alcanzar para pagar el viernes.
@@ -459,7 +470,7 @@ export function calcularResumenObras(
     // avisa cuando una obra subcontratada no tiene la marca puesta, en vez de mostrar un
     // porcentaje lindo y falso.
     const neto = presupuestoTotal != null ? presupuestoTotal - (ivaApartar ?? 0) : null
-    const margen = neto != null ? neto - gastoCompras - gastoSubcontratos - manoDeObra : null
+    const margen = neto != null ? neto - gastoCompras - gastoMaterialesBodega - gastoSubcontratos - manoDeObra : null
     const margenPct = neto != null && neto > 0 && margen != null ? Math.round((margen / neto) * 1000) / 10 : null
     // "Subcontratada" no es una marca que alguien tenga que mantener: la obra lo es si tiene
     // un contrato de subcontratista cargado. Así no hay un flag que se pueda olvidar.
@@ -470,7 +481,7 @@ export function calcularResumenObras(
       obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar, subcontratosPorPagar,
       neto, margen, margenPct, esSubcontratada, margenObjetivo,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
-      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
+      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoMaterialesBodega, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
   })
 }
@@ -493,6 +504,7 @@ export function PanelObras() {
   const [nuevaObra, setNuevaObra] = useState({ nombre: '', cliente: '', presupuesto_total: '', presupuesto_id: '' })
   const [modoExcepcion, setModoExcepcion] = useState(false)
   const [presupuestosAceptados, setPresupuestosAceptados] = useState<PresupuestoGuardado[]>([])
+  const [salidasStock, setSalidasStock] = useState<MovimientoStock[]>([])
   const [mostrarNuevaCuentaSuelta, setMostrarNuevaCuentaSuelta] = useState(false)
   const [nuevaCuentaSuelta, setNuevaCuentaSuelta] = useState({ pagador: '', concepto: '', total_presupuesto: '' })
 
@@ -504,7 +516,7 @@ export function PanelObras() {
   }, [])
 
   const cargar = useCallback(async () => {
-    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }, { data: t }, { data: sm }, { data: cu }, { data: ab }, { data: pa }] = await Promise.all([
+    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }, { data: t }, { data: sm }, { data: cu }, { data: ab }, { data: pa }, { data: sal }] = await Promise.all([
       supabase.from('reportes_diarios').select('*'),
       supabase.from('reportes_compras').select('*'),
       supabase.from('reportes_cobros').select('*'),
@@ -518,7 +530,10 @@ export function PanelObras() {
         .select('id, created_at, cliente_id, cliente_nombre, cliente_telefono, cliente_email, cliente_direccion, referencia, tipo, estado, subtotal, iva, total')
         .eq('estado', 'aceptado')
         .order('created_at', { ascending: false }),
+      // Material entregado desde bodega: es costo de la obra que lo recibió.
+      supabase.from('movimientos_stock').select('*').eq('tipo', 'salida'),
     ])
+    setSalidasStock((sal as MovimientoStock[]) || [])
     setDiarios((d as ReporteTrabajadorDia[]) || [])
     setCompras((c as ReporteCompraDia[]) || [])
     setCobros((co as ReporteCobroDia[]) || [])
@@ -698,7 +713,7 @@ export function PanelObras() {
 
   if (loading) return <div className="spinner" />
 
-  const resumen = calcularResumenObras(obrasMaestro, diarios, compras, cobros, subcontratos, cuentas, abonos, subcontratosMaster, trabajadoresTarifas)
+  const resumen = calcularResumenObras(obrasMaestro, diarios, compras, cobros, subcontratos, cuentas, abonos, subcontratosMaster, trabajadoresTarifas, salidasStock)
 
   const enCurso = resumen.filter(o => o.activa)
   const culminadas = resumen.filter(o => !o.activa)
@@ -938,6 +953,9 @@ export function PanelObras() {
                       />
                       <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
                       <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
+                      {o.gastoMaterialesBodega > 0 && (
+                        <StatTile label="Materiales de bodega" valor={fmtMoney(o.gastoMaterialesBodega)} />
+                      )}
                       <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
                       {o.subcontratosPorPagar > 0 && (
                         <StatTile label="Falta pagar" valor={fmtMoney(o.subcontratosPorPagar)} tono="alerta" />
@@ -1176,11 +1194,13 @@ function GanttSemanal({ fases, items }: { fases: ObraFase[]; items: ObraItem[] }
   )
 }
 
-function ItemAvanceRow({ item, fases, onCantidad, onFase, onBorrar, onAdicional, mostrarPrecio = true }: {
+function ItemAvanceRow({ item, fases, onCantidad, onFase, onCategoria, onBorrar, onAdicional, mostrarPrecio = true }: {
   item: ObraItem
   fases?: ObraFase[]
   onCantidad: (cantidad: number) => void
   onFase?: (fase: string | null) => void
+  // Solo el panel de gestión: en el de campo el trabajador no reclasifica ítems.
+  onCategoria?: (categoria: string | null) => void
   onBorrar?: () => void
   // Solo lo pasa el panel de gestión: en el de campo el trabajador marca avance, no cambia
   // lo que hay que hacer.
@@ -1271,6 +1291,21 @@ function ItemAvanceRow({ item, fases, onCantidad, onFase, onBorrar, onAdicional,
           >
             <option value="">Sin fase</option>
             {fases.map(f => <option key={f.id} value={f.nombre}>{f.nombre}</option>)}
+          </select>
+        )}
+        {/* La categoría es lo que separa el avance del trabajo de la compra de materiales.
+            Los presupuestos que entraron como PDF externo vienen sin ella, y hasta que se
+            cargue el porcentaje de esa obra mezcla las dos cosas. */}
+        {onCategoria && (
+          <select
+            value={(item.categoria || '').trim().toUpperCase() === 'MATERIALES' ? 'MATERIALES' : (item.categoria || '').trim() ? 'MANO DE OBRA' : ''}
+            onChange={e => onCategoria(e.target.value || null)}
+            style={{ fontSize: 11.5, padding: '3px 6px', width: 'auto', color: item.categoria ? 'var(--text)' : 'var(--primary)' }}
+            title="Los materiales no cuentan para el avance del trabajo"
+          >
+            <option value="">Sin categoría</option>
+            <option value="MANO DE OBRA">Mano de obra</option>
+            <option value="MATERIALES">Materiales</option>
           </select>
         )}
         {/* "Se colocaron cuatro, se agregaron dos más": acá se carga ese 2. Lo presupuestado
@@ -1495,6 +1530,14 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
     if (error) { alert('No se pudo actualizar. Intenta de nuevo.'); cargar() }
   }
 
+  // Reclasificar un ítem entre mano de obra y materiales. Es lo que decide si cuenta para el
+  // avance del trabajo, así que se puede corregir en las obras que entraron sin categoría.
+  async function actualizarCategoriaItem(item: ObraItem, categoria: string | null) {
+    setItems(prev => prev.map(x => x.id === item.id ? { ...x, categoria } : x))
+    const { error } = await supabase.from('obra_items').update({ categoria }).eq('id', item.id)
+    if (error) { alert('No se pudo actualizar la categoría. Intenta de nuevo.'); cargar() }
+  }
+
   async function crearFase() {
     if (!nuevaFase.trim()) return
     const { error } = await supabase.from('obra_fases').insert({ obra_id: obraId, nombre: nuevaFase.trim(), orden: fases.length })
@@ -1519,10 +1562,32 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
 
   if (loading) return <div className="spinner" style={{ margin: '16px auto' }} />
 
-  const totalMonto = items.reduce((s, it) => s + totalConAdicionales(it), 0)
-  const montoCompletado = items.reduce((s, it) => { const aEj = cantidadAEjecutar(it); return s + (aEj > 0 ? (it.cantidad_completada / aEj) * totalConAdicionales(it) : 0) }, 0)
+  // El avance mide TRABAJO, no compras. Alexandra, 09/09: si los materiales cuentan, comprar
+  // el tablero mueve la barra sin que nadie haya trabajado -- en la obra de Alexis los
+  // materiales son el 39,4% ($970.000 de $2.460.000), así que la barra podía marcar 39% con
+  // cero obra ejecutada, y dejaba de responder "cuánto falta por hacer".
+  // Los materiales se siguen tildando (Gustavo quiere saber que el tablero ya está en obra)
+  // pero van en su propia línea, sin entrar en el porcentaje.
+  const esMaterial = (it: ObraItem) => (it.categoria || '').trim().toUpperCase() === 'MATERIALES'
+  // Los presupuestos que entraron como PDF externo guardan la categoría vacía (66 de 66
+  // ítems en O'Higgins, Camino turístico y Geronimo de Alderete). Ahí no hay con qué
+  // separar: se sigue midiendo como antes y se avisa, en vez de inventar una división.
+  const hayCategorias = items.some(it => (it.categoria || '').trim() !== '')
+  const itemsTrabajo = hayCategorias ? items.filter(it => !esMaterial(it)) : items
+  const itemsMaterial = hayCategorias ? items.filter(esMaterial) : []
+  const sumaTotal = (lista: ObraItem[]) => lista.reduce((s, it) => s + totalConAdicionales(it), 0)
+  const sumaHecho = (lista: ObraItem[]) => lista.reduce((s, it) => {
+    const aEj = cantidadAEjecutar(it)
+    return s + (aEj > 0 ? (it.cantidad_completada / aEj) * totalConAdicionales(it) : 0)
+  }, 0)
+
+  const totalMonto = sumaTotal(itemsTrabajo)
+  const montoCompletado = sumaHecho(itemsTrabajo)
   const pct = totalMonto > 0 ? Math.round((montoCompletado / totalMonto) * 100) : 0
   const colorPct = pct >= 100 ? 'var(--success)' : 'var(--primary)'
+  const totalMaterial = sumaTotal(itemsMaterial)
+  const materialEntregado = sumaHecho(itemsMaterial)
+  const pctMaterial = totalMaterial > 0 ? Math.round((materialEntregado / totalMaterial) * 100) : 0
 
   const nombresFase = Array.from(new Set(items.map(it => it.fase || '')))
   const hayFases = nombresFase.some(f => f !== '')
@@ -1544,13 +1609,41 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
       ) : (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>Avance</span>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>
+              {hayCategorias ? 'Avance del trabajo' : 'Avance'}
+            </span>
             <span className="font-display" style={{ fontSize: 15, fontWeight: 800, color: colorPct }}>{pct}%</span>
           </div>
           <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${pct}%`, background: colorPct, transition: 'width 0.2s' }} />
           </div>
-          <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{fmtMoney(montoCompletado)} de {fmtMoney(totalMonto)} completado</p>
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+            {fmtMoney(montoCompletado)} de {fmtMoney(totalMonto)} completado
+            {hayCategorias && ' — solo mano de obra, los materiales van aparte'}
+          </p>
+
+          {totalMaterial > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>Materiales en obra</span>
+                <span className="font-display" style={{ fontSize: 15, fontWeight: 800, color: 'var(--muted)' }}>{pctMaterial}%</span>
+              </div>
+              <div style={{ height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pctMaterial}%`, background: 'var(--muted)', transition: 'width 0.2s' }} />
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                {fmtMoney(materialEntregado)} de {fmtMoney(totalMaterial)} — lo que ya está en la obra. No cuenta como avance del trabajo.
+              </p>
+            </div>
+          )}
+
+          {!hayCategorias && (
+            <p style={{ fontSize: 11.5, color: 'var(--primary)', fontWeight: 600, marginTop: 8, lineHeight: 1.45 }}>
+              En esta obra los ítems no tienen categoría (el presupuesto entró como PDF externo), así que este
+              porcentaje mezcla trabajo y materiales — comprar material lo hace subir. Ponle categoría a cada
+              ítem abajo y el avance pasa a medir solo el trabajo.
+            </p>
+          )}
         </div>
       )}
 
@@ -1679,6 +1772,7 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
                     fases={fases}
                     onCantidad={c => actualizarCantidad(it, c)}
                     onFase={f => actualizarFaseItem(it, f)}
+                    onCategoria={c => actualizarCategoriaItem(it, c)}
                     onBorrar={() => borrarItem(it)}
                     onAdicional={c => actualizarAdicional(it, c)}
                   />
@@ -2270,7 +2364,8 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Falta pagar', texto: 'De los subcontratos ya contratados, cuánto todavía no salió de la cuenta. Es plata que ya se debe: el saldo la descuenta como costo, pero el dinero sigue estando. Aparece solo si queda algo por pagar.' },
   { titulo: 'Abonado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual. No es lo facturado: una factura es un documento aparte, que se carga en la ficha del cliente.' },
   { titulo: 'Por abonar', texto: 'Cuánto le queda debiendo el cliente por esta obra. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto cargado.' },
-  { titulo: 'Saldo', texto: 'Lo abonado menos lo que CUESTA la obra: mano de obra, compras y subcontratos contratados. Un costo cuenta cuando se incurre, no cuando se paga, así que un sobrecosto se ve apenas se contrata y no cuando llega la factura. No es la plata que queda en la cuenta: para eso mira "Falta pagar", que es lo comprometido que todavía no salió.' },
+  { titulo: 'Saldo', texto: 'Lo abonado menos lo que CUESTA la obra: mano de obra, compras, materiales entregados desde bodega y subcontratos contratados. Un costo cuenta cuando se incurre, no cuando se paga, así que un sobrecosto se ve apenas se contrata y no cuando llega la factura. No es la plata que queda en la cuenta: para eso mira "Falta pagar", que es lo comprometido que todavía no salió.' },
+  { titulo: 'Materiales de bodega', texto: 'Material que salió de la bodega hacia esta obra, con su vale de entrega. Aparece cuando se compró en bloque (sin decidir la obra todavía) y después se entregó: el costo se le carga a la obra recién en ese momento, no al pagar la boleta. Cada salida queda valorizada con el precio que tenía cuando salió, así una compra nueva más cara no reescribe lo que costó una obra ya cerrada.' },
   { titulo: 'IVA a apartar', texto: 'Cuánto de lo presupuestado es IVA y hay que transferir a la cuenta de IVA — no es plata de la empresa. Aparece solo en las obras marcadas como "el precio incluye IVA".' },
   { titulo: 'Margen', texto: 'Lo que queda del neto (el precio sin IVA) después de restar mano de obra, compras y subcontratos. En las obras que ejecuta un subcontratista dice además el objetivo —25% del neto— y se pone naranja si el margen real va por debajo. Si la obra está subcontratada pero no marcaste "incluye IVA", el porcentaje sale más alto de lo real y la app te lo avisa.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
@@ -5873,30 +5968,244 @@ export function PanelCalendario() {
 export function PanelStock() {
   const [materiales, setMateriales] = useState<Material[]>([])
   const [movimientos, setMovimientos] = useState<MovimientoStock[]>([])
+  const [obras, setObras] = useState<Obra[]>([])
+  const [trabajadores, setTrabajadores] = useState<Trabajador[]>([])
+  const [subcontratistas, setSubcontratistas] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
+  const [hoy] = useState(() => new Date().toISOString().slice(0, 10))
+
+  // Inventario manual. Gustavo ya tiene materiales en la bodega de antes de que existiera
+  // esto, y sin facturas ordenadas para reconstruirlo: si el catálogo solo se pudiera
+  // llenar desde compras nuevas, el sistema arrancaría vacío y mostraría faltantes falsos.
+  const [mostrarAlta, setMostrarAlta] = useState(false)
+  const [alta, setAlta] = useState({ nombre: '', unidad: '', cantidad: '', precio_unitario: '' })
+  const [guardandoAlta, setGuardandoAlta] = useState(false)
+
+  // Vale de entrega: material que sale de bodega a una obra, en manos de alguien.
+  const [mostrarVale, setMostrarVale] = useState(false)
+  const [vale, setVale] = useState<{ obra: string; receptor: string; fecha: string; lineas: { materialId: string; cantidad: string }[] }>(
+    { obra: '', receptor: '', fecha: '', lineas: [{ materialId: '', cantidad: '' }] }
+  )
+  const [guardandoVale, setGuardandoVale] = useState(false)
 
   const cargar = useCallback(async () => {
-    const [{ data: mats }, { data: movs }] = await Promise.all([
+    const [{ data: mats }, { data: movs }, { data: obs }, { data: trab }, { data: subs }] = await Promise.all([
       supabase.from('materiales').select('*').order('nombre'),
       supabase.from('movimientos_stock').select('*').order('created_at', { ascending: false }).limit(30),
+      supabase.from('obras').select('*').eq('activa', true).order('nombre'),
+      supabase.from('trabajadores').select('*'),
+      supabase.from('subcontratos_master').select('subcontratista'),
     ])
     setMateriales((mats as Material[]) || [])
     setMovimientos((movs as MovimientoStock[]) || [])
+    setObras((obs as Obra[]) || [])
+    setTrabajadores((trab as Trabajador[]) || [])
+    setSubcontratistas(Array.from(new Set(((subs as { subcontratista: string }[]) || []).map(s => s.subcontratista))))
     setLoading(false)
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
 
+  async function guardarAlta() {
+    const cantidad = Number(alta.cantidad)
+    const precio = Number(alta.precio_unitario)
+    if (!alta.nombre.trim()) { alert('Ponle nombre al material.'); return }
+    if (!Number.isFinite(cantidad) || cantidad <= 0) { alert('La cantidad tiene que ser un número mayor a cero.'); return }
+    if (!Number.isFinite(precio) || precio <= 0) { alert('El precio unitario tiene que ser un número mayor a cero — sin él no se puede cargarle el costo a ninguna obra cuando se entregue.'); return }
+    setGuardandoAlta(true)
+    try {
+      const { data: material, error: eMat } = await supabase
+        .from('materiales')
+        .upsert({ nombre: alta.nombre.trim(), unidad: alta.unidad.trim() || null, precio_unitario: precio }, { onConflict: 'nombre' })
+        .select('id')
+        .single()
+      if (eMat || !material) {
+        alert('No se pudo guardar el material. Puede que falte correr la migración sql/20260909_stock_vales_de_entrega.sql — avísale a Alexandra.')
+        return
+      }
+      // El trigger de la base ajusta `stock_actual`; acá solo se crea el movimiento.
+      const { error: eMov } = await supabase.from('movimientos_stock').insert({
+        material_id: material.id, tipo: 'entrada', cantidad, fecha: hoy,
+        precio_unitario: precio, nota: 'Inventario cargado a mano',
+      })
+      if (eMov) { alert('El material quedó en el catálogo pero no se pudo registrar la entrada. Intenta de nuevo.'); return }
+      setAlta({ nombre: '', unidad: '', cantidad: '', precio_unitario: '' })
+      setMostrarAlta(false)
+      await cargar()
+    } finally { setGuardandoAlta(false) }
+  }
+
+  async function guardarVale() {
+    const lineas = vale.lineas.filter(l => l.materialId && Number(l.cantidad) > 0)
+    if (!vale.obra) { alert('Elige a qué obra va el material.'); return }
+    if (!vale.receptor.trim()) { alert('Pon quién se lleva el material — el vale es justamente para eso.'); return }
+    if (lineas.length === 0) { alert('Agrega al menos un material con su cantidad.'); return }
+    const sinStock = lineas.filter(l => {
+      const m = materiales.find(x => x.id === l.materialId)
+      return m && Number(l.cantidad) > m.stock_actual
+    })
+    if (sinStock.length > 0) {
+      const detalle = sinStock.map(l => {
+        const m = materiales.find(x => x.id === l.materialId)
+        return `${m?.nombre}: se entregan ${l.cantidad} y en bodega hay ${m?.stock_actual}`
+      }).join('\n')
+      if (!window.confirm(`Estás entregando más de lo que dice el stock:\n\n${detalle}\n\nPuede ser que el inventario esté desactualizado. ¿Registrar el vale igual?`)) return
+    }
+    setGuardandoVale(true)
+    try {
+      const filas = lineas.map(l => {
+        const m = materiales.find(x => x.id === l.materialId)
+        return {
+          material_id: l.materialId,
+          tipo: 'salida',
+          cantidad: Number(l.cantidad),
+          fecha: vale.fecha || hoy,
+          obra: vale.obra,
+          receptor: vale.receptor.trim(),
+          // Precio congelado al momento de salir: el costo de una obra ya cerrada no se
+          // reescribe cuando cambia el precio del material.
+          precio_unitario: m?.precio_unitario ?? null,
+        }
+      })
+      const { error } = await supabase.from('movimientos_stock').insert(filas)
+      if (error) {
+        alert('No se pudo registrar el vale. Puede que falte correr la migración sql/20260909_stock_vales_de_entrega.sql — avísale a Alexandra.')
+        return
+      }
+      const sinPrecio = filas.filter(f => !f.precio_unitario).length
+      if (sinPrecio > 0) {
+        alert(`El vale quedó registrado, pero ${sinPrecio} material(es) no tienen precio cargado, así que esa parte no le suma costo a la obra. Ponles precio en el catálogo para que el margen sea real.`)
+      }
+      setVale({ obra: '', receptor: '', fecha: '', lineas: [{ materialId: '', cantidad: '' }] })
+      setMostrarVale(false)
+      await cargar()
+    } finally { setGuardandoVale(false) }
+  }
+
   const materialesFiltrados = materiales.filter(m =>
     !busqueda.trim() || m.nombre.toLowerCase().includes(busqueda.trim().toLowerCase())
   )
   const materialPorId = new Map(materiales.map(m => [m.id, m]))
+  const valorBodega = materiales.reduce((s, m) => s + m.stock_actual * (m.precio_unitario || 0), 0)
+  const sinPrecio = materiales.filter(m => !m.precio_unitario && m.stock_actual > 0)
+  const receptoresSugeridos = Array.from(new Set([...subcontratistas, ...trabajadores.filter(t => t.activo).map(t => t.nombre)]))
 
   if (loading) return <div className="spinner" />
 
   return (
     <div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        <button className="btn btn-primary" onClick={() => { setMostrarAlta(x => !x); setMostrarVale(false) }} style={{ fontSize: 13 }}>
+          {mostrarAlta ? 'Cancelar' : '+ Cargar material a mano'}
+        </button>
+        <button className="btn btn-secondary" onClick={() => { setMostrarVale(x => !x); setMostrarAlta(false) }} disabled={materiales.length === 0} style={{ fontSize: 13 }}>
+          {mostrarVale ? 'Cancelar' : 'Entregar material a una obra'}
+        </button>
+      </div>
+
+      {mostrarAlta && (
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Cargar material que ya está en bodega</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.45 }}>
+            Para lo que ya hay en la bodega de antes, sin boleta que lo respalde. Si el material se compró
+            ahora, conviene cargarlo desde el Reporte Diario marcando la compra como “Stock”: así queda
+            enganchado a su boleta.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="field">
+              <label>Material</label>
+              <input value={alta.nombre} onChange={e => setAlta(p => ({ ...p, nombre: e.target.value }))} placeholder="Ej: Cable 2,5mm rojo" />
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div className="field" style={{ flex: 1, minWidth: 110 }}>
+                <label>Unidad</label>
+                <input value={alta.unidad} onChange={e => setAlta(p => ({ ...p, unidad: e.target.value }))} placeholder="metros, unidades..." />
+              </div>
+              <div className="field" style={{ flex: 1, minWidth: 110 }}>
+                <label>Cantidad en bodega</label>
+                <input type="number" min="0" value={alta.cantidad} onChange={e => setAlta(p => ({ ...p, cantidad: e.target.value }))} />
+              </div>
+              <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                <label>Precio por unidad</label>
+                <input type="number" min="0" value={alta.precio_unitario} onChange={e => setAlta(p => ({ ...p, precio_unitario: e.target.value }))} />
+              </div>
+            </div>
+            <button className="btn btn-primary" onClick={guardarAlta} disabled={guardandoAlta} style={{ fontSize: 13 }}>
+              {guardandoAlta ? 'Guardando...' : 'Cargar al inventario'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mostrarVale && (
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Vale de entrega</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.45 }}>
+            Lo que sale de la bodega hacia una obra, y en manos de quién. Recién en este momento el material
+            se convierte en costo de esa obra — al comprarlo todavía no se sabía a cuál iba.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div className="field" style={{ flex: 1, minWidth: 190 }}>
+                <label>¿A qué obra va?</label>
+                <select value={vale.obra} onChange={e => setVale(p => ({ ...p, obra: e.target.value }))}>
+                  <option value="">Elegir obra...</option>
+                  {obras.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)}
+                </select>
+              </div>
+              <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                <label>¿Quién se lo lleva?</label>
+                <input list="receptores-stock" value={vale.receptor} onChange={e => setVale(p => ({ ...p, receptor: e.target.value }))} placeholder="Ej: Cristian" />
+                <datalist id="receptores-stock">
+                  {receptoresSugeridos.map(r => <option key={r} value={r} />)}
+                </datalist>
+              </div>
+              <div className="field" style={{ minWidth: 140 }}>
+                <label>Fecha</label>
+                <input type="date" value={vale.fecha || hoy} onChange={e => setVale(p => ({ ...p, fecha: e.target.value }))} />
+              </div>
+            </div>
+
+            {vale.lineas.map((l, i) => {
+              const m = materiales.find(x => x.id === l.materialId)
+              const subtotal = m && Number(l.cantidad) > 0 ? Number(l.cantidad) * (m.precio_unitario || 0) : 0
+              return (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div className="field" style={{ flex: 1, minWidth: 180 }}>
+                    <label>Material</label>
+                    <select value={l.materialId} onChange={e => setVale(p => ({ ...p, lineas: p.lineas.map((x, j) => j === i ? { ...x, materialId: e.target.value } : x) }))}>
+                      <option value="">Elegir...</option>
+                      {materiales.map(mat => (
+                        <option key={mat.id} value={mat.id}>
+                          {mat.nombre} (hay {mat.stock_actual}{mat.unidad ? ' ' + mat.unidad : ''})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field" style={{ width: 110 }}>
+                    <label>Cantidad</label>
+                    <input type="number" min="0" value={l.cantidad} onChange={e => setVale(p => ({ ...p, lineas: p.lineas.map((x, j) => j === i ? { ...x, cantidad: e.target.value } : x) }))} />
+                  </div>
+                  <span style={{ fontSize: 12.5, color: subtotal > 0 ? 'var(--text)' : 'var(--muted)', paddingBottom: 8, minWidth: 90 }}>
+                    {subtotal > 0 ? fmtMoney(subtotal) : m && !m.precio_unitario ? 'sin precio' : ''}
+                  </span>
+                  {vale.lineas.length > 1 && (
+                    <button type="button" onClick={() => setVale(p => ({ ...p, lineas: p.lineas.filter((_, j) => j !== i) }))} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 13, paddingBottom: 8 }}>Quitar</button>
+                  )}
+                </div>
+              )
+            })}
+            <button type="button" className="btn btn-ghost" onClick={() => setVale(p => ({ ...p, lineas: [...p.lineas, { materialId: '', cantidad: '' }] }))} style={{ fontSize: 12, alignSelf: 'flex-start' }}>
+              + Otro material
+            </button>
+            <button className="btn btn-primary" onClick={guardarVale} disabled={guardandoVale} style={{ fontSize: 13 }}>
+              {guardandoVale ? 'Registrando...' : 'Registrar entrega'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="field" style={{ maxWidth: 320, marginBottom: 18 }}>
         <label>Buscar material</label>
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Nombre del material..." />
@@ -5904,16 +6213,30 @@ export function PanelStock() {
 
       {materiales.length === 0 ? (
         <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem 0' }}>
-          Todavía no hay materiales en stock — entran solos cuando se marca una compra como "Stock" en el Reporte Diario.
+          Todavía no hay materiales en bodega. Se cargan de dos formas: marcando una compra como “Stock” en el
+          Reporte Diario, o con “+ Cargar material a mano” para lo que ya estaba ahí de antes.
         </p>
       ) : (
         <>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+            <StatTile label="Valor en bodega" valor={fmtMoney(valorBodega)} />
+            {sinPrecio.length > 0 && (
+              <StatTile label="Sin precio cargado" valor={`${sinPrecio.length} material${sinPrecio.length !== 1 ? 'es' : ''}`} tono="alerta" />
+            )}
+          </div>
+          {sinPrecio.length > 0 && (
+            <p style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, marginBottom: 14, lineHeight: 1.45 }}>
+              Hay material sin precio en el catálogo ({sinPrecio.map(m => m.nombre).join(', ')}). Cuando se entregue
+              a una obra, esa parte no le va a sumar costo y el margen de esa obra va a salir más alto de lo real.
+            </p>
+          )}
+
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
             {materialesFiltrados.map(m => (
               <StatTile
                 key={m.id}
                 label={m.nombre}
-                valor={`${m.stock_actual}${m.unidad ? ' ' + m.unidad : ''}`}
+                valor={`${m.stock_actual}${m.unidad ? ' ' + m.unidad : ''}${m.precio_unitario ? ` · ${fmtMoney(m.stock_actual * m.precio_unitario)}` : ''}`}
                 tono={m.stock_actual <= 0 ? 'negativo' : 'neutral'}
               />
             ))}
@@ -5930,8 +6253,15 @@ export function PanelStock() {
                   <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{mov.fecha.split('-').reverse().join('/')}</span>
                   <span style={{ flex: 1 }}>
                     <strong>{material?.nombre || 'Material eliminado'}</strong>
-                    {mov.tipo === 'entrada' ? ' — entró al stock' : mov.obra ? ` — usado en ${mov.obra}` : ' — salió del stock'}
+                    {mov.tipo === 'entrada'
+                      ? (mov.nota ? ` — ${mov.nota.toLowerCase()}` : ' — entró al stock')
+                      : mov.obra
+                        ? ` — a ${mov.obra}${mov.receptor ? `, se lo llevó ${mov.receptor}` : ''}`
+                        : ' — salió del stock'}
                   </span>
+                  {mov.precio_unitario ? (
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtMoney(mov.cantidad * mov.precio_unitario)}</span>
+                  ) : null}
                   <span style={{ fontWeight: 700, color: mov.tipo === 'entrada' ? 'var(--success)' : 'var(--warning)' }}>
                     {mov.tipo === 'entrada' ? '+' : '-'}{mov.cantidad}
                   </span>

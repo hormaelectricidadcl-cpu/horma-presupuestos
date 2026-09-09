@@ -29,6 +29,20 @@ de Alexis no estaba mal calculado: le faltaba el costo de Cristian, y no había 
 un contrato de subcontratista aunque la tabla y el cálculo ya existieran. Ahora se cargan desde el detalle de
 la obra, y cada obra muestra su margen (con objetivo 25% en las subcontratadas).
 
+**5. El avance de obra ya no cuenta materiales como avance.** En la obra de Alexis los materiales eran el
+39,4%: comprar y tildar todo marcaba 39% con cero trabajo hecho. Ahora hay dos barras separadas. Las tres
+obras grandes entraron como PDF externo y no tienen categoría en sus ítems, así que ahí el porcentaje sigue
+mezclando y la pantalla lo avisa; se puede corregir con el selector de categoría por ítem.
+
+**6. Bodega con vales de entrega.** Ver `decisiones.md` 2026-09-09. Se compra a bodega sin obra y la obra se
+decide después, cuando el material sale con un vale a nombre de quien se lo lleva. Media estructura ya existía
+sin usarse (2 compras de 39 a Stock, cero salidas). Se agregó receptor, precio congelado por movimiento,
+inventario manual, y que la salida cargue costo a la obra.
+
+**FALTA CORRER LA MIGRACIÓN `sql/20260909_stock_vales_de_entrega.sql`.** Hasta que Alexandra la corra, cargar
+un material a mano o registrar un vale falla con un aviso que nombra el archivo. Todo lo demás de esta sesión
+(avance, adicionales, margen) funciona sin ella.
+
 ### Lo que queda pendiente de esta sesión
 - **El adicional de Alexis sigue sin sumarse a la obra.** Ahora es un clic ("Mis presupuestos" → el adicional
   → estado "Sumado a la obra"), pero es una escritura de plata real y la decide Alexandra. La obra "Pasaje
