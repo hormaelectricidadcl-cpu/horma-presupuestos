@@ -1,63 +1,76 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## POR DÓNDE SEGUIR — miércoles 09/09/2026
+## POR DÓNDE SEGUIR — miércoles 09/09/2026 (traspaso para sesión nueva)
 
-Sesión corta y puntual, salida de dos cosas que reportó Alexandra. Todo verificado contra Supabase real y
-en navegador con TODA escritura de red interceptada; **nada se escribió en producción.**
+**Todo lo de esta sesión está en producción y verificado ahí**, no solo commiteado. Seis commits, del
+`6a8754d` al `b9eec50`. La migración `sql/20260909_stock_vales_de_entrega.sql` **ya está corrida** (verificado
+contra la base: existen `movimientos_stock.receptor`, `movimientos_stock.precio_unitario` y
+`materiales.precio_unitario`).
 
-**1. Apareció por qué se perdió un presupuesto.** Gustavo hizo el `HRM-MTSTS0UU` ($709.478, Alexis) desde el
-iPhone el 08/09 a las 12:29 y nunca llegó a "Mis presupuestos". Los logs de Supabase muestran que la petición
-nunca salió del teléfono: el PDF se generaba ANTES del guardado y en iOS la descarga se lleva la página por
-delante. **Arreglado** (guardar primero, PDF después) en los dos presupuestadores. Ver `decisiones.md`
-2026-09-09. **Lo que no se pudo probar acá es el iOS real** — no hay iPhone en este entorno; lo verificado es
-el orden de las operaciones, que es la causa. Vale la pena que Gustavo lo pruebe desde su teléfono el viernes.
+### Estado real de los datos, verificado hoy contra Supabase
 
-**2. El flujo de adicionales tenía tres huecos**, encontrados probándolo con un caso real. Ver `decisiones.md`
-2026-09-09: un adicional intentaba crear una obra nueva en vez de sumarse a la del original; el botón "Crear
-adicionales" no existía para presupuestos externos ni por etapas (Nicole/O'Higgins, $39M, quedaban sin forma
-de cargarlos); y la ficha del cliente mostraba un total distinto al de la pestaña Obras. Los tres arreglados.
-También el contraste de los botones "Volver" del panel, que eran azul oscuro sobre azul oscuro.
+| Dato | Valor |
+|---|---|
+| Obra "Pasaje rinconada 8948" (Alexis) | $3.220.140 · `con_iva = false` |
+| Sus ítems | $1.490.000 mano de obra + $970.000 materiales |
+| Ítems del adicional en Avance | 5 filas, fase "Adicional HRM-MTU30EEP", $542.000 — **ya traídos** |
+| Subcontratos de esa obra | **0** — el contrato de Cristian sigue sin cargar |
+| Salidas de bodega (vales) | **0** |
+| Materiales en catálogo | 2, **ninguno con precio** |
+| Obras marcadas con IVA | **0** |
+| Adicionales enganchados | 1 (HRM-MTU30EEP) |
 
-**3. Los adicionales ahora se ven desde los tres lados.** El detalle de la obra no sabía nada de ellos
-(`obras.presupuesto_id` es un campo único), en la ficha del cliente eran texto muerto sin poder abrirlos, y
-sus ítems no llegaban a `obra_items` — la obra subía de precio pero el trabajo nuevo no existía en Avance de
-obra. Los tres arreglados, sin migración.
+### Lo que se construyó (detalle en `decisiones.md`, todas las entradas del 2026-09-09)
 
-**4. Margen de obra (opción b) y carga de subcontratos.** Ver `decisiones.md` 2026-09-09. El saldo de la obra
-de Alexis no estaba mal calculado: le faltaba el costo de Cristian, y no había ninguna pantalla para cargar
-un contrato de subcontratista aunque la tabla y el cálculo ya existieran. Ahora se cargan desde el detalle de
-la obra, y cada obra muestra su margen (con objetivo 25% en las subcontratadas).
+1. **Se perdía un presupuesto hecho desde el teléfono.** El `HRM-MTSTS0UU` de Gustavo (08/09, 12:29) nunca
+   llegó a la base: el PDF se generaba ANTES del guardado y en iOS la descarga se lleva la página por delante
+   junto con el insert en vuelo. Ahora se guarda primero. **No se pudo probar en un iPhone real** — no hay uno
+   en este entorno; lo verificado es el orden de las operaciones, que es la causa. Que Gustavo lo pruebe.
+2. **Adicionales que funcionan de punta a punta**: un adicional ya no intenta crear una obra nueva (estado
+   "Sumado a la obra"), se puede crear desde los tres tipos de presupuesto, se ve y se abre desde la obra y
+   desde la ficha del cliente, sus ítems llegan solos a Avance, y uno hecho fuera de la app se puede enganchar
+   al subirlo como presupuesto externo.
+3. **Margen por obra (opción b)**: `neto − compras − materiales de bodega − subcontratos − mano de obra`, con
+   objetivo 25% en las obras que tienen un subcontratista cargado.
+4. **El avance mide trabajo, no compras.** Dos barras separadas.
+5. **Bodega con vales de entrega**: inventario manual, receptor, precio congelado por movimiento, y la salida
+   carga costo a la obra.
 
-**5. El avance de obra ya no cuenta materiales como avance.** En la obra de Alexis los materiales eran el
-39,4%: comprar y tildar todo marcaba 39% con cero trabajo hecho. Ahora hay dos barras separadas. Las tres
-obras grandes entraron como PDF externo y no tienen categoría en sus ítems, así que ahí el porcentaje sigue
-mezclando y la pantalla lo avisa; se puede corregir con el selector de categoría por ítem.
+### Lo que falta, en orden de lo que más duele
 
-**6. Bodega con vales de entrega.** Ver `decisiones.md` 2026-09-09. Se compra a bodega sin obra y la obra se
-decide después, cuando el material sale con un vale a nombre de quien se lo lleva. Media estructura ya existía
-sin usarse (2 compras de 39 a Stock, cero salidas). Se agregó receptor, precio congelado por movimiento,
-inventario manual, y que la salida cargue costo a la obra.
+1. **Cargar el contrato de Cristian** en la obra de Alexis (Detalle → Subcontratistas). Hasta que esté, su
+   saldo y su margen no reflejan lo que se le debe. Ojo: si Horma compra los materiales, ese monto es **solo
+   su mano de obra** — las compras se cargan aparte y contarlas dos veces haría ver la obra peor de lo real.
+2. **Marcar qué obras se pactaron con IVA.** Lo decide Gustavo el viernes. Sin la marca, el neto queda igual
+   al precio completo y el margen de una obra subcontratada sale más alto de lo real; la app lo avisa en la
+   tarjeta. En Alexis: neto real $2.706.000 y el 25% son $676.500, no los $805.035 que salen sin la marca.
+3. **Subir los adicionales que Gustavo ya tiene hechos** — Mis presupuestos → "+ Cargar presupuesto externo",
+   y ahí elegir de qué presupuesto es adicional.
+4. **Ponerle precio a los 2 materiales del catálogo.** Sin precio, cuando se entreguen no le suman costo a la
+   obra y el margen sale inflado. La pantalla de Stock lo avisa.
+5. **Categoría en los ítems de las tres obras grandes** (O'Higgins, Camino turístico, Geronimo de Alderete —
+   66 ítems entrados como PDF externo, sin categoría). Mientras no la tengan, su avance mezcla trabajo y
+   materiales. Hay un selector por ítem en Avance de obra. Vale evaluar que el lector de PDF por IA
+   categorice de entrada, para que no se repita.
+6. **Seguridad etapa 2** — sigue pendiente desde el 08/09, ver `decisiones.md`.
 
-**FALTA CORRER LA MIGRACIÓN `sql/20260909_stock_vales_de_entrega.sql`.** Hasta que Alexandra la corra, cargar
-un material a mano o registrar un vale falla con un aviso que nombra el archivo. Todo lo demás de esta sesión
-(avance, adicionales, margen) funciona sin ella.
+### Dos cosas de método que conviene no perder
 
-### Lo que queda pendiente de esta sesión
-- **El adicional de Alexis sigue sin sumarse a la obra.** Ahora es un clic ("Mis presupuestos" → el adicional
-  → estado "Sumado a la obra"), pero es una escritura de plata real y la decide Alexandra. La obra "Pasaje
-  rinconada 8948" sigue en $2.510.662 y debería quedar en $3.220.140.
-- **Ninguna obra está marcada como "el precio incluye IVA".** Mientras siga así, el margen de una obra
-  subcontratada se muestra más alto de lo real; la app lo avisa en la tarjeta, pero el dato hay que cargarlo.
-- **El contrato de Cristian todavía no está cargado** en la obra de Alexis. Hasta que esté, su saldo y su
-  margen siguen sin reflejar lo que se le debe.
-- **Los ítems del adicional de Alexis todavía no están en Avance de obra** — se sumó antes de que existiera el
-  copiado automático. Hay un botón en el detalle de la obra, "Llevar sus ítems a Avance de obra", que los
-  copia sin tocar la plata.
-- **Nada está deployado todavía**: los cambios están commiteados en `main` local, sin push. Cloudflare no los
-  tiene.
-- Sigue en pie todo lo de la lista del 08/09 que está más abajo, en especial la sesión del viernes 11/09 y la
-  seguridad etapa 2.
+- **El MCP de Supabase es de solo lectura.** Las migraciones las corre Alexandra a mano desde el archivo en
+  `sql/`. Si la sesión del MCP caduca o se cambia de cuenta, se re-autoriza con `/mcp`; la cuenta tiene que
+  tener acceso al proyecto `fhcebphnvnozaxherpbf`.
+- **Todo lo de esta sesión se verificó en el navegador interceptando TODA escritura de red**, y los cálculos
+  de plata se corrieron a mano contra Supabase antes de creerle a la pantalla. Eso encontró errores propios
+  tres veces: el cartel de Avance que ofrecía inventar un ítem de $1.302.140, el modal "Detalle" que se
+  saltaba el arreglo de adicionales, y una diferencia de $1 en O'Higgins que resultó ser que la obra tiene una
+  cuenta por cobrar de $39.063.832 y la app usa la suma de las cuentas, no `obras.presupuesto_total`.
+
+### La sesión del viernes 11/09 con Gustavo sigue siendo lo más importante
+Nada de lo nuevo pasó todavía por un caso real con él. Lo que conviene pasar: hacer un presupuesto **desde su
+teléfono** (el arreglo de arriba), subir uno de sus adicionales ya hechos, cargar el contrato de Cristian,
+decidir el IVA de cada obra, y mostrarle el flujo de bodega para ver si lo adopta — si no lo va a usar, no
+vale la pena seguir construyendo encima.
 
 ## POR DÓNDE SEGUIR — cierre del martes 08/09/2026
 
