@@ -1,6 +1,33 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
+## POR DÓNDE SEGUIR — miércoles 09/09/2026
+
+Sesión corta y puntual, salida de dos cosas que reportó Alexandra. Todo verificado contra Supabase real y
+en navegador con TODA escritura de red interceptada; **nada se escribió en producción.**
+
+**1. Apareció por qué se perdió un presupuesto.** Gustavo hizo el `HRM-MTSTS0UU` ($709.478, Alexis) desde el
+iPhone el 08/09 a las 12:29 y nunca llegó a "Mis presupuestos". Los logs de Supabase muestran que la petición
+nunca salió del teléfono: el PDF se generaba ANTES del guardado y en iOS la descarga se lleva la página por
+delante. **Arreglado** (guardar primero, PDF después) en los dos presupuestadores. Ver `decisiones.md`
+2026-09-09. **Lo que no se pudo probar acá es el iOS real** — no hay iPhone en este entorno; lo verificado es
+el orden de las operaciones, que es la causa. Vale la pena que Gustavo lo pruebe desde su teléfono el viernes.
+
+**2. El flujo de adicionales tenía tres huecos**, encontrados probándolo con un caso real. Ver `decisiones.md`
+2026-09-09: un adicional intentaba crear una obra nueva en vez de sumarse a la del original; el botón "Crear
+adicionales" no existía para presupuestos externos ni por etapas (Nicole/O'Higgins, $39M, quedaban sin forma
+de cargarlos); y la ficha del cliente mostraba un total distinto al de la pestaña Obras. Los tres arreglados.
+También el contraste de los botones "Volver" del panel, que eran azul oscuro sobre azul oscuro.
+
+### Lo que queda pendiente de esta sesión
+- **El adicional de Alexis sigue sin sumarse a la obra.** Ahora es un clic ("Mis presupuestos" → el adicional
+  → estado "Sumado a la obra"), pero es una escritura de plata real y la decide Alexandra. La obra "Pasaje
+  rinconada 8948" sigue en $2.510.662 y debería quedar en $3.220.140.
+- **Nada está deployado todavía**: los cambios están commiteados en `main` local, sin push. Cloudflare no los
+  tiene.
+- Sigue en pie todo lo de la lista del 08/09 que está más abajo, en especial la sesión del viernes 11/09 y la
+  seguridad etapa 2.
+
 ## POR DÓNDE SEGUIR — cierre del martes 08/09/2026
 
 Dos páginas compartidas con Alexandra:

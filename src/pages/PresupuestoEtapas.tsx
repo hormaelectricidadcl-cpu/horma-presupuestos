@@ -285,7 +285,6 @@ export default function PresupuestoEtapas({ embedded = false, onVolver }: { embe
     if (!client.address.trim()) { alert('Ingresa la dirección del cliente antes de generar el PDF.'); return }
     if (ggBase === 0) { alert('Procesa el texto con IA antes de generar el PDF.'); return }
     const referencia = `HRM-${Date.now().toString(36).toUpperCase()}`
-    await generatePDFEtapas(client, etapas, { pct: ggPct, amount: ggAmount }, referencia)
     setGuardado(null)
     setGuardadoError(false)
 
@@ -296,6 +295,13 @@ export default function PresupuestoEtapas({ embedded = false, onVolver }: { embe
     // directamente fallar/lanzar (no solo devolver un error en la respuesta) --
     // sin esto, el guardado fallaba en silencio y el PDF parecía "generado
     // correctamente" aunque nunca llegara a "Mis presupuestos".
+    //
+    // 09/09/2026: además, el guardado va ANTES de generar el PDF. Con el orden viejo se
+    // perdió un presupuesto real (HRM-MTSTS0UU, hecho desde un iPhone el 08/09): la
+    // descarga del PDF le entrega la página al visor de iOS y mata el insert que todavía
+    // estaba en vuelo. Mismo cambio que en el presupuestador simple -- si algo falla, que
+    // falle el PDF (se puede volver a bajar) y no el registro de la plata.
+    let guardadoOk = false
     if (embedded || session?.user?.id) {
       try {
         const clientePayload: { nombre: string; telefono?: string; email?: string } = { nombre: client.name.trim() }
@@ -326,11 +332,26 @@ export default function PresupuestoEtapas({ embedded = false, onVolver }: { embe
         })
         if (dbErr) throw dbErr
         setGuardado(referencia)
+        guardadoOk = true
       } catch (e) {
         console.error('Error al guardar presupuesto por etapas en Supabase:', e)
         setGuardadoError(true)
       }
+    } else {
+      // Fuera del panel y sin sesión no hay dónde guardar: el PDF es todo lo que se pide.
+      guardadoOk = true
     }
+
+    if (!guardadoOk) {
+      const generarIgual = window.confirm(
+        `No se pudo guardar el presupuesto (Ref: ${referencia}). Suele ser la conexión.\n\n` +
+        'Si generas el PDF igual, se lo vas a mandar al cliente sin que quede registrado en "Mis presupuestos".\n\n' +
+        'Aceptar: generar el PDF igual.\nCancelar: no generarlo y volver a intentar en un momento.'
+      )
+      if (!generarIgual) return
+    }
+
+    await generatePDFEtapas(client, etapas, { pct: ggPct, amount: ggAmount }, referencia)
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -749,7 +770,7 @@ export default function PresupuestoEtapas({ embedded = false, onVolver }: { embe
           )}
           {guardadoError && (
             <p style={{ textAlign: 'center', fontSize: 12, color: '#b91c1c', marginTop: 8, fontWeight: 600 }}>
-              El PDF se generó pero no se pudo guardar en Mis presupuestos. Avisa a Alexandra o intenta de nuevo.
+              No se pudo guardar en Mis presupuestos. Avisa a Alexandra o intenta de nuevo.
             </p>
           )}
         </div>

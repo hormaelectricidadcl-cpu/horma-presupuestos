@@ -26,6 +26,10 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
   const [overheadPercentage, setOverheadPercentage] = useState(10);
   const [clienteIdPrefill, setClienteIdPrefill] = useState<string | null>(null);
   const [pendienteOrigenNombre, setPendienteOrigenNombre] = useState<string | null>(null);
+  // Referencia del último presupuesto que se guardó bien. Se muestra en la página en vez de
+  // en un alert porque en el teléfono la descarga del PDF puede llevarse la pestaña por
+  // delante y un alert no se alcanzaría a ver.
+  const [guardadoRef, setGuardadoRef] = useState<string | null>(null);
   // Adicionales (08/09/2026): si el link trae "desde_presupuesto", esto se convierte en el
   // presupuesto de adicionales de ese original. El original queda intacto y solo se muestra
   // como referencia -- lo que se guarde acá es un presupuesto NUEVO que lo apunta con
@@ -155,13 +159,35 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
       }
 
       const referencia = `HRM-${Date.now().toString(36).toUpperCase()}`;
-      generatePDF(clientData, items, overheadPercentage, referencia, origenId ? (origenReferencia || 'original') : undefined);
+
+      // PRIMERO guardar, DESPUÉS el PDF. El orden importa y no es cosmético.
+      //
+      // Al revés (como estaba hasta el 09/09/2026) se perdió un presupuesto real: el
+      // HRM-MTSTS0UU que Gustavo hizo desde el iPhone el 08/09 a las 12:29. `doc.save()`
+      // de jsPDF clickea un <a download href="blob:..."> y en iOS eso le entrega la página
+      // al visor de PDF; el insert a Supabase todavía estaba en vuelo y se murió con la
+      // página. En los logs de Supabase no llegó ni el preflight. El PDF salió, se lo
+      // mandó al cliente, y en "Mis presupuestos" no quedó nada -- y como la página se fue
+      // antes del alert, tampoco vio ningún error. Ver progress/decisiones.md 2026-09-09.
+      //
+      // Con este orden el riesgo se da vuelta hacia el lado barato: si algo falla ahora,
+      // falla el PDF (que se puede volver a bajar cuando sea desde el detalle del
+      // presupuesto), no el registro de la plata.
       const guardadoOk = await guardarPresupuesto(referencia);
-      if (guardadoOk) {
-        alert(`✓ PDF generado y guardado — Ref: ${referencia}\n\nYa está disponible en "Mis presupuestos" (esta pestaña es independiente de esa vista, así que no viaja sola ahí -- ciérrala y volvé a la pestaña donde tenías Admin/Gustavo para verlo).`);
-      } else {
-        alert(`El PDF se generó (Ref: ${referencia}), pero no se pudo guardar en Mis presupuestos. Avísale a Alexandra o intenta de nuevo.`);
+      if (!guardadoOk) {
+        const generarIgual = window.confirm(
+          `No se pudo guardar el presupuesto (Ref: ${referencia}). Suele ser la conexión.\n\n` +
+          'Si generas el PDF igual, se lo vas a mandar al cliente sin que quede registrado en "Mis presupuestos" — y después nadie se acuerda de cargarlo.\n\n' +
+          'Aceptar: generar el PDF igual.\nCancelar: no generarlo y volver a intentar en un momento.'
+        );
+        if (!generarIgual) return;
       }
+
+      generatePDF(clientData, items, overheadPercentage, referencia, origenId ? (origenReferencia || 'original') : undefined);
+      // El aviso de que salió bien va en la página, no en un alert: en el teléfono la
+      // descarga del PDF puede llevarse la pestaña por delante y un alert posterior no
+      // se llegaría a ver nunca. Esto queda escrito y se puede volver a mirar.
+      setGuardadoRef(guardadoOk ? referencia : null);
     } catch (error) {
       console.error('Error in handleGeneratePDF:', error);
       alert('Error al generar el PDF');
@@ -249,6 +275,19 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
         <span className="eyebrow">Presupuesto</span>
         <h1>Horma Grup</h1>
       </header>
+
+      {guardadoRef && (
+        <div className="card" style={{ padding: '10px 14px', marginBottom: 16, background: '#f0fdf4', borderLeft: '3px solid #16a34a', color: '#166534' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+            Guardado en “Mis presupuestos” — Ref: {guardadoRef}
+          </p>
+          <p style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+            Ya quedó registrado, aunque el PDF no se haya alcanzado a descargar. Esta pestaña es
+            aparte de la del panel: para verlo, vuelve a la pestaña donde tenías Admin o el panel de
+            Gustavo y recarga.
+          </p>
+        </div>
+      )}
 
       {pendienteOrigenNombre && (
         <div className="card" style={{ padding: '10px 14px', marginBottom: 16, background: '#f0fdf4', borderLeft: '3px solid #16a34a' }}>

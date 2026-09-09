@@ -1,6 +1,60 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-09 — El presupuesto se guarda ANTES de generar el PDF (se perdió uno real por el orden)
+Gustavo dijo haber hecho un presupuesto desde la app y no aparecía en "Mis presupuestos". Se verificó, no se
+asumió:
+- La referencia codifica el instante: `HRM-${Date.now().toString(36)}`. `MTSTS0UU` decodifica a
+  **08/09/2026 15:29:27 UTC** (12:29 de Chile). Ese es el segundo exacto del botón.
+- La tabla `presupuestos` no lo tenía (5 filas, la más nueva del 04/09).
+- **No fue RLS ni la seguridad etapa 1:** `presupuestos` y `clientes` siguen con `anon` ALL true/true.
+- **No fue un bundle viejo cacheado:** el PDF dice "HORMA GRUP", rebrand del 28/08 (`0949c18`), posterior al
+  guardado en Supabase (25/08, `5f73559`). El código que corrió sí tenía el guardado.
+- **Los logs de Supabase son la prueba:** último request 15:28:24 UTC desde un **iPhone (iOS 18.6.2, Safari
+  18.6, datos de Entel, Santiago)** pegándole al panel de Gustavo. Después, **silencio absoluto hasta las
+  17:06**. Ni un OPTIONS ni un POST a `clientes`/`presupuestos`. La petición nunca salió del teléfono.
+
+**Causa:** `handleGeneratePDF` llamaba a `generatePDF(...)` y recién después a `await guardarPresupuesto(...)`.
+`doc.save()` de jsPDF clickea un `<a download href="blob:...">` dentro de un `setTimeout(0)`; en iOS eso le
+entrega la página al visor de PDF y mata el insert que todavía estaba en vuelo. Lo corrobora que Gustavo no
+vio ningún error: la página se fue antes de que el `alert` de fallo pudiera aparecer.
+
+**Decidido: primero guardar, después generar el PDF** — en `Presupuesto.tsx` y en `PresupuestoEtapas.tsx`.
+Da vuelta el riesgo hacia el lado barato: si algo falla, falla el PDF (que se puede volver a bajar desde el
+detalle del presupuesto) y no el registro de la plata. Si el guardado falla, se pregunta antes de generarlo,
+porque mandarle el PDF al cliente sin registro es justo el caso que se quiere evitar. El aviso de éxito pasó
+de `alert` a un cartel en la página: en el teléfono un alert posterior a la descarga puede no verse nunca.
+
+Verificado en navegador con toda escritura interceptada, mirando el ORDEN real de los eventos: POST clientes
+→ POST presupuestos → descarga del PDF (539 ms después). Falla + Cancelar: no se genera ningún PDF. Falla +
+Aceptar: el PDF sale igual y el cartel de guardado no aparece. **Lo que no se pudo probar acá es el iOS real**
+— no hay iPhone en este entorno; lo verificado es el orden de las operaciones, que es la causa.
+
+## 2026-09-09 — Un adicional se suma a la obra del original; nunca crea una obra nueva
+Probando el flujo con un caso real (adicional `HRM-MTU30EEP` de Alexis, $709.478, sobre la obra "Pasaje
+rinconada 8948") apareció el error "No se pudo crear la obra. Puede que ya exista una con ese nombre".
+
+**Causa:** el selector de estado le ofrecía "Convertido en obra" a un adicional igual que a cualquier
+presupuesto. Intentaba crear una obra NUEVA con la dirección del cliente y chocaba contra `obras_nombre_key`.
+El mensaje engañaba: el problema no era el nombre, era que el camino entero estaba mal. Con un nombre
+distinto habría creado una obra duplicada, que es peor.
+
+**Decidido:** en un adicional el estado se llama **"Sumado a la obra"** y sube `obras.presupuesto_total` de la
+obra del original (la que tiene `presupuesto_id = adicional.origen_id`) — que es el número contra el que se
+calcula lo que el cliente debe. El estado en la base sigue siendo `convertido`; lo que cambia es el nombre y
+lo que hace. El modal "Detalle" tenía una copia propia de esa lógica y se saltaba el arreglo: ahora las dos
+pantallas pasan por la misma función.
+
+**Decidido también: un solo número por obra.** La línea "Vigente" de la ficha del cliente sumaba los
+adicionales *aceptados* mientras la pestaña Obras seguía con el total viejo — dos verdades sobre la misma
+plata ($3.220.140 contra $2.510.662). Ahora "Vigente" solo suma lo que YA se sumó a la obra, y lo aceptado
+pendiente se avisa aparte como lo que es: una acción sin hacer, no un total.
+
+**Decidido también: "Crear adicionales" va en los tres tipos de presupuesto**, no solo en los "simple". Esa
+restricción dejaba sin ninguna forma de cargar adicionales a las obras que entraron por PDF externo o por
+etapas — Nicole/O'Higgins, $39M, justo las grandes. En las que no son "simple" el adicional se carga desde
+cero y se explica por qué no hay lista del original que consultar.
+
 ## 2026-09-08 — Seguridad etapa 1: achicar el daño, sin cambiar todavía cómo entra nadie
 Conversación abierta desde el 28/08. Antes de tocar nada se midió el estado real (no se asumió):
 - **La clave pública de Supabase está dentro del JS del sitio** — confirmado buscándola en el bundle
