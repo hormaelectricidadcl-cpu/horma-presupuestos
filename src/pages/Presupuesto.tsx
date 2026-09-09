@@ -37,6 +37,10 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
   // al cliente algo que ya estaba presupuestado -- ver decisiones.md 2026-09-08.
   const [origenItems, setOrigenItems] = useState<Item[]>([]);
   const [origenTotal, setOrigenTotal] = useState<number | null>(null);
+  // Los presupuestos externos (PDF del cliente) y los de etapas no tienen ítems simples que
+  // listar, pero SÍ pueden tener adicionales -- es el caso de Nicole/O'Higgins. Se guarda el
+  // tipo para explicar por qué no hay lista que consultar, en vez de bloquear el flujo.
+  const [origenTipo, setOrigenTipo] = useState<'simple' | 'etapas' | 'externo' | null>(null);
 
   // Fase 2 del "orden" (03/09/2026): si el link trae "desde_pendiente", los ítems que ya
   // generó la IA en el hilo de ese pendiente (Admin -> "Generar ítems con IA") se cargan
@@ -80,10 +84,12 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
       .single()
       .then(({ data }) => {
         if (!data) return;
-        if (data.tipo !== 'simple') {
-          alert('Solo se puede partir de un presupuesto simple. Este es de otro tipo (por etapas o externo), así que los ítems hay que cargarlos a mano.');
-          return;
-        }
+        // Antes acá se cortaba si el original no era "simple". Eso dejaba sin forma de cargar
+        // adicionales a las obras que entraron por PDF externo (Nicole/O'Higgins) o por
+        // etapas, que son justo las obras grandes donde más adicionales aparecen. Ahora el
+        // vínculo se arma igual: lo único que cambia es que no hay lista de ítems para
+        // consultar, porque el original no la tiene.
+        setOrigenTipo(data.tipo as 'simple' | 'etapas' | 'externo');
         setOrigenId(data.id);
         setOrigenReferencia(data.referencia || null);
         setOrigenTotal(data.total ?? null);
@@ -260,9 +266,19 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
             </p>
             <p style={{ fontSize: 12.5, lineHeight: 1.5 }}>
               Acá va <strong>solo lo que se agregó</strong>, no el trabajo que ya estaba presupuestado — eso ya
-              se lo cobraste. El original queda intacto y se ve abajo para consultarlo: si de un ítem se
-              hicieron más, tocá <strong>“+ Agregar”</strong> en esa línea y poné cuántos <strong>más</strong>.
-              Lo que no estaba en el original, agregalo con IA, catálogo o a mano.
+              se lo cobraste. El original queda intacto.{' '}
+              {origenTipo === 'simple' ? (
+                <>
+                  Se ve abajo para consultarlo: si de un ítem se hicieron más, toca{' '}
+                  <strong>“+ Agregar”</strong> en esa línea y pon cuántos <strong>más</strong>.
+                  Lo que no estaba en el original, agrégalo con IA, catálogo o a mano.
+                </>
+              ) : (
+                <>
+                  Este original no tiene ítems cargados en la app, así que las líneas del adicional
+                  se cargan con IA, catálogo o a mano.
+                </>
+              )}
             </p>
           </div>
 
@@ -274,7 +290,13 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
               )}
             </div>
             {origenItems.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: '#6b7280' }}>El original no tiene ítems cargados.</p>
+              <p style={{ fontSize: 12.5, color: '#6b7280' }}>
+                {origenTipo === 'externo'
+                  ? 'El original es un PDF externo del cliente, así que no hay ítems que consultar acá. El adicional se carga desde cero.'
+                  : origenTipo === 'etapas'
+                    ? 'El original está armado por etapas, así que no hay ítems sueltos que consultar acá. El adicional se carga desde cero.'
+                    : 'El original no tiene ítems cargados.'}
+              </p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 260, overflowY: 'auto' }}>
                 {origenItems.map((it, i) => (

@@ -3291,22 +3291,22 @@ function PresupuestoDeLaFicha({ presupuesto, adicionales = [] }: { presupuesto: 
             Descargar PDF
           </button>
         )}
-        {/* Adicionales (08/09): abre el presupuestador con una copia editable de este
-            presupuesto. El original no se toca -- lo que se guarde es un documento nuevo
-            que lo apunta. Solo para los "simple": los de etapas y los externos no tienen
-            ítems que copiar de esta forma. */}
-        {presupuesto.tipo === 'simple' && (
-          <a
-            className="btn btn-ghost"
-            href={`/?t=${import.meta.env.VITE_PRESUPUESTO_TOKEN}&desde_presupuesto=${presupuesto.id}`}
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontSize: 12, textDecoration: 'none' }}
-            title="Abre una copia editable de este presupuesto para armar el de adicionales. El original queda intacto."
-          >
-            Crear adicionales →
-          </a>
-        )}
+        {/* Adicionales (08/09): abre el presupuestador apuntando a este presupuesto. El
+            original no se toca -- lo que se guarde es un documento nuevo que lo apunta.
+            09/09: antes esto era solo para los "simple", y dejaba sin forma de cargar
+            adicionales a las obras que entraron por PDF externo o por etapas (Nicole/
+            O'Higgins), que son justo las grandes. Ahora está para los tres tipos: en los
+            que no son "simple" el adicional se carga desde cero, sin lista que consultar. */}
+        <a
+          className="btn btn-ghost"
+          href={`/?t=${import.meta.env.VITE_PRESUPUESTO_TOKEN}&desde_presupuesto=${presupuesto.id}`}
+          target="_blank"
+          rel="noreferrer"
+          style={{ fontSize: 12, textDecoration: 'none' }}
+          title="Abre el presupuestador para armar un adicional de este presupuesto. El original queda intacto."
+        >
+          Crear adicionales →
+        </a>
       </div>
 
       {adicionales.length > 0 && (
@@ -3319,22 +3319,42 @@ function PresupuestoDeLaFicha({ presupuesto, adicionales = [] }: { presupuesto: 
               <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--muted)' }}>{new Date(a.created_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })}</span>
                 {a.referencia && <span style={{ fontWeight: 600 }}>{a.referencia}</span>}
-                <span className="badge badge-otro" style={{ fontSize: 10 }}>{ESTADO_PRESUPUESTO_LABELS[a.estado]}</span>
+                <span className="badge badge-otro" style={{ fontSize: 10 }}>
+                  {a.estado === 'convertido' ? 'Sumado a la obra' : ESTADO_PRESUPUESTO_LABELS[a.estado]}
+                </span>
                 <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{a.total != null ? fmtMoney(a.total) : '—'}</span>
               </div>
             ))}
           </div>
           {(() => {
             // Lo que muestran los sistemas de job costing: original, adicionales aprobados,
-            // y el vigente que es la suma. Solo cuentan los aceptados o ya convertidos --
-            // un adicional enviado y sin respuesta todavía no es plata acordada.
-            const aprobados = adicionales.filter(a => a.estado === 'aceptado' || a.estado === 'convertido')
-            const sumaAprobados = aprobados.reduce((s, a) => s + (a.total || 0), 0)
-            if (sumaAprobados === 0) return null
+            // y el vigente que es la suma.
+            //
+            // 09/09: antes acá se sumaban los "aceptado" Y los "convertido", y eso creaba dos
+            // verdades sobre la misma obra -- esta línea decía $3.220.140 mientras la pestaña
+            // Obras seguía diciendo $2.510.662, que es el número contra el que se calcula el
+            // saldo real. Ahora solo cuenta lo que YA se sumó a la obra ("convertido"), así
+            // los dos números no pueden discrepar; y lo aceptado pero todavía sin sumar se
+            // avisa aparte, porque es una acción pendiente, no un total.
+            const sumados = adicionales.filter(a => a.estado === 'convertido')
+            const sumaSumados = sumados.reduce((s, a) => s + (a.total || 0), 0)
+            const pendientes = adicionales.filter(a => a.estado === 'aceptado')
+            const sumaPendientes = pendientes.reduce((s, a) => s + (a.total || 0), 0)
+            if (sumaSumados === 0 && sumaPendientes === 0) return null
             return (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontWeight: 700 }}>
-                <span>Vigente (original + {aprobados.length} adicional{aprobados.length !== 1 ? 'es' : ''} aprobado{aprobados.length !== 1 ? 's' : ''})</span>
-                <span>{fmtMoney((presupuesto.total || 0) + sumaAprobados)}</span>
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                {sumaSumados > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 700 }}>
+                    <span>Vigente (original + {sumados.length} adicional{sumados.length !== 1 ? 'es' : ''} sumado{sumados.length !== 1 ? 's' : ''} a la obra)</span>
+                    <span>{fmtMoney((presupuesto.total || 0) + sumaSumados)}</span>
+                  </div>
+                )}
+                {sumaPendientes > 0 && (
+                  <p style={{ fontSize: 11.5, color: 'var(--primary)', fontWeight: 600, marginTop: sumaSumados > 0 ? 6 : 0, lineHeight: 1.45 }}>
+                    {pendientes.length} adicional{pendientes.length !== 1 ? 'es' : ''} aceptado{pendientes.length !== 1 ? 's' : ''} por {fmtMoney(sumaPendientes)} que todavía no está{pendientes.length !== 1 ? 'n' : ''} sumado{pendientes.length !== 1 ? 's' : ''} a la obra —
+                    la obra todavía no lo cobra. En “Mis presupuestos”, ponle el estado “Sumado a la obra”.
+                  </p>
+                )}
               </div>
             )
           })()}
@@ -4104,7 +4124,10 @@ export function PanelTrabajadores() {
       <div>
         <button
           onClick={() => setTrabajadorSel(null)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--secondary)', marginBottom: 16, padding: 0 }}
+          /* Va directo sobre --bg (#10182C), no dentro de una card: con --secondary (#14213D)
+             quedaba azul oscuro sobre azul oscuro, invisible. styles.css ya lo dice -- lo que
+             queda sobre --bg usa las variables *-inverse. */
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--text-inverse)', marginBottom: 16, padding: 0 }}
         >
           ← Volver a trabajadores
         </button>
@@ -4641,6 +4664,57 @@ export function PanelPresupuestos() {
     }
   }
 
+  // Un adicional no se convierte en obra: la obra ya existe y es la del original. Sumarlo
+  // significa subir el presupuesto de ESA obra, que es el número contra el que se calcula
+  // lo que el cliente todavía debe.
+  //
+  // 09/09: antes esto no existía y el selector le ofrecía "Convertido en obra" a un
+  // adicional igual que a cualquier presupuesto. Intentaba crear una obra NUEVA con la
+  // dirección del cliente, chocaba contra `obras_nombre_key` (nombre único) y devolvía
+  // "No se pudo crear la obra. Puede que ya exista una con ese nombre" -- sin decir que el
+  // camino entero estaba mal. Si el nombre hubiera sido distinto, habría creado una obra
+  // duplicada, que es peor.
+  async function sumarAdicionalALaObra(p: PresupuestoGuardado) {
+    if (!p.origen_id) return
+    const { data: obra, error: errBuscar } = await supabase
+      .from('obras')
+      .select('id, nombre, presupuesto_total')
+      .eq('presupuesto_id', p.origen_id)
+      .maybeSingle()
+    if (errBuscar) {
+      alert('No se pudo buscar la obra de este adicional. Intenta de nuevo.')
+      return
+    }
+    if (!obra) {
+      alert('El presupuesto original de este adicional todavía no está convertido en obra, así que no hay a qué sumarlo.\n\nConvierte primero el original en obra y después vuelve acá.')
+      return
+    }
+    const actual = obra.presupuesto_total || 0
+    const monto = p.total || 0
+    const nuevo = actual + monto
+    const seguir = window.confirm(
+      `Sumar este adicional de ${fmtMoney(monto)} a la obra "${obra.nombre}".\n\n` +
+      `Presupuesto de la obra: ${fmtMoney(actual)} → ${fmtMoney(nuevo)}\n\n` +
+      'Eso es lo que el cliente pasa a deber por esta obra. ¿Confirmas?'
+    )
+    if (!seguir) return
+
+    const { error: errObra } = await supabase.from('obras').update({ presupuesto_total: nuevo }).eq('id', obra.id)
+    if (errObra) {
+      alert('No se pudo actualizar el presupuesto de la obra. No se cambió nada, intenta de nuevo.')
+      return
+    }
+    // El estado se escribe DESPUÉS de la obra a propósito: si fallara al revés, el adicional
+    // quedaría marcado como sumado sin haberse sumado, y nadie se enteraría.
+    const { error: errEstado } = await supabase.from('presupuestos').update({ estado: 'convertido' }).eq('id', p.id)
+    if (errEstado) {
+      alert(`La obra "${obra.nombre}" quedó en ${fmtMoney(nuevo)}, pero el adicional no se pudo marcar como sumado.\n\nNO lo vuelvas a sumar (se sumaría dos veces) — avísale a Alexandra.`)
+      cargar()
+      return
+    }
+    cargar()
+  }
+
   // "Convertido en obra" nunca se escribe directo desde el selector de estado -- solo
   // el flujo real de conversión (que crea la obra) puede llegar a ese estado, para que
   // nunca quede un presupuesto "convertido" sin ninguna obra vinculada.
@@ -4648,6 +4722,10 @@ export function PanelPresupuestos() {
     if (estado === 'convertido') {
       if (p.estado !== 'aceptado') {
         alert('Primero marca el presupuesto como "Aceptado" y después conviértelo en obra.')
+        return
+      }
+      if (p.origen_id) {
+        sumarAdicionalALaObra(p)
         return
       }
       abrirConvertir(p)
@@ -4909,7 +4987,9 @@ export function PanelPresupuestos() {
                   style={{ fontSize: 13, padding: '5px 10px', width: 'auto' }}
                 >
                   {(Object.entries(ESTADO_PRESUPUESTO_LABELS) as [EstadoPresupuesto, string][]).map(([k, label]) => (
-                    <option key={k} value={k}>{label}</option>
+                    // En un adicional "Convertido en obra" se lee mal: no crea ninguna obra,
+                    // le suma plata a la que ya existe. Mismo estado en la base, nombre honesto.
+                    <option key={k} value={k}>{k === 'convertido' && p.origen_id ? 'Sumado a la obra' : label}</option>
                   ))}
                 </select>
                 <button className="btn btn-secondary" onClick={() => abrirDetalle(p.id)} style={{ fontSize: 12, padding: '6px 12px' }}>
@@ -5041,21 +5121,22 @@ export function PanelPresupuestos() {
                   <select
                     value={detalle.estado}
                     onChange={e => {
+                      // 09/09: acá había una copia propia de la lógica del selector de la
+                      // lista, que llamaba directo a abrirConvertir. Con eso un ADICIONAL
+                      // abierto por "Detalle" se seguía yendo a crear una obra nueva, saltándose
+                      // el camino de sumarlo a la obra del original. Ahora las dos pantallas
+                      // pasan por la misma función y no pueden volver a separarse.
                       const nuevo = e.target.value as EstadoPresupuesto
-                      if (nuevo === 'convertido') {
-                        if (detalle.estado !== 'aceptado') {
-                          alert('Primero marca el presupuesto como "Aceptado" y después conviértelo en obra.')
-                          return
-                        }
-                        setDetalleId(null); setDetalle(null); abrirConvertir(detalle)
-                        return
-                      }
-                      cambiarEstado(detalle.id, nuevo)
+                      // Solo se cierra si el cambio va a proceder de verdad: si falta marcarlo
+                      // "Aceptado" primero, seleccionarEstado avisa y no hace nada, y cerrar el
+                      // modal ahí dejaría el aviso sin la pantalla a la que se refiere.
+                      if (nuevo === 'convertido' && detalle.estado === 'aceptado') setDetalleId(null)
+                      seleccionarEstado(detalle, nuevo)
                     }}
                     style={{ fontSize: 13, padding: '5px 10px', width: 'auto' }}
                   >
                     {(Object.entries(ESTADO_PRESUPUESTO_LABELS) as [EstadoPresupuesto, string][]).map(([k, label]) => (
-                      <option key={k} value={k}>{label}</option>
+                      <option key={k} value={k}>{k === 'convertido' && detalle.origen_id ? 'Sumado a la obra' : label}</option>
                     ))}
                   </select>
                   <button className="btn btn-danger" onClick={() => eliminarPresupuesto(detalle.id, detalle.cliente_nombre)} style={{ fontSize: 12, padding: '6px 12px', marginLeft: 'auto' }}>
@@ -5683,7 +5764,10 @@ export function PanelClientes({ modoAdmin = false, onNuevoPendiente }: { modoAdm
       <div>
         <button
           onClick={() => setSeleccionado(null)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--secondary)', marginBottom: 16, padding: 0 }}
+          /* Va directo sobre --bg (#10182C), no dentro de una card: con --secondary (#14213D)
+             quedaba azul oscuro sobre azul oscuro, invisible. styles.css ya lo dice -- lo que
+             queda sobre --bg usa las variables *-inverse. */
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--text-inverse)', marginBottom: 16, padding: 0 }}
         >
           ← Volver a clientes
         </button>
