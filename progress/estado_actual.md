@@ -39,6 +39,19 @@ contra la base: existen `movimientos_stock.receptor`, `movimientos_stock.precio_
 
 ### Lo que falta, en orden de lo que más duele
 
+0. **CORREGIR LA OBRA DE ALEXIS: no hay ningún contrato de subcontratista cargado.** Al cierre del 09/09,
+   `subcontratos_master` está VACÍA para "Pasaje rinconada 8948". Lo que hay es un **pago** en
+   `reportes_subcontratos` (Gabriel, $1.088.550, 09/09) que Gustavo cargó desde el Reporte Diario creyendo
+   que estaba creando el contrato. Sin contrato, la app usa los pagos como si fueran el costo total, y por
+   eso la tarjeta dice "Margen" a secas en vez de "Margen (objetivo 25%)" y no aparece "Falta pagar".
+   Los números de esa obra al cierre son **provisorios**: saldo −$199.135 y margen $1.765.674 (54,8%),
+   calculados como si a Gabriel se le debiera exactamente lo que ya se le pagó.
+   **Qué hacer:** cargar el contrato real con su total en Detalle → Subcontratistas → "+ Agregar subcontrato".
+   Ahí el costo pasa a ser lo pactado, aparece "Falta pagar" y vuelve el objetivo del 25%.
+   **Ojo antes de agregar pagos:** Alexandra tenía una transferencia a Gabriel para cargar; hay que revisar si
+   es la misma que ya está cargada del 09/09 antes de duplicarla.
+   (Gabriel ≠ Fabriel: Fabriel es trabajador con sueldo fijo, Gabriel no está en `trabajadores`, es
+   subcontratista. Los nombres se parecen y van a lugares distintos.)
 1. **Cargar el contrato de Cristian** en la obra de Alexis (Detalle → Subcontratistas). Hasta que esté, su
    saldo y su margen no reflejan lo que se le debe. Ojo: si Horma compra los materiales, ese monto es **solo
    su mano de obra** — las compras se cargan aparte y contarlas dos veces haría ver la obra peor de lo real.
@@ -54,6 +67,31 @@ contra la base: existen `movimientos_stock.receptor`, `movimientos_stock.precio_
    materiales. Hay un selector por ítem en Avance de obra. Vale evaluar que el lector de PDF por IA
    categorice de entrada, para que no se repita.
 6. **Seguridad etapa 2** — sigue pendiente desde el 08/09, ver `decisiones.md`.
+
+### Trampas conocidas de la interfaz, sin arreglar (ofrecidas y no aprobadas todavía)
+
+- **"+ Agregar cuenta" puede destruir el presupuesto de una obra.** Regla del 07/09: si una obra tiene
+  cuentas por cobrar, su presupuesto es la SUMA de esas cuentas y el campo de la obra se ignora. Entonces,
+  agregarle la PRIMERA cuenta a una obra que hoy se rige por el campo la deja valiendo solo esa cuenta.
+  Al 09/09: **Luis Carrera y O'Higgins van por cuentas (seguro agregar); Pasaje rinconada ($3.220.140),
+  Camino turístico ($11.731.258) y Geronimo de Alderete ($7.356.580) van por el campo — agregarles una
+  cuenta suelta les reemplaza el total.** Propuesto: avisar en ese botón. Sin aprobar.
+- **La sección "Subcontratos" del Reporte Diario se lee como si ahí se creara el contrato**, y es donde se
+  cargan los PAGOS. Es exactamente lo que confundió a Gustavo. Propuesto: renombrarla a "Pagos a
+  subcontratistas" y avisar cuando se carga un pago a una obra sin contrato. Sin aprobar.
+- **"Crear adicionales →" vive solo en la ficha del cliente**, no en el detalle de la obra, que es por donde
+  Gustavo entra. Propuesto: ponerlo también ahí. Sin aprobar.
+
+### Consulta respondida el 09/09, sin construir nada: mandar el presupuesto por correo desde Clientes
+Se puede, pero **el obstáculo no es técnico**: de 43 clientes, **ninguno tiene correo cargado**. El campo
+existe en el presupuestador y en la ficha y nunca se llena, porque Gustavo trabaja por WhatsApp. Construir el
+envío antes de que haya correos sería repetir lo del módulo de bodega: entero y con cero uso.
+A favor ya está: el PDF se puede reconstruir cuando sea desde los datos guardados (`descargarPdfPresupuesto`),
+y hay 16 Cloudflare Functions, así que el patrón está. Falta un servicio de envío con el dominio de Horma
+verificado, decidir adjunto vs link, y **cerrar esa función** — con la clave pública dentro del JS del sitio,
+una función de correo sin protección es un relay de spam abierto (engancha con la etapa 2).
+Antes de decidir: preguntarle a Gustavo qué quiso decir con *"no quiero que salga WhatsApp, web"*, que sigue
+sin entenderse desde el 08/09 y podría cambiar la prioridad entera.
 
 ### Dos cosas de método que conviene no perder
 
