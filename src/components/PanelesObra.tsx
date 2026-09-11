@@ -946,7 +946,11 @@ export function PanelObras() {
                 {obras.map(o => (
                   <div key={o.obra} className="card" style={{ padding: '16px 18px', borderTop: `3px solid ${o.saldo >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-                      <p className="font-serif" style={{ fontSize: 21, flex: 1, color: 'var(--secondary)' }}>{o.obra}</p>
+                      {/* `minWidth` para que en el telefono los botones bajen enteros a la
+                          linea de abajo en vez de estrangular el titulo: "Pasaje rinconada
+                          8948, Vitacura" se partia en tres lineas y el nombre de la obra es
+                          lo primero que hay que leer. */}
+                      <p className="font-serif" style={{ fontSize: 21, flex: 1, minWidth: 200, color: 'var(--secondary)' }}>{o.obra}</p>
                       {o.obraId && (
                         <select
                           value={o.estadoObra}
@@ -975,8 +979,23 @@ export function PanelObras() {
                         </button>
                       )}
                     </div>
+                    {/* Las fechas se pliegan: son tres campos administrativos que casi nunca
+                        se tocan y en el telefono empujaban todos los numeros abajo del
+                        pliegue, que es donde Gustavo mira la obra (Alexandra, 11/09).
+                        Cerradas muestran lo que hay cargado, que suele ser toda la
+                        pregunta. */}
                     {o.obraId && (
-                      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
+                      <details style={{ marginBottom: 12 }}>
+                        <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer', listStyle: 'revert' }}>
+                          {o.fechaInicio || o.fechaFin || o.garantiaHasta
+                            ? [
+                                o.fechaInicio ? `Inicio ${o.fechaInicio.split('-').reverse().join('/')}` : null,
+                                o.fechaFin ? `fin ${o.fechaFin.split('-').reverse().join('/')}` : null,
+                                o.garantiaHasta ? `garantía hasta ${o.garantiaHasta.split('-').reverse().join('/')}` : null,
+                              ].filter(Boolean).join(' · ')
+                            : 'Sin fechas cargadas'}
+                        </summary>
+                      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 8, fontSize: 12 }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)' }}>
                           Inicio
                           <input type="date" value={o.fechaInicio || ''} onChange={e => guardarFechaObra(o.obraId as string, 'fecha_inicio', e.target.value)} style={{ fontSize: 12, padding: '3px 6px', width: 'auto' }} />
@@ -999,6 +1018,7 @@ export function PanelObras() {
                           )}
                         </label>
                       </div>
+                      </details>
                     )}
                     {/* Tres bloques con sentido propio, en vez de una tira de tarjetas que se
                         acomodan solas según el ancho (Alexandra, 11/09): lo que entra, lo que
@@ -1011,7 +1031,7 @@ export function PanelObras() {
                         <StatTile
                           label="Presupuesto"
                           valor={o.presupuestoTotal != null ? fmtMoney(o.presupuestoTotal) : 'sin definir'}
-                          nota={o.ivaApartar != null ? `De eso, ${fmtMoney(o.ivaApartar)} es IVA: no es plata de Horma` : undefined}
+                          nota={o.ivaApartar != null ? `IVA ${fmtMoney(o.ivaApartar)}` : undefined}
                           compacta
                         />
                         <StatTile label="Abonado" valor={fmtMoney(o.cobrado)} tono="positivo" />
@@ -1030,7 +1050,7 @@ export function PanelObras() {
                         <StatTile
                           label="Compras"
                           valor={fmtMoney(o.gastoCompras)}
-                          nota={o.gastoCompras > 0 ? `Costo sin IVA: ${fmtMoney(o.gastoComprasNeto)}` : undefined}
+                          nota={o.gastoCompras > 0 ? `Sin IVA ${fmtMoney(o.gastoComprasNeto)}` : undefined}
                           compacta
                         />
                         {o.gastoMaterialesBodega > 0 && (
@@ -1053,53 +1073,35 @@ export function PanelObras() {
                         </div>
                       )}
 
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 8 }}>
-                        {/* Las dos que Alexandra no entendió (11/09). El número solo no dice
-                            nada: cada una lleva su cuenta escrita abajo, con el nombre del
-                            subcontratista cuando lo hay, que es lo que la vuelve concreta. */}
-                        {o.margenAlPactar != null && (
-                          <StatTile
-                            label="Te quedaba al cerrar el trato"
-                            valor={fmtMoney(o.margenAlPactar)}
-                            nota={`${o.margenAlPactarPct != null ? `${o.margenAlPactarPct}% — ` : ''}precio sin IVA menos lo pactado con ${o.subcontratistas || 'el subcontratista'}, antes de gastar en materiales`}
-                            compacta
-                          />
-                        )}
-                        {o.margen != null && (
-                          <StatTile
-                            label="Te queda hoy"
-                            valor={fmtMoney(o.margen)}
-                            tono={o.margen < 0 ? 'negativo' : 'positivo'}
-                            nota={`${o.margenPct != null ? `${o.margenPct}% — ` : ''}lo mismo, pero ya descontando todo lo gastado hasta ahora`}
-                            compacta
-                          />
-                        )}
-                        <StatTile
-                          label="Saldo"
-                          valor={fmtMoney(o.saldo)}
-                          tono={o.saldo >= 0 ? 'positivo' : 'negativo'}
-                          nota="Lo abonado menos lo que va costando"
-                          compacta
-                        />
-                      </div>
                     </div>
-                    {/* Pedido de Alexandra (11/09): "definitivamente tenemos que meter la parte
-                        fiscal y contable". Sin esta línea, el margen usa un número de compras
-                        distinto al de la tarjeta de arriba y parece un error de la app. */}
-                    {(o.gastoCompras > 0 || o.gastoSubcontratos > 0) && (
-                      <details style={{ marginBottom: 12 }}>
-                        <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>
-                          Por qué el margen no resta las compras completas
-                        </summary>
-                        <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5, marginTop: 6 }}>
-                          Los materiales se cuentan <strong>sin IVA</strong>: las compras van con factura y ese
-                          IVA vuelve como crédito fiscal, así que no es plata que la obra perdió.
-                          {o.ivaRecuperableCompras > 0 && <> En esta obra se compraron {fmtMoney(o.gastoCompras)} y {fmtMoney(o.ivaRecuperableCompras)} de eso es IVA recuperable, así que el costo real de materiales es {fmtMoney(o.gastoComprasNeto)}.</>}
-                          {' '}Los subcontratistas se cuentan <strong>completos</strong>, porque no facturan ni
-                          boletean: ahí no hay IVA que recuperar y lo que se les paga es costo entero.
-                          {' '}La tarjeta “Compras” muestra lo que salió del banco, para cuadrar caja.
-                        </p>
-                      </details>
+
+                    {/* El resultado, en una línea sola y grande. Antes eran tres tarjetas con
+                        párrafos adentro y en el teléfono quedaba ilegible -- Alexandra, 11/09:
+                        "no se ve pro ni premium... esa información debería vivir entonces en
+                        el detalle de la obra, no allí". Acá queda el número que importa, y la
+                        cuenta completa con sus explicaciones se lee en el detalle. */}
+                    {o.margen != null && (
+                      <button
+                        onClick={() => setHistorialObra(o.obra)}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap',
+                          background: 'none', border: 'none', borderTop: '1px solid var(--border)',
+                          padding: '12px 0 4px', marginBottom: 8, cursor: 'pointer', textAlign: 'left', color: 'var(--text)',
+                        }}
+                      >
+                        <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                          Te queda hoy
+                        </span>
+                        <span className="font-display" style={{ fontSize: 24, fontWeight: 800, color: o.margen < 0 ? 'var(--danger)' : 'var(--success)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                          {fmtMoney(o.margen)}
+                        </span>
+                        {o.margenPct != null && (
+                          <span style={{ fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{o.margenPct}%</span>
+                        )}
+                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--primary)' }}>
+                          Ver cómo se calcula →
+                        </span>
+                      </button>
                     )}
                     <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {o.obraId ? (
@@ -1196,6 +1198,7 @@ export function PanelObras() {
         <HistorialObraModal
           obra={historialObra}
           obraId={obrasMaestro.find(o => o.nombre === historialObra)?.id}
+          resumen={resumen.find(o => o.obra === historialObra)}
           presupuestoId={obrasMaestro.find(o => o.nombre === historialObra)?.presupuesto_id ?? null}
           diarios={diarios}
           compras={compras}
@@ -4936,9 +4939,100 @@ function BitacoraObra({ obra, presupuestoId }: { obra: string; presupuestoId: st
   )
 }
 
+// La fila que devuelve `calcularResumenObras` para una obra. Se deriva del cálculo en vez de
+// escribirla a mano, así no puede quedar desfasada si mañana se agrega un campo.
+export type ResumenObra = ReturnType<typeof calcularResumenObras>[number]
+
+/* ─── Cómo va la plata de esta obra ──── */
+// Vive en el detalle y no en la tarjeta de la obra, a pedido de Alexandra (11/09): en la
+// tarjeta eran tres recuadros con un párrafo adentro cada uno y en el teléfono quedaba
+// ilegible. Acá hay lugar para contarlo como lo que es -- una resta con tres pasos.
+function ComoVaLaPlata({ o }: { o: ResumenObra }) {
+  if (o.margen == null || o.neto == null) return null
+  const costoTotal = o.gastoComprasNeto + o.gastoMaterialesBodega + o.manoDeObra
+  const Linea = ({ etiqueta, valor, detalle, fuerte, tono }: { etiqueta: string; valor: string; detalle?: string; fuerte?: boolean; tono?: string }) => (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: fuerte ? 13.5 : 13, fontWeight: fuerte ? 700 : 500 }}>{etiqueta}</p>
+        {detalle && <p style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.4, marginTop: 2 }}>{detalle}</p>}
+      </div>
+      <span className="font-display" style={{ fontSize: fuerte ? 18 : 14, fontWeight: fuerte ? 800 : 600, color: tono || 'var(--text)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+        {valor}
+      </span>
+    </div>
+  )
+
+  return (
+    <SeccionPlegable
+      titulo="Cómo va la plata"
+      abiertaPorDefecto
+      resumen={`Te queda hoy ${fmtMoney(o.margen)}${o.margenPct != null ? ` · ${o.margenPct}%` : ''}`}
+    >
+      <div>
+        <Linea
+          etiqueta="Precio de la obra, sin IVA"
+          detalle={o.ivaApartar != null ? `${fmtMoney(o.presupuestoTotal ?? 0)} menos ${fmtMoney(o.ivaApartar)} de IVA, que va al SII y no es plata de Horma` : 'Esta obra no está marcada como “el precio incluye IVA”, así que se usa el precio completo'}
+          valor={fmtMoney(o.neto)}
+        />
+        {o.margenAlPactar != null && (
+          <Linea
+            etiqueta={`Menos lo pactado con ${o.subcontratistas || 'el subcontratista'}`}
+            detalle="Lo que se le prometió por el trabajo completo, facture o no"
+            valor={`− ${fmtMoney(o.gastoSubcontratos)}`}
+          />
+        )}
+        {o.margenAlPactar != null && (
+          <Linea
+            etiqueta="Te quedaba al cerrar el trato"
+            detalle="La bolsa que le quedó a Horma el día que se cerró, antes de gastar un peso en materiales. Este número no se mueve salvo que se renegocie."
+            valor={`${fmtMoney(o.margenAlPactar)}${o.margenAlPactarPct != null ? ` · ${o.margenAlPactarPct}%` : ''}`}
+            fuerte
+          />
+        )}
+        {costoTotal > 0 && (
+          <Linea
+            etiqueta="Menos lo que se lleva gastado"
+            detalle={[
+              o.gastoComprasNeto > 0 ? `materiales ${fmtMoney(o.gastoComprasNeto)} (se compraron ${fmtMoney(o.gastoCompras)}, pero ${fmtMoney(o.ivaRecuperableCompras)} es IVA que vuelve con la factura)` : null,
+              o.gastoMaterialesBodega > 0 ? `bodega ${fmtMoney(o.gastoMaterialesBodega)}` : null,
+              o.manoDeObra > 0 ? `mano de obra ${fmtMoney(o.manoDeObra)}` : null,
+            ].filter(Boolean).join(' · ')}
+            valor={`− ${fmtMoney(costoTotal)}`}
+          />
+        )}
+        <Linea
+          etiqueta="Te queda hoy"
+          detalle={o.margenAlPactar != null
+            ? 'Si mañana se compra más material, este número baja y el de arriba no se mueve: la distancia entre los dos es lo que se está yendo.'
+            : 'Lo que queda del precio sin IVA después de todos los costos. Baja cada vez que se compra algo.'}
+          valor={`${fmtMoney(o.margen)}${o.margenPct != null ? ` · ${o.margenPct}%` : ''}`}
+          fuerte
+          tono={o.margen < 0 ? 'var(--danger)' : 'var(--success)'}
+        />
+        <Linea
+          etiqueta="Saldo de caja"
+          detalle="Lo que el cliente ya abonó, menos lo que la obra va costando. Es distinto de lo de arriba: mide la plata que entró, no la ganancia."
+          valor={fmtMoney(o.saldo)}
+          tono={o.saldo < 0 ? 'var(--danger)' : 'var(--success)'}
+        />
+      </div>
+
+      {(o.gastoCompras > 0 || o.gastoSubcontratos > 0) && (
+        <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginTop: 12 }}>
+          Los materiales se cuentan <strong>sin IVA</strong> porque las compras van con factura y ese IVA vuelve
+          como crédito fiscal: no es plata que la obra perdió. Los subcontratistas se cuentan <strong>completos</strong>,
+          porque no facturan ni boletean. La tarjeta “Compras” de la pestaña Obras muestra lo que salió del banco,
+          para cuadrar caja.
+        </p>
+      )}
+    </SeccionPlegable>
+  )
+}
+
 export function HistorialObraModal({
   obra,
   obraId,
+  resumen,
   presupuestoId = null,
   diarios,
   compras,
@@ -4957,6 +5051,9 @@ export function HistorialObraModal({
 }: {
   obra: string
   obraId?: string
+  // La fila ya calculada de esta obra. Se pasa hecha en vez de recalcularla acá, para que
+  // el detalle no pueda mostrar un numero distinto al de la tarjeta.
+  resumen?: ResumenObra
   presupuestoId?: string | null
   // Para que la tarjeta de la obra recalcule saldo y margen apenas se carga un subcontrato,
   // sin tener que cerrar el detalle y volver a entrar.
@@ -5015,6 +5112,8 @@ export function HistorialObraModal({
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+
+        {resumen && <ComoVaLaPlata o={resumen} />}
 
         <PresupuestoDeLaObra presupuestoId={presupuestoId} obraId={obraId} />
 
