@@ -364,6 +364,20 @@ function aNeto(montoConIva: number) {
   return Math.round(montoConIva / (1 + IVA_PCT / 100))
 }
 
+// Cuánto le carga Gustavo encima al costo de los materiales cuando arma un presupuesto.
+// Alexandra, 11/09: "de el precio que cobramos en los materiales al cliente Gustavo
+// supuestamente suma un 25%... eso lo veremos fielmente cuando una obra la logremos cerrar
+// con todos los materiales cargados, mientras usemos el 25% a ver si logramos hacer esto".
+//
+// Es un SUPUESTO, no un dato medido, y la app lo dice en pantalla donde lo usa. Sirve para
+// convertir el presupuesto (que tiene PRECIOS al cliente) en un presupuesto de COSTOS, que
+// es lo que pide un WIP report de verdad: sin eso, "precio menos lo gastado hasta hoy" no
+// significa nada porque ignora lo que falta gastar.
+//
+// PARA VALIDARLO: cuando cierre una obra con todos sus materiales cargados, comparar el
+// costo estimado contra lo realmente gastado. Si no da 25%, se corrige acá.
+const RECARGO_MATERIALES_PCT = 25
+
 // Resumen por obra (cobrado, gastado, saldo, falta por cobrar) -- extraído de
 // PanelObras para que PanelConsultasIA (chat con IA) use exactamente el mismo
 // cálculo, y nunca le muestre a Gustavo un número de saldo distinto al de la
@@ -381,6 +395,9 @@ export function calcularResumenObras(
   // Salidas de bodega hacia obras (09/09). Opcional para no romper a quien llame sin esto:
   // sin el dato el resultado es el de antes, no un número a medias.
   salidasStock: MovimientoStock[] = [],
+  // Ítems presupuestados de cada obra. Con ellos se puede estimar cuánto VA a costar la
+  // obra, no solo cuánto lleva gastado. Opcional por el mismo motivo.
+  obraItems: ObraItem[] = [],
 ) {
   const nombres = Array.from(new Set([
     ...obrasMaestro.map(o => o.nombre),
@@ -528,6 +545,35 @@ export function calcularResumenObras(
     // sale de ahí, y la distancia entre esa bolsa y el margen de hoy es exactamente cuánto se
     // lleva gastado. Sin reglas que mantener: si el contrato está bien escrito, el número es
     // correcto solo.
+    // ─── Lo que la obra VA a costar, no solo lo que lleva gastado ───
+    // Es la pieza que faltaba para tener un WIP report de verdad. El presupuesto guarda
+    // PRECIOS al cliente; dividir los materiales por el recargo los convierte en el COSTO
+    // que Horma espera tener. La mano de obra no se convierte: si la obra está
+    // subcontratada su costo ya es el contrato (un dato real, no un supuesto), y si la hace
+    // el equipo propio no sabemos el recargo, así que se usa lo que va corriendo.
+    const itemsObra = maestro ? obraItems.filter(i => i.obra_id === maestro.id) : []
+    const totalItem = (i: ObraItem) => (i.cantidad + (i.cantidad_adicional || 0)) * i.precio_unitario
+    const materialesPresupuestados = itemsObra.filter(i => (i.categoria || '').toUpperCase() === 'MATERIALES').reduce((sum, i) => sum + totalItem(i), 0)
+    const hayPresupuestoDeMateriales = materialesPresupuestados > 0
+    const costoEstimadoMateriales = hayPresupuestoDeMateriales
+      ? Math.round(materialesPresupuestados / (1 + RECARGO_MATERIALES_PCT / 100))
+      : null
+    // Cuánto del presupuesto de materiales se lleva consumido. Es el aviso temprano que hoy
+    // no existe: pasarse se ve recién al cerrar la obra, cuando ya no se puede hacer nada.
+    const materialesGastados = gastoComprasNeto + gastoMaterialesBodega
+    const pctMaterialesUsado = costoEstimadoMateriales && costoEstimadoMateriales > 0
+      ? Math.round((materialesGastados / costoEstimadoMateriales) * 1000) / 10
+      : null
+    // Costo final estimado = lo que falta comprar de materiales (o lo gastado, si ya se pasó)
+    // + el costo real de la gente. Solo se calcula si hay con qué estimarlo.
+    const costoFinalEstimado = costoEstimadoMateriales != null
+      ? Math.max(costoEstimadoMateriales, materialesGastados) + gastoSubcontratos + manoDeObra
+      : null
+    const margenProyectado = neto != null && costoFinalEstimado != null ? neto - costoFinalEstimado : null
+    const margenProyectadoPct = margenProyectado != null && neto && neto > 0
+      ? Math.round((margenProyectado / neto) * 1000) / 10
+      : null
+
     const margenAlPactar = neto != null && esSubcontratada ? neto - gastoSubcontratos : null
     const margenAlPactarPct = margenAlPactar != null && neto && neto > 0
       ? Math.round((margenAlPactar / neto) * 1000) / 10
@@ -536,6 +582,7 @@ export function calcularResumenObras(
     return {
       obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar, subcontratosPorPagar,
       neto, margen, margenPct, esSubcontratada, margenAlPactar, margenAlPactarPct,
+      materialesPresupuestados, costoEstimadoMateriales, materialesGastados, pctMaterialesUsado, costoFinalEstimado, margenProyectado, margenProyectadoPct,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
       tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoComprasNeto, ivaRecuperableCompras, gastoMaterialesBodega, gastoSubcontratos, pagadoSubcontratos, subcontratistas, abonosSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
@@ -554,6 +601,7 @@ export function PanelObras() {
   const [abonos, setAbonos] = useState<AbonoCuenta[]>([])
   const [loading, setLoading] = useState(true)
   const [vista, setVista] = useState<'curso' | 'culminadas'>('curso')
+  const [obraItems, setObraItems] = useState<ObraItem[]>([])
   const [historialObra, setHistorialObra] = useState<string | null>(null)
   const [mostrarGuia, setMostrarGuia] = useState(false)
   const [mostrarNuevaObra, setMostrarNuevaObra] = useState(false)
@@ -572,7 +620,7 @@ export function PanelObras() {
   }, [])
 
   const cargar = useCallback(async () => {
-    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }, { data: t }, { data: sm }, { data: cu }, { data: ab }, { data: pa }, { data: sal }] = await Promise.all([
+    const [{ data: d }, { data: c }, { data: co }, { data: s }, { data: m }, { data: t }, { data: sm }, { data: cu }, { data: ab }, { data: pa }, { data: sal }, { data: items }] = await Promise.all([
       supabase.from('reportes_diarios').select('*'),
       supabase.from('reportes_compras').select('*'),
       supabase.from('reportes_cobros').select('*'),
@@ -588,7 +636,10 @@ export function PanelObras() {
         .order('created_at', { ascending: false }),
       // Material entregado desde bodega: es costo de la obra que lo recibió.
       supabase.from('movimientos_stock').select('*').eq('tipo', 'salida'),
+      // Ítems presupuestados: con ellos se estima cuánto VA a costar cada obra.
+      supabase.from('obra_items').select('*'),
     ])
+    setObraItems((items as ObraItem[]) || [])
     setSalidasStock((sal as MovimientoStock[]) || [])
     setDiarios((d as ReporteTrabajadorDia[]) || [])
     setCompras((c as ReporteCompraDia[]) || [])
@@ -769,7 +820,7 @@ export function PanelObras() {
 
   if (loading) return <div className="spinner" />
 
-  const resumen = calcularResumenObras(obrasMaestro, diarios, compras, cobros, subcontratos, cuentas, abonos, subcontratosMaster, trabajadoresTarifas, salidasStock)
+  const resumen = calcularResumenObras(obrasMaestro, diarios, compras, cobros, subcontratos, cuentas, abonos, subcontratosMaster, trabajadoresTarifas, salidasStock, obraItems)
 
   const enCurso = resumen.filter(o => o.activa)
   const culminadas = resumen.filter(o => !o.activa)
@@ -1089,13 +1140,13 @@ export function PanelObras() {
                       >
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
                           <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                            Va quedando
+                            {o.margenProyectado != null ? 'Va a terminar dejando' : 'Va quedando'}
                           </span>
-                          <span className="font-display" style={{ fontSize: 24, fontWeight: 800, color: o.margen < 0 ? 'var(--danger)' : 'var(--success)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-                            {fmtMoney(o.margen)}
+                          <span className="font-display" style={{ fontSize: 24, fontWeight: 800, color: (o.margenProyectado ?? o.margen) < 0 ? 'var(--danger)' : 'var(--success)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                            {fmtMoney(o.margenProyectado ?? o.margen)}
                           </span>
-                          {o.margenPct != null && (
-                            <span style={{ fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{o.margenPct}%</span>
+                          {(o.margenProyectadoPct ?? o.margenPct) != null && (
+                            <span style={{ fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{o.margenProyectadoPct ?? o.margenPct}%</span>
                           )}
                           <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--primary)' }}>
                             Ver cómo se calcula →
@@ -1106,9 +1157,9 @@ export function PanelObras() {
                             todo y no es así". Es lo que la obra va a dejar SI el cliente paga todo y
                             no se gasta más, y al lado va lo que de verdad entró. */}
                         <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.45 }}>
-                          Es el techo: arranca en el precio sin IVA y baja con cada gasto. Nunca sube. Y todavía
-                          no es plata tuya
-                          {o.presupuestoTotal != null && <> — el cliente abonó {fmtMoney(o.cobrado)} de {fmtMoney(o.presupuestoTotal)}</>}.
+                          {o.margenProyectado != null
+                            ? <>Cuenta lo que todavía falta comprar, no solo lo gastado. Lleva usado el {o.pctMaterialesUsado}% del presupuesto de materiales.</>
+                            : <>Es el techo: arranca en el precio sin IVA y baja con cada gasto, nunca sube. Ponle categoría a los ítems en Avance de obra y la app puede decirte con cuánto va a terminar.</>}
                         </p>
                       </button>
                     )}
@@ -5020,6 +5071,23 @@ function ComoVaLaPlata({ o }: { o: ResumenObra }) {
           fuerte
           tono={o.margen < 0 ? 'var(--danger)' : 'var(--success)'}
         />
+        {o.costoFinalEstimado != null && o.margenProyectado != null && (
+          <>
+            <Linea
+              etiqueta="Falta comprar de materiales"
+              detalle={`Se presupuestaron ${fmtMoney(o.materialesPresupuestados)} en materiales. Quitándoles el ${RECARGO_MATERIALES_PCT}% que Gustavo les carga encima, costarían ${fmtMoney(o.costoEstimadoMateriales as number)}; se llevan gastados ${fmtMoney(o.materialesGastados)}.`}
+              valor={fmtMoney(Math.max((o.costoEstimadoMateriales as number) - o.materialesGastados, 0))}
+            />
+            <Linea
+              etiqueta="Va a terminar dejando"
+              detalle={`Esto SÍ mira hacia adelante: descuenta lo que todavía falta comprar, no solo lo gastado. Es el número que dice si la obra va a cerrar bien. Supone que los materiales se cobran con ${RECARGO_MATERIALES_PCT}% encima -- a confirmar cuando cierre una obra con todos sus materiales cargados.`}
+              valor={`${fmtMoney(o.margenProyectado)}${o.margenProyectadoPct != null ? ` · ${o.margenProyectadoPct}%` : ''}`}
+              fuerte
+              tono={o.margenProyectado < 0 ? 'var(--danger)' : 'var(--success)'}
+            />
+          </>
+        )}
+
         <Linea
           etiqueta="Saldo de la obra"
           detalle={`Lo que el cliente ya abonó (${fmtMoney(o.cobrado)}) menos lo que la obra cuesta. A diferencia de la proyección de arriba, parte de la plata que de verdad entró.${o.subcontratosPorPagar > 0 ? ` Ojo: los subcontratos se descuentan por lo CONTRATADO, no por lo pagado, así que acá adentro hay ${fmtMoney(o.subcontratosPorPagar)} comprometidos que todavía no salieron de la cuenta.` : ''}`}
