@@ -49,12 +49,16 @@ $407.847**.
 
 ### LO QUE FALTA HACER, en orden
 
-1. **Correr las dos migraciones, en este orden** (las corre Alexandra a mano, el MCP es de solo lectura):
-   - `sql/20260911_gastos_variables_desde_reporte.sql` — agrega `foto_boleta_url` y `origen`. Sin esto, el
-     destino "Gasto de la empresa" no guarda (la app lo avisa por nombre y **no** llega a borrar compras).
-   - `sql/20260911_reclasificar_gastos_de_empresa.sql` — saca del costo de las obras las 9 filas que no son
-     de una obra, $753.258. Lleva su consulta de verificación adentro.
-2. **Decidir si se pushea a producción.** Seis commits locales. Nada se subió.
+1. ✅ **Las dos migraciones YA ESTÁN CORRIDAS** (Alexandra, 11/09 por la tarde). Verificado contra la base:
+   `gastos_variables` tiene `origen` y `foto_boleta_url`, y la reclasificación devolvió exacto lo esperado —
+   0 compras, 9 gastos, **$753.258** movidos (Herramientas $642.858 · Combustible $92.100 · Transporte
+   $18.300). O'Higgins pasó de $2.601.246 a $1.927.986 en compras y su margen a **$29.868.676 (76,5%)**.
+   Los dos peajes de septiembre aparecieron en Estado de Resultados: gastos variables del mes $554.370 →
+   $566.570, la diferencia exacta.
+2. 🔴 **DECIDIR EL PUSH — es lo único que queda y ahora es urgente.** Los commits siguen locales.
+   **Producción tiene el bug del guardado** (ver abajo) y además ya tiene los datos reclasificados pero no
+   el cálculo en neto, así que hoy muestra márgenes a mitad de camino: correctos en los datos, viejos en la
+   fórmula.
 3. **Bloque 0 — carga de datos, no requiere código.** Sigue pendiente entero: los PDF de los presupuestos que
    Gustavo hizo desde el teléfono, el contrato de Cristian, precio a los 2 materiales viejos, borrar los datos
    de prueba (incluida la obra "Gustavo prueba", que hoy ensucia la pestaña Obras con un margen inventado), y
@@ -62,6 +66,18 @@ $407.847**.
 4. **Subir las facturas emitidas que falten.** Es el agujero más grande de la pantalla de IVA nueva: la app
    tiene 3 documentos emitidos cargados en total, así que el débito fiscal sale corto y el F29 real va a dar
    más. La pantalla lo dice, pero el arreglo es cargar los documentos.
+
+### 🔴 BUG DE PRODUCCIÓN ENCONTRADO EL 11/09 POR LA TARDE — arreglado, sin pushear
+Alexandra no podía guardar el reporte: "Falta indicar la obra de algún trabajador presente", sin haber tocado
+asistencia. Mismo síntoma que el 07/09 pero **otra causa**, y el arreglo de aquella vez no lo tapa.
+
+La lista `TRABAJADORES` escrita en el código estaba vieja en los dos sentidos: tenía a Alejandro (archivado) y
+le faltaba Yasmani. Cuando llegaba la lista real, Yasmani quedaba en "presente sin obra" y bloqueaba el
+guardado **del día entero**. Reproducido demorando la petición 1,8s: sin el arreglo, alerta y CERO escrituras.
+
+Se arregló la raíz: **se borró la lista escrita a mano**. Ahora la asistencia de un día sale de los
+trabajadores activos de la base más quien tenga fila guardada ese día — lo que además hace que un archivado
+siga apareciendo en los días que trabajó, que antes se perdían de vista. Cinco escenarios probados.
 
 ### Una cosa que encontré y conviene mirar
 Al revisar las 44 compras una por una (el "riesgo a revisar" del plan), las cuatro más viejas con desglose
