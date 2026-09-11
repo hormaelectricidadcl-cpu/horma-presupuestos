@@ -1083,23 +1083,33 @@ export function PanelObras() {
                       <button
                         onClick={() => setHistorialObra(o.obra)}
                         style={{
-                          width: '100%', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap',
-                          background: 'none', border: 'none', borderTop: '1px solid var(--border)',
+                          width: '100%', background: 'none', border: 'none', borderTop: '1px solid var(--border)',
                           padding: '12px 0 4px', marginBottom: 8, cursor: 'pointer', textAlign: 'left', color: 'var(--text)',
                         }}
                       >
-                        <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                          Te queda hoy
-                        </span>
-                        <span className="font-display" style={{ fontSize: 24, fontWeight: 800, color: o.margen < 0 ? 'var(--danger)' : 'var(--success)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-                          {fmtMoney(o.margen)}
-                        </span>
-                        {o.margenPct != null && (
-                          <span style={{ fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{o.margenPct}%</span>
-                        )}
-                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--primary)' }}>
-                          Ver cómo se calcula →
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                          <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                            Ganancia proyectada
+                          </span>
+                          <span className="font-display" style={{ fontSize: 24, fontWeight: 800, color: o.margen < 0 ? 'var(--danger)' : 'var(--success)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                            {fmtMoney(o.margen)}
+                          </span>
+                          {o.margenPct != null && (
+                            <span style={{ fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{o.margenPct}%</span>
+                          )}
+                          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--primary)' }}>
+                            Ver cómo se calcula →
+                          </span>
+                        </div>
+                        {/* La aclaración es el punto, no un adorno: "Te queda hoy" se leía como plata
+                            en la mano y no lo es -- Alexandra, 11/09: "eso asume que ya me pagaron
+                            todo y no es así". Es lo que la obra va a dejar SI el cliente paga todo y
+                            no se gasta más, y al lado va lo que de verdad entró. */}
+                        <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.45 }}>
+                          Todavía no es plata tuya: es lo que dejaría la obra si el cliente paga todo y no se
+                          gasta más.
+                          {o.presupuestoTotal != null && <> Hasta ahora abonó {fmtMoney(o.cobrado)} de {fmtMoney(o.presupuestoTotal)}.</>}
+                        </p>
                       </button>
                     )}
                     <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -2550,8 +2560,8 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Saldo', texto: 'Lo abonado menos lo que CUESTA la obra: mano de obra, compras, materiales entregados desde bodega y subcontratos contratados. Un costo cuenta cuando se incurre, no cuando se paga, así que un sobrecosto se ve apenas se contrata y no cuando llega la factura. No es la plata que queda en la cuenta: para eso mira "Falta pagar", que es lo comprometido que todavía no salió.' },
   { titulo: 'Materiales de bodega', texto: 'Material que salió de la bodega hacia esta obra, con su vale de entrega. Aparece cuando se compró en bloque (sin decidir la obra todavía) y después se entregó: el costo se le carga a la obra recién en ese momento, no al pagar la boleta. Cada salida queda valorizada con el precio que tenía cuando salió, así una compra nueva más cara no reescribe lo que costó una obra ya cerrada.' },
   { titulo: 'IVA a apartar', texto: 'Va escrito debajo del Presupuesto: cuánto de ese total es IVA y hay que transferir a la cuenta de IVA, porque no es plata de Horma. Aparece solo en las obras marcadas como "el precio incluye IVA".' },
-  { titulo: 'Te quedaba al cerrar el trato', texto: 'En las obras que ejecuta un subcontratista: el precio sin IVA menos lo pactado con él. Es la bolsa que le quedó a Horma al cerrar el trato, antes de gastar un peso en materiales. La distancia entre este número y "Te queda hoy" es exactamente cuánto se lleva gastado. Sale del monto que se escribe a mano al cargar el subcontrato, porque cada trato se negocia distinto y no hay fórmula que lo reproduzca.' },
-  { titulo: 'Te queda hoy', texto: 'Lo que queda del precio sin IVA después de restar mano de obra, compras, materiales de bodega y subcontratos. Es la ganancia de la obra si se cerrara hoy: si mañana se compra más material, este número baja. Si la obra no está marcada como "incluye IVA", el porcentaje sale más alto de lo real y la app te lo avisa.' },
+  { titulo: 'Te quedaba al cerrar el trato', texto: 'En las obras que ejecuta un subcontratista: el precio sin IVA menos lo pactado con él. Es la bolsa que le quedó a Horma al cerrar el trato, antes de gastar un peso en materiales. La distancia entre este número y "Ganancia proyectada" es exactamente cuánto se lleva gastado. Sale del monto que se escribe a mano al cargar el subcontrato, porque cada trato se negocia distinto y no hay fórmula que lo reproduzca.' },
+  { titulo: 'Ganancia proyectada', texto: 'Lo que queda del precio sin IVA después de restar mano de obra, compras, materiales de bodega y subcontratos. NO es plata que ya tengas: da por hecho que el cliente va a pagar todo el precio y que no se va a gastar más. Para ver la plata que realmente entró, mirá el Saldo. Si mañana se compra más material, este número baja. Si la obra no está marcada como "incluye IVA", el porcentaje sale más alto de lo real y la app te lo avisa.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
 
@@ -4965,7 +4975,7 @@ function ComoVaLaPlata({ o }: { o: ResumenObra }) {
     <SeccionPlegable
       titulo="Cómo va la plata"
       abiertaPorDefecto
-      resumen={`Te queda hoy ${fmtMoney(o.margen)}${o.margenPct != null ? ` · ${o.margenPct}%` : ''}`}
+      resumen={`Ganancia proyectada ${fmtMoney(o.margen)}${o.margenPct != null ? ` · ${o.margenPct}%` : ''}`}
     >
       <div>
         <Linea
@@ -5000,17 +5010,15 @@ function ComoVaLaPlata({ o }: { o: ResumenObra }) {
           />
         )}
         <Linea
-          etiqueta="Te queda hoy"
-          detalle={o.margenAlPactar != null
-            ? 'Si mañana se compra más material, este número baja y el de arriba no se mueve: la distancia entre los dos es lo que se está yendo.'
-            : 'Lo que queda del precio sin IVA después de todos los costos. Baja cada vez que se compra algo.'}
+          etiqueta="Ganancia proyectada"
+          detalle={`Lo que dejaría la obra SI el cliente paga todo el precio y no se gasta más. Todavía no es plata tuya${o.presupuestoTotal != null ? `: abonó ${fmtMoney(o.cobrado)} de ${fmtMoney(o.presupuestoTotal)}` : ''}.${o.margenAlPactar != null ? ' Si mañana se compra más material este número baja y el de arriba no se mueve: la distancia entre los dos es lo que se está yendo.' : ''}`}
           valor={`${fmtMoney(o.margen)}${o.margenPct != null ? ` · ${o.margenPct}%` : ''}`}
           fuerte
           tono={o.margen < 0 ? 'var(--danger)' : 'var(--success)'}
         />
         <Linea
           etiqueta="Saldo de caja"
-          detalle="Lo que el cliente ya abonó, menos lo que la obra va costando. Es distinto de lo de arriba: mide la plata que entró, no la ganancia."
+          detalle="Esta sí es plata de verdad: lo que el cliente ya abonó menos lo que la obra lleva gastado. Lo de arriba es una proyección; esto es lo que pasó por la cuenta."
           valor={fmtMoney(o.saldo)}
           tono={o.saldo < 0 ? 'var(--danger)' : 'var(--success)'}
         />

@@ -1179,8 +1179,7 @@ export default function Reporte({ token, embedded = false }: Props) {
             <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Compras y gastos del día</h2>
             <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
               Todo lo que se pagó hoy va acá: los materiales de una obra, los que se compran en bloque para
-              bodega, y los gastos de la empresa como combustible, peaje o herramientas. No hay que ir a otra
-              pantalla — lo que cambia es el destino que elijas en cada una, y la app la manda a donde va.
+              bodega, y los gastos de la empresa como combustible, peaje o herramientas.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
               {compras.map((c, idx) => {
