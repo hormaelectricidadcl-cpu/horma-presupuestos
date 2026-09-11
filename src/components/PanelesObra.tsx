@@ -4,6 +4,8 @@ import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
 import { generatePDF } from '../utils/pdfGenerator'
 import { generatePDFEtapas } from '../utils/pdfGeneratorEtapas'
+import { generatePDFConsolidado } from '../utils/pdfConsolidado'
+import type { LineaConsolidado, DocumentoConsolidado } from '../utils/pdfConsolidado'
 import type { ReporteTrabajadorDia, ReporteCompraDia, ReporteCobroDia, ReporteSubcontratoDia, ReporteTrabajoPuntualDia, Trabajador, CuentaPorCobrar, AbonoCuenta, GastoFijo, GastoVariable, Obra, SubcontratoMaster, PresupuestoGuardado, PresupuestoDetalle, EstadoPresupuesto, EstadoObra, ObraMedia, EventoCalendario, Material, MovimientoStock, CompraItem, Cliente, Pendiente, TipoPendiente, PagoSemanalComprobante, IdeaContenido, AjustePagoSemanal, AdelantoTrabajador, ObraItem, ObraFase, ObraAvanceRegistro, PresupuestoItemSimple, PresupuestoEtapa, ClienteFactura } from '../types'
 
 // Componentes y cálculos compartidos entre el panel de Admin (Alexandra) y el
@@ -3692,10 +3694,20 @@ function PresupuestoDeLaFicha({ presupuesto, adicionales = [] }: { presupuesto: 
             return (
               <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                 {sumaSumados > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 700 }}>
-                    <span>Vigente (original + {sumados.length} adicional{sumados.length !== 1 ? 'es' : ''} sumado{sumados.length !== 1 ? 's' : ''} a la obra)</span>
-                    <span>{fmtMoney((presupuesto.total || 0) + sumaSumados)}</span>
-                  </div>
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 700 }}>
+                      <span>Vigente (original + {sumados.length} adicional{sumados.length !== 1 ? 'es' : ''} sumado{sumados.length !== 1 ? 's' : ''} a la obra)</span>
+                      <span>{fmtMoney((presupuesto.total || 0) + sumaSumados)}</span>
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => descargarPdfConsolidado(presupuesto, sumados)}
+                      style={{ fontSize: 12, marginTop: 8 }}
+                      title="Un solo PDF con el original, cada adicional y el total vigente — para mandárselo al cliente sin tener que explicarle la cuenta."
+                    >
+                      PDF del vigente (original + adicionales)
+                    </button>
+                  </>
                 )}
                 {sumaPendientes > 0 && (
                   <p style={{ fontSize: 11.5, color: 'var(--primary)', fontWeight: 600, marginTop: sumaSumados > 0 ? 6 : 0, lineHeight: 1.45 }}>
@@ -3856,10 +3868,20 @@ function PresupuestoDeLaObra({ presupuestoId, obraId }: { presupuestoId: string 
                 ))}
               </div>
               {sumaSumados > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontWeight: 700 }}>
-                  <span>Total de la obra (original + {sumados.length} adicional{sumados.length !== 1 ? 'es' : ''})</span>
-                  <span>{fmtMoney((presupuesto.total || 0) + sumaSumados)}</span>
-                </div>
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontWeight: 700 }}>
+                    <span>Total de la obra (original + {sumados.length} adicional{sumados.length !== 1 ? 'es' : ''})</span>
+                    <span>{fmtMoney((presupuesto.total || 0) + sumaSumados)}</span>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => descargarPdfConsolidado(presupuesto, sumados)}
+                    style={{ fontSize: 12, marginTop: 8 }}
+                    title="Un solo PDF con el original, cada adicional y el total vigente — para mandárselo al cliente sin tener que explicarle la cuenta."
+                  >
+                    PDF del vigente (original + adicionales)
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -5164,6 +5186,95 @@ export function descargarPdfPresupuesto(d: PresupuestoDetalle) {
     const client = { name: d.cliente_nombre || '', rut: '', email: d.cliente_email || '', address: d.cliente_direccion || '' }
     generatePDF(client, d.items || [], d.gg_pct ?? 10, d.referencia || undefined)
   }
+}
+
+// Pasa un presupuesto guardado a las líneas que muestra el PDF consolidado. Los "simple"
+// guardan `items` y los "etapas" guardan `etapas` con otra forma; para el cliente son lo
+// mismo, así que acá se unifican.
+function lineasDelPresupuesto(d: PresupuestoDetalle): LineaConsolidado[] {
+  const lineas: LineaConsolidado[] = []
+  if (d.tipo === 'etapas') {
+    for (const etapa of d.etapas || []) {
+      for (const it of etapa.items) {
+        lineas.push({
+          descripcion: `${etapa.nombre} — ${it.descripcion}`,
+          cantidad: it.cantidad,
+          precioUnitario: it.precioUnitario,
+          total: it.cantidad * it.precioUnitario,
+          grupo: it.tipo === 'MAT' ? 'MATERIALES' : 'MANO DE OBRA',
+        })
+      }
+    }
+  } else {
+    for (const it of d.items || []) {
+      const cat = (it.categoria || '').toUpperCase()
+      lineas.push({
+        descripcion: it.description,
+        cantidad: it.quantity,
+        precioUnitario: it.price,
+        total: it.price * it.quantity,
+        grupo: cat === 'MATERIALES' ? 'MATERIALES' : cat === 'MANO DE OBRA' ? 'MANO DE OBRA' : 'OTROS',
+      })
+    }
+  }
+  // Los gastos generales son una línea más para el cliente: sin esto el desglose no suma
+  // el neto y parece que falta algo.
+  if (d.gg_amount) {
+    lineas.push({
+      descripcion: `Gastos generales${d.gg_pct ? ` (${d.gg_pct}%)` : ''}`,
+      cantidad: 1,
+      precioUnitario: d.gg_amount,
+      total: d.gg_amount,
+      grupo: 'OTROS',
+    })
+  }
+  return lineas
+}
+
+// El PDF que faltaba para cobrar un adicional: original + adicionales = vigente, en un solo
+// papel. Solo cuenta los adicionales que ya se sumaron a la obra ("convertido"), igual que
+// la línea "Vigente" de la pantalla -- si contara los aceptados todavía sin sumar, el PDF
+// le pediría al cliente plata que la obra no está cobrando.
+export async function descargarPdfConsolidado(original: PresupuestoGuardado, sumados: PresupuestoGuardado[]) {
+  const ids = [original.id, ...sumados.map(a => a.id)]
+  const { data, error } = await supabase.from('presupuestos').select('*').in('id', ids)
+  if (error || !data) {
+    alert('No se pudieron leer los presupuestos para armar el PDF. Intenta de nuevo.')
+    return
+  }
+  const porId = new Map((data as PresupuestoDetalle[]).map(d => [d.id, d]))
+  const fechaCorta = (iso: string) => new Date(iso).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })
+
+  const documentos: DocumentoConsolidado[] = ids.map((id, i) => {
+    const d = porId.get(id)
+    const base = i === 0 ? original : sumados[i - 1]
+    const total = d?.total ?? base.total ?? 0
+    const iva = d?.iva ?? null
+    const lineas = d ? lineasDelPresupuesto(d) : []
+    // Se muestra el desglose SOLO si cuadra con el total del documento. Los presupuestos
+    // cargados como PDF externo guardan ítems netos que la IA leyó, y su total ya trae
+    // gastos generales e IVA: listarlos como están le mandaría al cliente un detalle que
+    // no suma. Antes que inventar la diferencia, se dice que el detalle está en el papel
+    // original.
+    const neto = iva != null ? total - iva : total
+    const sumaLineas = lineas.reduce((s, l) => s + l.total, 0)
+    const cuadra = lineas.length > 0 && Math.abs(sumaLineas - neto) <= 1
+    return {
+      titulo: i === 0 ? 'Presupuesto original' : `Adicional ${i}`,
+      referencia: (d?.referencia ?? base.referencia) || null,
+      fecha: fechaCorta(d?.created_at ?? base.created_at),
+      total,
+      iva: cuadra ? iva : null,
+      lineas: cuadra ? lineas : [],
+    }
+  })
+
+  generatePDFConsolidado({
+    name: original.cliente_nombre || '',
+    telefono: original.cliente_telefono || '',
+    email: original.cliente_email || '',
+    address: original.cliente_direccion || '',
+  }, documentos)
 }
 
 export function PanelPresupuestos() {
