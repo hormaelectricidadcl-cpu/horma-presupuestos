@@ -1093,8 +1093,7 @@ export function PanelObras() {
                         acomodan solas según el ancho (Alexandra, 11/09): lo que entra, lo que
                         cuesta, y lo que queda. Así la misma tarjeta cae siempre en el mismo
                         lugar y se puede leer de memoria. */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(116px, 1fr))', gap: 8, marginBottom: 12 }}>
                         {/* El IVA a apartar vive acá adentro y no en su propia tarjeta: es una
                             parte de este mismo número, no un dato suelto. */}
                         <StatTile
@@ -1109,9 +1108,6 @@ export function PanelObras() {
                           valor={o.faltaPorCobrar != null ? fmtMoney(o.faltaPorCobrar) : 'sin presupuesto'}
                           tono={o.faltaPorCobrar == null ? 'neutral' : o.faltaPorCobrar > 0 ? 'alerta' : 'positivo'}
                         />
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 8 }}>
                         <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
                         {/* Arriba lo que salió del banco, abajo lo que costó de verdad. Sin
                             los dos números, cuadrar la caja contra el margen obliga a hacer
@@ -1126,20 +1122,14 @@ export function PanelObras() {
                           <StatTile label="Materiales de bodega" valor={fmtMoney(o.gastoMaterialesBodega)} nota="sin IVA" compacta />
                         )}
                         <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
-                      </div>
-
                       {/* Pedido de Gustavo (11/09): se veía lo contratado y lo que falta, pero
                           no cuánto se le lleva abonado, que es lo que él necesita saber antes
                           de hacer la próxima transferencia. */}
-                      {(o.pagadoSubcontratos > 0 || o.subcontratosPorPagar > 0) && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 8 }}>
-                          {o.pagadoSubcontratos > 0 && (
-                            <StatTile label="Abonado a subcontratistas" valor={fmtMoney(o.pagadoSubcontratos)} tono="positivo" compacta />
-                          )}
-                          {o.subcontratosPorPagar > 0 && (
-                            <StatTile label="Falta pagarle al subcontratista" valor={fmtMoney(o.subcontratosPorPagar)} tono="alerta" compacta />
-                          )}
-                        </div>
+                      {o.pagadoSubcontratos > 0 && (
+                        <StatTile label="Abonado a subcontratistas" valor={fmtMoney(o.pagadoSubcontratos)} tono="positivo" compacta />
+                      )}
+                      {o.subcontratosPorPagar > 0 && (
+                        <StatTile label="Falta pagarle al subcontratista" valor={fmtMoney(o.subcontratosPorPagar)} tono="alerta" compacta />
                       )}
 
                     </div>
