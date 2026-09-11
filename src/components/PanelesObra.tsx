@@ -566,7 +566,17 @@ export function calcularResumenObras(
       : null
     // Costo final estimado = lo que falta comprar de materiales (o lo gastado, si ya se pasó)
     // + el costo real de la gente. Solo se calcula si hay con qué estimarlo.
-    const costoFinalEstimado = costoEstimadoMateriales != null
+    //
+    // OJO con la mano de obra propia: el presupuesto guarda el PRECIO que se le cobra al
+    // cliente y no sabemos cuánto se le carga encima (con los materiales sí: 25%). Si la obra
+    // la hace el equipo de Horma y todavía queda trabajo por hacer, no hay forma de estimar
+    // los jornales que faltan -- y en una obra tipo la de Alexis la mano de obra es el 60%
+    // del presupuesto. Proyectar contando solo los jornales YA trabajados daría un número
+    // demasiado optimista, que en una pantalla de plata es el error peligroso. Así que en ese
+    // caso no se proyecta nada y la pantalla dice por qué.
+    const manoObraPresupuestada = itemsObra.filter(i => (i.categoria || '').toUpperCase() === 'MANO DE OBRA').reduce((sum, i) => sum + totalItem(i), 0)
+    const manoDeObraPropiaSinEstimar = !esSubcontratada && manoObraPresupuestada > 0
+    const costoFinalEstimado = costoEstimadoMateriales != null && !manoDeObraPropiaSinEstimar
       ? Math.max(costoEstimadoMateriales, materialesGastados) + gastoSubcontratos + manoDeObra
       : null
     const margenProyectado = neto != null && costoFinalEstimado != null ? neto - costoFinalEstimado : null
@@ -582,7 +592,7 @@ export function calcularResumenObras(
     return {
       obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar, subcontratosPorPagar,
       neto, margen, margenPct, esSubcontratada, margenAlPactar, margenAlPactarPct,
-      materialesPresupuestados, costoEstimadoMateriales, materialesGastados, pctMaterialesUsado, costoFinalEstimado, margenProyectado, margenProyectadoPct,
+      materialesPresupuestados, costoEstimadoMateriales, materialesGastados, pctMaterialesUsado, costoFinalEstimado, margenProyectado, margenProyectadoPct, manoObraPresupuestada, manoDeObraPropiaSinEstimar,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
       tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoComprasNeto, ivaRecuperableCompras, gastoMaterialesBodega, gastoSubcontratos, pagadoSubcontratos, subcontratistas, abonosSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
@@ -1159,7 +1169,9 @@ export function PanelObras() {
                         <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.45 }}>
                           {o.margenProyectado != null
                             ? <>Cuenta lo que todavía falta comprar, no solo lo gastado. Lleva usado el {o.pctMaterialesUsado}% del presupuesto de materiales.</>
-                            : <>Es el techo: arranca en el precio sin IVA y baja con cada gasto, nunca sube. Ponle categoría a los ítems en Avance de obra y la app puede decirte con cuánto va a terminar.</>}
+                            : o.manoDeObraPropiaSinEstimar
+                              ? <>Es el techo: baja con cada gasto y nunca sube. No se puede proyectar el cierre porque la mano de obra la hace el equipo propio y no hay cómo estimar los jornales que faltan.</>
+                              : <>Es el techo: arranca en el precio sin IVA y baja con cada gasto, nunca sube. Ponle categoría a los ítems en Avance de obra y la app puede decirte con cuánto va a terminar.</>}
                         </p>
                       </button>
                     )}
