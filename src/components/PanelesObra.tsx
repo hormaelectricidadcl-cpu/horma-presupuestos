@@ -576,6 +576,15 @@ export function calcularResumenObras(
     // caso no se proyecta nada y la pantalla dice por qué.
     const manoObraPresupuestada = itemsObra.filter(i => (i.categoria || '').toUpperCase() === 'MANO DE OBRA').reduce((sum, i) => sum + totalItem(i), 0)
     const manoDeObraPropiaSinEstimar = !esSubcontratada && manoObraPresupuestada > 0
+    // Lo que SÍ sirve de cargar los jornales del equipo propio, y no es poco: el presupuesto
+    // de mano de obra es el TECHO de jornales. Con los materiales hay que deducir el costo a
+    // partir del precio (de ahí el 25%); con la gente no hace falta ningún supuesto, porque
+    // el costo se mide solo -- días × tarifa, del Reporte Diario. Si se cobran $1.490.000 por
+    // el trabajo y ya se pagaron $1.490.000 en jornales, la mano de obra no dejó nada; pasado
+    // eso, se pierde. Es el mismo aviso temprano que el de materiales, del otro lado.
+    const pctManoObraUsado = manoObraPresupuestada > 0
+      ? Math.round((manoDeObra / manoObraPresupuestada) * 1000) / 10
+      : null
     const costoFinalEstimado = costoEstimadoMateriales != null && !manoDeObraPropiaSinEstimar
       ? Math.max(costoEstimadoMateriales, materialesGastados) + gastoSubcontratos + manoDeObra
       : null
@@ -592,7 +601,7 @@ export function calcularResumenObras(
     return {
       obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar, subcontratosPorPagar,
       neto, margen, margenPct, esSubcontratada, margenAlPactar, margenAlPactarPct,
-      materialesPresupuestados, costoEstimadoMateriales, materialesGastados, pctMaterialesUsado, costoFinalEstimado, margenProyectado, margenProyectadoPct, manoObraPresupuestada, manoDeObraPropiaSinEstimar,
+      materialesPresupuestados, costoEstimadoMateriales, materialesGastados, pctMaterialesUsado, costoFinalEstimado, margenProyectado, margenProyectadoPct, manoObraPresupuestada, manoDeObraPropiaSinEstimar, pctManoObraUsado,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
       tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoComprasNeto, ivaRecuperableCompras, gastoMaterialesBodega, gastoSubcontratos, pagadoSubcontratos, subcontratistas, abonosSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
@@ -1170,7 +1179,7 @@ export function PanelObras() {
                           {o.margenProyectado != null
                             ? <>Cuenta lo que todavía falta comprar, no solo lo gastado. Lleva usado el {o.pctMaterialesUsado}% del presupuesto de materiales.</>
                             : o.manoDeObraPropiaSinEstimar
-                              ? <>Es el techo: baja con cada gasto y nunca sube. No se puede proyectar el cierre porque la mano de obra la hace el equipo propio y no hay cómo estimar los jornales que faltan.</>
+                              ? <>Es el techo: baja con cada gasto y nunca sube. No se proyecta el cierre porque no hay cómo saber cuántos días más va a llevar el trabajo{o.pctManoObraUsado != null && <>, pero de los jornales presupuestados se llevan usados el {o.pctManoObraUsado}%</>}.</>
                               : <>Es el techo: arranca en el precio sin IVA y baja con cada gasto, nunca sube. Ponle categoría a los ítems en Avance de obra y la app puede decirte con cuánto va a terminar.</>}
                         </p>
                       </button>
@@ -5083,6 +5092,15 @@ function ComoVaLaPlata({ o }: { o: ResumenObra }) {
           fuerte
           tono={o.margen < 0 ? 'var(--danger)' : 'var(--success)'}
         />
+        {o.pctManoObraUsado != null && !o.esSubcontratada && (
+          <Linea
+            etiqueta="Jornales usados del presupuesto"
+            detalle={`Se le cobran ${fmtMoney(o.manoObraPresupuestada)} al cliente por el trabajo y se llevan pagados ${fmtMoney(o.manoDeObra)} en días de equipo. Acá no hay supuesto que valga: el costo se mide solo desde el Reporte Diario. Al llegar al 100% la mano de obra dejó de dejar plata.`}
+            valor={`${fmtMoney(o.manoDeObra)} de ${fmtMoney(o.manoObraPresupuestada)} · ${o.pctManoObraUsado}%`}
+            tono={o.pctManoObraUsado > 100 ? 'var(--danger)' : undefined}
+          />
+        )}
+
         {o.costoFinalEstimado != null && o.margenProyectado != null && (
           <>
             <Linea
