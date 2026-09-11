@@ -238,11 +238,14 @@ function CargarPresupuestoObra({ obra, onGuardado }: { obra: { id: string; nombr
   )
 }
 
-export function StatTile({ label, valor, tono = 'neutral', nota }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' | 'alerta'; nota?: string }) {
+// `compacta` corta el ancho del título para que uno largo baje a dos líneas en vez de
+// estirar la tarjeta a lo ancho: "Abonado a subcontratistas" en una sola línea hacía una
+// tarjeta del doble que las de al lado y rompía la grilla (Alexandra, 11/09).
+export function StatTile({ label, valor, tono = 'neutral', nota, compacta = false }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' | 'alerta'; nota?: string; compacta?: boolean }) {
   const color = tono === 'positivo' ? 'var(--success)' : tono === 'negativo' ? 'var(--danger)' : tono === 'alerta' ? 'var(--primary)' : 'var(--text)'
   return (
-    <div style={{ padding: '14px 16px', background: 'var(--surface)', borderRadius: 14, minWidth: 100, boxShadow: 'var(--shadow)' }}>
-      <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+    <div style={{ padding: '13px 13px', background: 'var(--surface)', borderRadius: 14, minWidth: 0, boxShadow: 'var(--shadow)' }}>
+      <p className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4, maxWidth: compacta ? 130 : undefined, lineHeight: 1.25 }}>
         {label}
       </p>
       <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
@@ -434,6 +437,12 @@ export function calcularResumenObras(
       ? contratosObra.reduce((sum, s) => sum + s.total_contrato, 0)
       : subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
     const pagadoSubcontratos = subcontratosObra.reduce((sum, s) => sum + s.monto, 0)
+    // Nombres y abonos uno por uno, para poder mostrarlos en la tarjeta de la obra sin
+    // obligar a abrir el detalle -- pedido de Alexandra (11/09). "Pagado hasta ahora
+    // $300.000" no dice si fue una transferencia o tres, que es justo lo que hay que saber
+    // antes de hacer la próxima.
+    const subcontratistas = Array.from(new Set(contratosObra.map(s => s.subcontratista))).join(', ')
+    const abonosSubcontratos = [...subcontratosObra].sort((a, b) => b.fecha.localeCompare(a.fecha))
     const adelantos = diariosObra.filter(d => d.tipo_pago !== 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
     const pagosSemanales = diariosObra.filter(d => d.tipo_pago === 'pago_semanal').reduce((sum, d) => sum + (d.adelanto_monto || 0), 0)
     const manoDeObra = diariosObra.reduce((sum, d) => {
@@ -529,7 +538,7 @@ export function calcularResumenObras(
       obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar, subcontratosPorPagar,
       neto, margen, margenPct, esSubcontratada, margenAlPactar, margenAlPactarPct,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
-      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoComprasNeto, ivaRecuperableCompras, gastoMaterialesBodega, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
+      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoComprasNeto, ivaRecuperableCompras, gastoMaterialesBodega, gastoSubcontratos, pagadoSubcontratos, subcontratistas, abonosSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
   })
 }
@@ -991,53 +1000,88 @@ export function PanelObras() {
                         </label>
                       </div>
                     )}
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                      <StatTile label="Presupuesto" valor={o.presupuestoTotal != null ? fmtMoney(o.presupuestoTotal) : 'sin definir'} />
-                      <StatTile label="Abonado" valor={fmtMoney(o.cobrado)} tono="positivo" />
-                      <StatTile
-                        label="Por abonar"
-                        valor={o.faltaPorCobrar != null ? fmtMoney(o.faltaPorCobrar) : 'sin presupuesto'}
-                        tono={o.faltaPorCobrar == null ? 'neutral' : o.faltaPorCobrar > 0 ? 'alerta' : 'positivo'}
-                      />
-                      <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
-                      {/* Arriba lo que salió del banco, abajo lo que costó de verdad. Sin
-                          los dos números, cuadrar la caja contra el margen obliga a hacer
-                          la cuenta a mano y nadie sabe cuál de los dos está mirando. */}
-                      <StatTile
-                        label="Compras"
-                        valor={fmtMoney(o.gastoCompras)}
-                        nota={o.gastoCompras > 0 ? `Costo sin IVA: ${fmtMoney(o.gastoComprasNeto)}` : undefined}
-                      />
-                      {o.gastoMaterialesBodega > 0 && (
-                        <StatTile label="Materiales de bodega" valor={fmtMoney(o.gastoMaterialesBodega)} nota="sin IVA" />
-                      )}
-                      <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+                    {/* Tres bloques con sentido propio, en vez de una tira de tarjetas que se
+                        acomodan solas según el ancho (Alexandra, 11/09): lo que entra, lo que
+                        cuesta, y lo que queda. Así la misma tarjeta cae siempre en el mismo
+                        lugar y se puede leer de memoria. */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 8 }}>
+                        {/* El IVA a apartar vive acá adentro y no en su propia tarjeta: es una
+                            parte de este mismo número, no un dato suelto. */}
+                        <StatTile
+                          label="Presupuesto"
+                          valor={o.presupuestoTotal != null ? fmtMoney(o.presupuestoTotal) : 'sin definir'}
+                          nota={o.ivaApartar != null ? `De eso, ${fmtMoney(o.ivaApartar)} es IVA: no es plata de Horma` : undefined}
+                          compacta
+                        />
+                        <StatTile label="Abonado" valor={fmtMoney(o.cobrado)} tono="positivo" />
+                        <StatTile
+                          label="Por abonar"
+                          valor={o.faltaPorCobrar != null ? fmtMoney(o.faltaPorCobrar) : 'sin presupuesto'}
+                          tono={o.faltaPorCobrar == null ? 'neutral' : o.faltaPorCobrar > 0 ? 'alerta' : 'positivo'}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 8 }}>
+                        <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
+                        {/* Arriba lo que salió del banco, abajo lo que costó de verdad. Sin
+                            los dos números, cuadrar la caja contra el margen obliga a hacer
+                            la cuenta a mano y nadie sabe cuál de los dos está mirando. */}
+                        <StatTile
+                          label="Compras"
+                          valor={fmtMoney(o.gastoCompras)}
+                          nota={o.gastoCompras > 0 ? `Costo sin IVA: ${fmtMoney(o.gastoComprasNeto)}` : undefined}
+                          compacta
+                        />
+                        {o.gastoMaterialesBodega > 0 && (
+                          <StatTile label="Materiales de bodega" valor={fmtMoney(o.gastoMaterialesBodega)} nota="sin IVA" compacta />
+                        )}
+                        <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+                      </div>
+
                       {/* Pedido de Gustavo (11/09): se veía lo contratado y lo que falta, pero
                           no cuánto se le lleva abonado, que es lo que él necesita saber antes
                           de hacer la próxima transferencia. */}
-                      {o.pagadoSubcontratos > 0 && (
-                        <StatTile label="Abonado a subcontratistas" valor={fmtMoney(o.pagadoSubcontratos)} tono="positivo" />
+                      {(o.pagadoSubcontratos > 0 || o.subcontratosPorPagar > 0) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 8 }}>
+                          {o.pagadoSubcontratos > 0 && (
+                            <StatTile label="Abonado a subcontratistas" valor={fmtMoney(o.pagadoSubcontratos)} tono="positivo" compacta />
+                          )}
+                          {o.subcontratosPorPagar > 0 && (
+                            <StatTile label="Falta pagarle al subcontratista" valor={fmtMoney(o.subcontratosPorPagar)} tono="alerta" compacta />
+                          )}
+                        </div>
                       )}
-                      {o.subcontratosPorPagar > 0 && (
-                        <StatTile label="Falta pagar" valor={fmtMoney(o.subcontratosPorPagar)} tono="alerta" />
-                      )}
-                      {o.ivaApartar != null && (
-                        <StatTile label="IVA a apartar" valor={fmtMoney(o.ivaApartar)} tono="alerta" />
-                      )}
-                      {o.margenAlPactar != null && (
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 8 }}>
+                        {/* Las dos que Alexandra no entendió (11/09). El número solo no dice
+                            nada: cada una lleva su cuenta escrita abajo, con el nombre del
+                            subcontratista cuando lo hay, que es lo que la vuelve concreta. */}
+                        {o.margenAlPactar != null && (
+                          <StatTile
+                            label="Te quedaba al cerrar el trato"
+                            valor={fmtMoney(o.margenAlPactar)}
+                            nota={`${o.margenAlPactarPct != null ? `${o.margenAlPactarPct}% — ` : ''}precio sin IVA menos lo pactado con ${o.subcontratistas || 'el subcontratista'}, antes de gastar en materiales`}
+                            compacta
+                          />
+                        )}
+                        {o.margen != null && (
+                          <StatTile
+                            label="Te queda hoy"
+                            valor={fmtMoney(o.margen)}
+                            tono={o.margen < 0 ? 'negativo' : 'positivo'}
+                            nota={`${o.margenPct != null ? `${o.margenPct}% — ` : ''}lo mismo, pero ya descontando todo lo gastado hasta ahora`}
+                            compacta
+                          />
+                        )}
                         <StatTile
-                          label="Quedaba al pactar"
-                          valor={`${fmtMoney(o.margenAlPactar)}${o.margenAlPactarPct != null ? ` · ${o.margenAlPactarPct}%` : ''}`}
+                          label="Saldo"
+                          valor={fmtMoney(o.saldo)}
+                          tono={o.saldo >= 0 ? 'positivo' : 'negativo'}
+                          nota="Lo abonado menos lo que va costando"
+                          compacta
                         />
-                      )}
-                      {o.margen != null && (
-                        <StatTile
-                          label="Margen"
-                          valor={`${fmtMoney(o.margen)}${o.margenPct != null ? ` · ${o.margenPct}%` : ''}`}
-                          tono={o.margen < 0 ? 'negativo' : 'positivo'}
-                        />
-                      )}
-                      <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
+                      </div>
                     </div>
                     {/* Pedido de Alexandra (11/09): "definitivamente tenemos que meter la parte
                         fiscal y contable". Sin esta línea, el margen usa un número de compras
@@ -1106,6 +1150,15 @@ export function PanelObras() {
                       {o.gastoSubcontratos !== o.pagadoSubcontratos && (
                         <span>
                           Subcontratos: contrato completo {fmtMoney(o.gastoSubcontratos)}, pagado hasta ahora <strong style={{ color: 'var(--warning)' }}>{fmtMoney(o.pagadoSubcontratos)}</strong>
+                          {/* Cada abono acá mismo: "pagado $300.000" no dice si fue una
+                              transferencia o tres, y eso es lo que hay que saber antes de
+                              hacer la próxima (Alexandra, 11/09). */}
+                          {o.abonosSubcontratos.length > 0 && (
+                            <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                              {' — '}
+                              {o.abonosSubcontratos.map(a => `${a.fecha.split('-').reverse().slice(0, 2).join('/')} ${fmtMoney(a.monto)}${a.subcontrato ? ` a ${a.subcontrato}` : ''}`).join(' · ')}
+                            </span>
+                          )}
                         </span>
                       )}
                       {o.porReembolsar > 0 && (
@@ -2489,14 +2542,14 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Compras', texto: 'Materiales y otros gastos que la empresa pagó directamente para esta obra.' },
   { titulo: 'Subcontratos', texto: 'Lo CONTRATADO con subcontratistas externos, como un pintor, que no son parte del equipo fijo — el total comprometido, aunque todavía no se les haya pagado todo.' },
   { titulo: 'Abonado a subcontratistas', texto: 'Cuánto se le lleva pagado al subcontratista de esta obra, sumando los abonos cargados en el Reporte Diario. Es lo que ya salió de la cuenta, no lo que se le debe — para eso está "Falta pagar".' },
-  { titulo: 'Falta pagar', texto: 'De los subcontratos ya contratados, cuánto todavía no salió de la cuenta. Es plata que ya se debe: el saldo la descuenta como costo, pero el dinero sigue estando. Aparece solo si queda algo por pagar.' },
+  { titulo: 'Falta pagarle al subcontratista', texto: 'De los subcontratos ya contratados, cuánto todavía no salió de la cuenta. Es plata que ya se debe: el saldo la descuenta como costo, pero el dinero sigue estando. Aparece solo si queda algo por pagar.' },
   { titulo: 'Abonado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual. No es lo facturado: una factura es un documento aparte, que se carga en la ficha del cliente.' },
   { titulo: 'Por abonar', texto: 'Cuánto le queda debiendo el cliente por esta obra. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto cargado.' },
   { titulo: 'Saldo', texto: 'Lo abonado menos lo que CUESTA la obra: mano de obra, compras, materiales entregados desde bodega y subcontratos contratados. Un costo cuenta cuando se incurre, no cuando se paga, así que un sobrecosto se ve apenas se contrata y no cuando llega la factura. No es la plata que queda en la cuenta: para eso mira "Falta pagar", que es lo comprometido que todavía no salió.' },
   { titulo: 'Materiales de bodega', texto: 'Material que salió de la bodega hacia esta obra, con su vale de entrega. Aparece cuando se compró en bloque (sin decidir la obra todavía) y después se entregó: el costo se le carga a la obra recién en ese momento, no al pagar la boleta. Cada salida queda valorizada con el precio que tenía cuando salió, así una compra nueva más cara no reescribe lo que costó una obra ya cerrada.' },
-  { titulo: 'IVA a apartar', texto: 'Cuánto de lo presupuestado es IVA y hay que transferir a la cuenta de IVA — no es plata de la empresa. Aparece solo en las obras marcadas como "el precio incluye IVA".' },
-  { titulo: 'Quedaba al pactar', texto: 'En las obras que ejecuta un subcontratista: el neto de la obra menos lo pactado con él. Es la bolsa que le quedó a Horma al cerrar el trato, antes de gastar un peso en materiales. Sale del monto que se escribe a mano al cargar el subcontrato, porque cada trato se negocia distinto y no hay fórmula que lo reproduzca.' },
-  { titulo: 'Margen', texto: 'Lo que queda del neto (el precio sin IVA) después de restar mano de obra, compras, materiales de bodega y subcontratos. En una obra subcontratada, la distancia entre "Quedaba al pactar" y este número es exactamente cuánto se lleva gastado en materiales. Si la obra no está marcada como "incluye IVA", el porcentaje sale más alto de lo real y la app te lo avisa.' },
+  { titulo: 'IVA a apartar', texto: 'Va escrito debajo del Presupuesto: cuánto de ese total es IVA y hay que transferir a la cuenta de IVA, porque no es plata de Horma. Aparece solo en las obras marcadas como "el precio incluye IVA".' },
+  { titulo: 'Te quedaba al cerrar el trato', texto: 'En las obras que ejecuta un subcontratista: el precio sin IVA menos lo pactado con él. Es la bolsa que le quedó a Horma al cerrar el trato, antes de gastar un peso en materiales. La distancia entre este número y "Te queda hoy" es exactamente cuánto se lleva gastado. Sale del monto que se escribe a mano al cargar el subcontrato, porque cada trato se negocia distinto y no hay fórmula que lo reproduzca.' },
+  { titulo: 'Te queda hoy', texto: 'Lo que queda del precio sin IVA después de restar mano de obra, compras, materiales de bodega y subcontratos. Es la ganancia de la obra si se cerrara hoy: si mañana se compra más material, este número baja. Si la obra no está marcada como "incluye IVA", el porcentaje sale más alto de lo real y la app te lo avisa.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
 
