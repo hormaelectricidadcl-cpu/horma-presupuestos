@@ -5207,14 +5207,31 @@ export function HistorialObraModal({
         display: 'flex', flexDirection: 'column',
         boxShadow: '0 -4px 32px rgba(0,0,0,0.15)',
       }}>
+        {/* Encabezado con "Volver", igual que el resto de la app. Antes solo estaba la ✕ de la
+            esquina: en el teléfono, con el detalle scrolleado, no se leía como salida
+            (Alexandra, 11/09: "no hay botón de volver cuando ya estoy en el detalle"). Queda
+            fijo arriba -- el que scrollea es el cuerpo, no el encabezado. */}
         <div style={{
-          padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+          padding: '1rem 1.5rem 0.9rem', borderBottom: '1px solid var(--border)', flexShrink: 0,
         }}>
-          <div>
-            <h2 style={{ fontSize: 17, fontWeight: 800 }}>{obra}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <button
+              onClick={onClose}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 20, padding: '7px 13px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--muted)', flexShrink: 0 }}
+            >← Volver</button>
+            <h2 className="font-display" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--primary)' }}>
+              Detalle de obra
+            </h2>
+            <button
+              onClick={onClose}
+              aria-label="Cerrar"
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1, flexShrink: 0 }}
+            >✕</button>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
+          <p className="font-serif" style={{ fontSize: 20, color: 'var(--secondary)', lineHeight: 1.15 }}>{obra}</p>
+          {resumen?.cliente && (
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 3 }}>{resumen.cliente}</p>
+          )}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
