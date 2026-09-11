@@ -1216,9 +1216,13 @@ export default function Reporte({ token, embedded = false }: Props) {
 
                     <div className="field">
                       <label>¿Quién pagó?</label>
+                      {/* Gustavo va acá (11/09). Lo pidió él: "si yo hago unas compras y yo no
+                          cargo, entonces no me van a transferir". Faltaba en la lista porque
+                          no está en `trabajadores`, así que su gasto con tarjeta no existía
+                          en la app -- 43 de 44 compras figuraban como de la caja. */}
                       <select value={c.pagadoPor} onChange={e => actualizarCompra(idx, { pagadoPor: e.target.value })}>
                         <option value="">Caja de la empresa</option>
-                        {trabajadorNombres.map(n => <option key={n} value={n}>{n} (con su propia plata — hay que reembolsarle)</option>)}
+                        {quienLoHizo.map(n => <option key={n} value={n}>{n} (con su propia plata — hay que reembolsarle)</option>)}
                       </select>
                     </div>
                     <button type="button" className="btn btn-ghost" onClick={() => quitarCompra(idx)} style={{ alignSelf: 'flex-end', fontSize: 13 }}>

@@ -442,6 +442,8 @@ export function calcularResumenObras(
       const viaticoMonto = d.viatico ? (tarifa?.viatico_diario || 0) : 0
       return sum + base + viaticoMonto
     }, 0)
+    // Va en BRUTO a propósito, al revés que el costo: a la persona se le devuelve lo que
+    // puso, que es el total de la boleta. El IVA lo recupera la empresa, no ella.
     const porReembolsar = comprasObra.filter(c => c.pagado_por && !c.reembolsado).reduce((sum, c) => sum + c.monto, 0)
     const cobrado = cobrosObra.reduce((sum, c) => sum + c.monto, 0) + cobradoManual
     // Saldo = lo cobrado menos lo que CUESTA la obra, no lo que ya salió de la cuenta.
@@ -3098,6 +3100,104 @@ export function PanelPagoSemanal() {
           Los trabajadores marcados "Sueldo fijo" tienen mensualidad fija (ver Gastos Fijos en Estado de Resultados) — acá solo se refleja su viático de esa semana más los ajustes que corresponda, no un cálculo por día. Sus adelantos se ven en "Historial de pagos".
         </p>
       )}
+
+      <ReembolsosPendientes />
+    </div>
+  )
+}
+
+/* ─── Lo que la empresa le debe a quien puso plata de su bolsillo ──── */
+// Pedido de Gustavo (11/09): "si yo hago unas compras y yo no cargo, entonces no me van a
+// transferir". Su ejemplo fue $2.100.000 con su tarjeta de crédito. El dato ya se guardaba
+// (`pagado_por` + `reembolsado`) pero no había ninguna pantalla que dijera el total, así que
+// para saber cuánto se le debe había que abrir obra por obra.
+//
+// Va acá, en Pago semanal, porque es la pantalla donde se decide qué transferir. Aparte de
+// las filas de sueldo a propósito: un reembolso no es sueldo, y sumarlo al neto del
+// trabajador rompería la comparación contra el comprobante que ya existe.
+//
+// NO se filtra por semana: una compra de hace tres semanas que nadie devolvió se sigue
+// debiendo, y esconderla sería justo el problema que esto viene a resolver.
+function ReembolsosPendientes() {
+  const [compras, setCompras] = useState<ReporteCompraDia[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [marcando, setMarcando] = useState<string | null>(null)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase
+      .from('reportes_compras').select('*')
+      .not('pagado_por', 'is', null).neq('reembolsado', true)
+      .order('fecha')
+    setCompras((data as ReporteCompraDia[]) || [])
+    setCargando(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function marcarReembolsado(id: string) {
+    setMarcando(id)
+    const { error } = await supabase.from('reportes_compras').update({ reembolsado: true }).eq('id', id)
+    setMarcando(null)
+    if (error) { alert('No se pudo marcar como reembolsado. Intenta de nuevo.'); return }
+    await cargar()
+  }
+
+  if (cargando || compras.length === 0) return null
+
+  const porPersona = Array.from(
+    compras.reduce((mapa, c) => {
+      const quien = c.pagado_por as string
+      mapa.set(quien, [...(mapa.get(quien) || []), c])
+      return mapa
+    }, new Map<string, ReporteCompraDia[]>()),
+  ).sort((a, b) => a[0].localeCompare(b[0]))
+
+  const total = compras.reduce((s, c) => s + c.monto, 0)
+
+  return (
+    <div style={{ marginTop: 26 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4, color: 'var(--text-inverse)' }}>Compras por reembolsar</h2>
+      <p style={{ fontSize: 12, color: 'var(--muted-inverse)', marginBottom: 12, lineHeight: 1.45 }}>
+        Compras que alguien pagó con su propia plata y la empresa todavía no le devolvió. Es plata aparte
+        del sueldo, y se devuelve por el monto completo de la boleta, con IVA — es lo que la persona puso.
+      </p>
+
+      <div style={{ marginBottom: 14 }}>
+        <StatTile label="Total por reembolsar" valor={fmtMoney(total)} tono="alerta" />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {porPersona.map(([quien, suyas]) => (
+          <div key={quien} className="card" style={{ padding: '16px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>{quien}</span>
+              <span className="font-display" style={{ fontSize: 18, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+                {fmtMoney(suyas.reduce((s, c) => s + c.monto, 0))}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {suyas.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13, flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{c.fecha.split('-').reverse().join('/')}</span>
+                  <span style={{ flex: 1, minWidth: 140 }}>
+                    {c.descripcion}
+                    {c.obra && <span style={{ color: 'var(--muted)', fontSize: 12 }}> · {c.obra}</span>}
+                  </span>
+                  <span style={{ fontWeight: 700 }}>{fmtMoney(c.monto)}</span>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => marcarReembolsado(c.id)}
+                    disabled={marcando === c.id}
+                    style={{ fontSize: 11, padding: '3px 8px' }}
+                  >
+                    {marcando === c.id ? 'Guardando...' : 'Ya se le devolvió'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
