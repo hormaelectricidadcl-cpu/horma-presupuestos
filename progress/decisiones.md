@@ -1,6 +1,66 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-11 (tarde) — Un gasto va a la obra solo si esa obra lo consumió; lo demás es de la empresa
+Regla que decidió Alexandra, textual: *"Gustavo debe elegir, si va a una obra en concreto, si va a stock
+porque compró muchos materiales juntos y desde stock debe asignarla a una obra, si va gastos variables porque
+no pertenece a stock ni a obras sino a gastos operativos de la empresa en sí"*. Tres destinos, elegidos UNA
+vez donde se carga, y la app decide en qué tabla guarda.
+
+**Por qué hacía falta:** hasta hoy el tercer caso solo se podía cargar desde Estado de Resultados, que es
+justo donde Gustavo no entra. El resultado estaba en los datos: combustible cargado como compra de O'Higgins
+($92.100) **y** como gasto variable ($85.000 el 08/09, $85.000 el 05/09, $77.014 el 10/08); peajes como
+compra de obra mientras el Tag ($194.501) iba como gasto variable. El mismo gasto en dos lados según por
+dónde se hubiera entrado.
+
+**Y se reclasifica lo ya cargado**, decidido por Alexandra con este criterio: *"O'Higgins es una obra que se
+inició antes de este sistema, el sistema se está creando para hacer las cosas de la manera correcta... haz el
+cambio que es el correcto de hacer como lo hacen los grandes"*. Salen del costo de obra 9 filas por $753.258
+(trompo $250.000, cortadora $179.990, herramientas $92.870 y $79.998, combustible $92.100, caucho $40.000,
+3 peajes $18.300): $673.260 de O'Higgins y $79.998 de Doctora Eloísa 1. El margen de O'Higgins sube de
+$29.302.911 a $29.868.675. Esa plata no desaparece — baja al resultado de la empresa, que es donde va.
+
+**La razón de fondo, para no re-discutirla:** un trompo, una cortadora o el combustible de la camioneta
+sirven a todas las obras y siguen existiendo cuando la obra termina. Cargárselos enteros a la que estaba
+abierta ese día hunde el margen de esa obra y deja a las otras viéndose mejor de lo que son. Es la división
+estándar de job costing: costo directo a la obra, gasto operativo a la empresa.
+
+**Lo que NO se mueve, a propósito:** "Recolección de escombros" ($60.000) y "Excavación y retiro de
+escombros" ($350.000) sí son de O'Higgins — servicio contratado para ese terreno. Igual la arena, las
+canaletas y la pintura.
+
+Migraciones para correr a mano, en orden: `sql/20260911_gastos_variables_desde_reporte.sql` y después
+`sql/20260911_reclasificar_gastos_de_empresa.sql`.
+
+## 2026-09-11 (tarde) — La pantalla de IVA muestra de dónde sale cada peso, o no sirve
+Pedido de Alexandra: *"la card de IVA es de suma importancia... uno le da clic allí y debe aparecer de dónde
+la app está tomando el IVA de las ventas, es decir el desglose por obra, y lo mismo para el IVA compras. Todo
+siempre debe tener su respectivo porqué, así es fácil ver cualquier error y no es una caja negra"*.
+
+Se investigó cómo funciona el **Formulario 29** chileno antes de construir, y la pantalla replica esa cuenta:
+- **Débito fiscal**: el IVA de lo vendido. Lo generan facturas *y* boletas emitidas.
+- **Crédito fiscal**: el IVA de lo comprado, pero **solo con factura** — una boleta de compra NO da derecho a
+  crédito. Este dato es el que respalda toda la corrección de costos en neto: la pregunta correcta era
+  justamente si las compras van con factura.
+- **Resultado**: débito − crédito. Positivo se paga; negativo queda como remanente a favor para el mes
+  siguiente, sin vencimiento.
+
+**Decidido que lo que no se cuenta se dice en pantalla, en vez de esconderlo.** La app tiene 3 facturas
+emitidas cargadas en total, así que el débito sale corto y el F29 real va a dar más; los gastos variables no
+se suman al crédito porque no se sabe cuáles tienen factura. Mostrar un número lindo y falso era la
+alternativa, y es exactamente lo que Alexandra pidió evitar.
+
+**Decidido NO derivar el débito de los cobros.** El IVA se declara cuando se emite el documento, no cuando el
+cliente paga. Derivarlo de la caja daría un número que se ve preciso y no es el del F29.
+
+## 2026-09-11 (tarde) — Un desglose que no cuadra no se le manda al cliente
+En el PDF consolidado (original + adicionales = vigente), el detalle línea por línea de un documento se
+muestra **solo si suma su total**. Los presupuestos cargados como PDF externo guardan ítems netos leídos por
+IA mientras su total ya trae gastos generales e IVA (verificado: Camino turístico $8.962.000 × 1,10 × 1,19 =
+$11.731.258 exacto), así que listarlos tal cual le mandaría al cliente un detalle que no suma. Antes que
+inventar la diferencia o etiquetarla de algo que no se sabe, el PDF dice que el detalle está en el papel
+original.
+
 ## 2026-09-09 — Un adicional hecho fuera de la app también se puede enganchar a su obra
 Gustavo ya tiene adicionales armados fuera de la app y quiere subirlos a sus obras. "Cargar presupuesto
 externo" nunca seteaba `origen_id`: el adicional quedaba como un documento suelto del cliente, sin colgar del

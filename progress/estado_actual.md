@@ -1,6 +1,75 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
+## POR DÓNDE SEGUIR — viernes 11/09/2026, sesión de la tarde
+
+**Se ejecutó el "PLAN PARA LA PRÓXIMA SESIÓN" completo: los 6 bloques.** Seis commits, del `585dcba` al
+`17d8099`. Todo con `tsc --noEmit` limpio, todo verificado en el navegador con TODA escritura de red
+interceptada, y cada número de plata calculado a mano contra Supabase antes de creerle a la pantalla.
+
+**Nada está pusheado todavía** — los seis commits están locales, esperando el visto bueno de Alexandra.
+
+### Lo que se construyó
+
+1. **La corrección fiscal (Bloque 1).** Los costos de materiales pasan a NETO y se revirtió el +19% que se
+   le había puesto al material de bodega. `saldo` y `margen` usan `gastoComprasNeto` (bruto / 1,19); los
+   subcontratos no se tocan porque no facturan. La tarjeta "Compras" sigue mostrando lo que salió del banco,
+   con el costo neto como nota, para poder cuadrar caja sin confundirlo con el costo. Y cada obra explica,
+   con sus propios números, por qué el margen no resta la compra completa.
+   La reversión de bodega no dejó datos sucios: existe **un solo vale** y había quedado guardado a precio de
+   catálogo ($6.887), nunca multiplicado.
+2. **PDF consolidado (Bloque 2).** Original + cada adicional = TOTAL VIGENTE, en un solo papel, con el
+   desglose de cada documento. Es lo que faltaba para cobrar un adicional sin discutir.
+3. **Compras de Gustavo y su reembolso (Bloque 3).** Ahora está en el selector "¿Quién pagó?" (no estaba
+   porque no vive en `trabajadores`), y Pago semanal tiene una sección nueva con lo que la empresa le debe a
+   cada persona, sin filtrar por semana.
+4. **Gastos de la empresa desde el Reporte Diario (Bloque 4).** Cuarto destino en el selector, con la regla
+   escrita debajo. **No hizo falta ninguna Cloudflare Function nueva**, al revés de lo que suponía el plan:
+   como el gasto se carga por el mismo formulario, el lector de boletas que ya existe le completa descripción
+   y monto. O sea que no quedó nada sin verificar por ese lado.
+5. **Bitácora por obra (Bloque 5)** — derivada de los `created_at` que ya existen, sin tabla de auditoría ni
+   escrituras nuevas. Y **avance por adicional (Bloque 6)**.
+6. **Pantalla de IVA del mes** — el apartado fiscal. Ver `decisiones.md`.
+
+### Los números, verificados contra Supabase
+
+| Obra | Compras (banco) | Costo real sin IVA | Margen nuevo |
+|---|---|---|---|
+| Ohiggins 126 | $2.601.246 | $2.185.921 | $29.302.911 · 75% |
+| Camino turístico | $1.667.008 | $1.400.847 | $7.762.353 · 78,7% |
+| Pasaje rinconada | $623.282 | $523.766 | $1.093.684 · 40,4% |
+| Geronimo Alderete | $238.320 | $200.269 | $5.901.731 · 95,5% |
+| Luis Carrera | $0 | $0 | $4.543.650 · 94% |
+
+El margen sube **+$819.053** en las 5 activas (los $817.221 del plan más $1.832 de una compra de $11.470 que
+alguien cargó en Pasaje rinconada durante la sesión — la base está viva, ojo con eso al comparar).
+
+IVA de septiembre 2026: débito $20.029 (1 documento), crédito $427.876 (19 compras), **remanente a favor
+$407.847**.
+
+### LO QUE FALTA HACER, en orden
+
+1. **Correr las dos migraciones, en este orden** (las corre Alexandra a mano, el MCP es de solo lectura):
+   - `sql/20260911_gastos_variables_desde_reporte.sql` — agrega `foto_boleta_url` y `origen`. Sin esto, el
+     destino "Gasto de la empresa" no guarda (la app lo avisa por nombre y **no** llega a borrar compras).
+   - `sql/20260911_reclasificar_gastos_de_empresa.sql` — saca del costo de las obras las 9 filas que no son
+     de una obra, $753.258. Lleva su consulta de verificación adentro.
+2. **Decidir si se pushea a producción.** Seis commits locales. Nada se subió.
+3. **Bloque 0 — carga de datos, no requiere código.** Sigue pendiente entero: los PDF de los presupuestos que
+   Gustavo hizo desde el teléfono, el contrato de Cristian, precio a los 2 materiales viejos, borrar los datos
+   de prueba (incluida la obra "Gustavo prueba", que hoy ensucia la pestaña Obras con un margen inventado), y
+   categoría a los 66 ítems de las tres obras grandes.
+4. **Subir las facturas emitidas que falten.** Es el agujero más grande de la pantalla de IVA nueva: la app
+   tiene 3 documentos emitidos cargados en total, así que el débito fiscal sale corto y el F29 real va a dar
+   más. La pantalla lo dice, pero el arreglo es cargar los documentos.
+
+### Una cosa que encontré y conviene mirar
+Al revisar las 44 compras una por una (el "riesgo a revisar" del plan), las cuatro más viejas con desglose
+cargado **no cuadran contra su propio total en ninguna dirección** — razones de 0,945 a 1,071 en vez de 1,19.
+No afecta ningún cálculo de plata (`gastoCompras` usa solo `monto`, nunca el desglose), pero significa que
+para esas cuatro el desglose de ítems no es confiable: probablemente la IA leyó precios de lista y el total
+del documento traía un descuento. Las cinco recientes dan 1,19 exacto.
+
 ## POR DÓNDE SEGUIR — viernes 11/09/2026
 
 Sesión de Alexandra con Gustavo (cuatro audios) + una lista de pedidos. Se construyeron ocho cosas, todas

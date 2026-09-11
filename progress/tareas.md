@@ -4,14 +4,29 @@
 
 ---
 
+# ✅ PLAN EJECUTADO — 11/09/2026, sesión de la tarde
+
+> **Los 6 bloques están hechos**, en seis commits del `585dcba` al `17d8099`. `tsc` limpio, todo verificado
+> en el navegador con toda escritura interceptada, y cada número de plata calculado a mano contra Supabase.
+> **Los commits son locales: nada se pusheó.** El detalle de qué quedó y qué falta → `estado_actual.md`.
+>
+> Lo que queda de este plan, y no es código:
+> 1. Correr `sql/20260911_gastos_variables_desde_reporte.sql` y después
+>    `sql/20260911_reclasificar_gastos_de_empresa.sql`.
+> 2. Decidir si se pushea a producción.
+> 3. **El BLOQUE 0 sigue pendiente entero** — es carga de datos, no depende de código. Está abajo.
+>
+> Se deja el plan completo abajo, sin borrar, porque el porqué de cada bloque sigue valiendo.
+
 # PLAN PARA LA PRÓXIMA SESIÓN — armado el 11/09/2026, actualizado el mismo día tras confirmar con Gustavo
 que las compras van con factura y los subcontratistas no facturan ni boletean
 
 > Todo del 09 al 11/09 (los primeros 10 commits, hasta `ce16915`) está en producción y verificado.
 > Esto es lo que sigue, en el orden en que conviene hacerlo. El porqué de cada punto está en `decisiones.md`.
-> **Nada de este bloque se ejecutó todavía** -- es plan puro, para la próxima sesión.
 
 ## BLOQUE 0 — Datos, sin código. No depende de mí y son minutos
+🔲 **SIGUE PENDIENTE ENTERO al 11/09 por la tarde.** Es lo único del plan que no se puede hacer desde el código.
+
 Son los que hacen que los números de la app dejen de mentir.
 
 1. **Pedirle a Gustavo los PDF de los presupuestos que hizo desde el teléfono antes del arreglo.**
@@ -31,6 +46,8 @@ Son los que hacen que los números de la app dejen de mentir.
    Hay un selector por ítem en Avance de obra.
 
 ## BLOQUE 1 — LA CORRECCIÓN FISCAL: costos en NETO, y REVERTIR el +19% de bodega de ayer
+✅ **HECHO** (`585dcba`). Impacto real: +$819.053 de margen en las 5 obras activas.
+
 Ver `decisiones.md` 2026-09-11 (revisado) para el detalle completo y los números verificados. Resumen:
 
 Gustavo confirmó que **todas las compras de materiales van con factura** (el IVA se recupera, no es costo
@@ -61,6 +78,8 @@ monto/desglose = 1,19 casi exacta). No se revisó compra por compra las más vie
 por las 44 antes de aplicar el cambio, o aplicarlo y corregir la que aparezca rara.
 
 ## BLOQUE 2 — PDF consolidado del vigente
+✅ **HECHO** (`a2f824a`). Probado con la obra de Alexis: $2.510.662 + $709.478 = $3.220.140.
+
 Un PDF que muestre **presupuesto original + adicionales = total vigente**.
 
 Es lo que Gustavo pidió y no tuvo respuesta: "en vez de 14 son 17... eso que se sumaron, ¿cómo se los muestro
@@ -69,6 +88,8 @@ cliente de palabra cómo se llegó al total. **Es lo único que bloquea cobrar u
 Los datos ya están: original, adicionales enganchados por `origen_id`, y sus ítems.
 
 ## BLOQUE 3 — Compras pagadas por Gustavo y su reembolso
+✅ **HECHO** (`82252fc`). Gustavo ya está en "¿Quién pagó?" y Pago semanal muestra lo que se le debe.
+
 Lo pidió él mismo y el mecanismo se impone solo: "si yo hago unas compras y yo no cargo, entonces no me van a
 transferir". Su ejemplo: gastó $2.100.000 con su tarjeta de crédito y le transfieren eso.
 
@@ -77,7 +98,13 @@ Pero **de 44 compras, 43 figuran como de la empresa** y solo 1 tiene pagador (Fa
 marcarlo al cargar, y una vista de cuánto se le debe a Gustavo esta semana.
 
 ## BLOQUE 4 — Gastos variables desde el Reporte Diario, con lectura por IA
-Necesita una decisión ANTES de construir. Pedido de Gustavo: hoy solo se cargan desde el Estado de
+✅ **HECHO** (`1e71487`). La regla la decidió Alexandra: tres destinos elegidos una sola vez donde se carga —
+obra concreta / stock / gasto de la empresa. Ver `decisiones.md` 2026-09-11 (tarde). **No hizo falta la
+Cloudflare Function nueva que este plan suponía**: como el gasto se carga por el mismo formulario de compras,
+el lector de boletas que ya existe le completa descripción y monto. El texto de abajo queda como registro de
+por qué se hizo.
+
+Necesitaba una decisión ANTES de construir. Pedido de Gustavo: hoy solo se cargan desde el Estado de
 Resultados y él vive en el Reporte Diario ("es lo que más uso, yo estoy cargando toda vaina ahí"). El
 criterio es correcto: la herramienta va donde está el hábito.
 
@@ -102,12 +129,16 @@ Lo que hay que construir, una vez decidida la regla:
 compra, para frenar que sigan entrando peajes como materiales de obra.*
 
 ## BLOQUE 5 — Bitácora de cambios por obra y por cliente
+✅ **HECHO** (`991df2c`), por obra. Derivada de los `created_at` que ya existen, sin tabla de auditoría. Por cliente todavía no.
+
 Idea de Alexandra (10/09), pensada para cuando haya más volumen: una línea de tiempo por obra/cliente que
 diga qué cambió y cuándo (se sumó un adicional, se cargó un subcontrato, se marcó con IVA), con clic para ir
 a ese momento. Hoy el único rastro de un cambio es que el número cambió, sin decir cuándo ni por qué —
 encontrado varias veces esta semana (el pago mal cargado a Gabriel, el objetivo del 25% que se sacó).
 
 ## BLOQUE 6 — Barra de avance por adicional
+✅ **HECHO** (`991df2c`).
+
 Pedido de Gustavo: "de los adicionales se te van tachando, pero debería aparecer... el avance del presupuesto
 adicional". Hoy el avance del trabajo mezcla original y adicionales en un solo porcentaje. Los ítems ya están
 agrupados por fase ("Adicional HRM-..."), así que el dato existe — falta mostrar la barra por grupo. Barato.
