@@ -11,6 +11,41 @@ retipearlo entero en "Crear adicionales", teniendo el PDF ya hecho.
 si es adicional de alguno. Si se engancha, hereda todo el camino que ya existía. Solo se ofrecen presupuestos
 que no son adicionales a su vez -- un adicional de un adicional rompería el anidado de la ficha.
 
+## 2026-09-11 — El margen se mide contra el contrato que escribe Gustavo, no contra un 25% inventado
+El 09/09 puse un "objetivo 25% del neto" como referencia para las obras subcontratadas. Era una constante
+mía. Al reconstruir cómo Gustavo llegó a los $1.088.550 de Gabriel se vio que no hay fórmula: el trato base
+es "75% del neto" cuando el subcontratista compra los materiales, pero en esta obra él solo puso la mano de
+obra, así que fue "75% de la mano de obra + 75% de los gastos operacionales", menos un ítem que el cliente
+cambió (el picado de zanja pasó a instalación aérea) y con un material más caro. Se probaron siete variantes
+de esa regla contra los datos reales y **ninguna da $1.088.550** -- la más cercana se pasa por $22.800. El
+propio Gustavo lo dijo: "no es como que una cuenta que saqué así específica".
+
+**Decidido con Alexandra: el monto lo escribe Gustavo a mano y de ahí se calcula todo.** Ese campo es donde
+vive el criterio que no se puede modelar. Se reemplaza el objetivo del 25% por **"Quedaba al pactar"** =
+neto − contrato: la bolsa que le quedó a Horma al cerrar el trato, antes de gastar en materiales. La
+distancia entre esa bolsa y el margen de hoy es exactamente cuánto se lleva gastado, que es justo el problema
+de Gustavo comprando de más, puesto donde duele y sin que nadie se lo tenga que decir.
+
+No hay ninguna regla que mantener: si el contrato está bien escrito, el número es correcto solo. En Alexis:
+neto $2.706.000 − contrato $1.088.550 = **$1.617.450 (59,8%)** al pactar, y hoy el margen va en **$1.005.638
+(37,2%)** después de $611.812 en materiales.
+
+## 2026-09-11 — El material que sale de bodega a una obra se carga con IVA
+Pedido de Gustavo, y la razón es mejor que la objeción que yo había puesto (que el IVA de compra es
+recuperable y sumarlo lo contaría dos veces). El punto real: **hoy el mismo material cuesta 19% menos si pasa
+por bodega que si se compra directo contra la obra.** Las compras directas se cargan por el monto del
+documento, con IVA; el precio del catálogo viene neto del desglose. Dos rutas para lo mismo, dos costos
+distintos -- "nos puede confundir el costo en materiales que se ha llevado esa obra".
+
+**Decidido: se le suma el 19% en el momento del vale y queda congelado ahí**, igual que el precio, para que
+una obra ya cerrada no cambie de costo si mañana cambia el IVA. El formulario muestra la cuenta antes de
+confirmar ($137.740 + IVA = $163.911) para que no sea un multiplicador invisible, y el campo del catálogo
+ahora dice **"Precio por unidad (sin IVA)"**: si alguien cargara ahí un precio que ya trae IVA, se contaría
+dos veces.
+
+**Queda en pie, sin resolver:** el margen compara venta NETA contra costos CON IVA. Es una asimetría real y
+se decidió no tocarla ahora. Anotada para que si un día el margen parece bajo, no se busque de nuevo.
+
 ## 2026-09-09 — Bodega con vales de entrega: separar la compra de la asignación a la obra
 Gustavo compra materiales en bloque, muchas veces para varias obras en una sola boleta, y no va a hacer una
 factura por obra en la caja ("nooh, mucho trabajo"). Con el modelo de hoy —una compra pertenece a UNA obra—

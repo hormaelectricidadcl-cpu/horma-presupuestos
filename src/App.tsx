@@ -17,5 +17,16 @@ export default function App() {
   if (path === '/admin') return <Admin />
   if (path === '/itemizado') return <PresupuestoEtapas />
 
-  return <Presupuesto token={params.get('t')} />
+  // El presupuestador se abre en una pestaña aparte desde el panel ("Crear adicionales", o
+  // desde un pendiente), y ahí quedaba sin salida: Alexandra lo pidió el 10/09 -- "¿cómo
+  // vuelvo? poner un botón de volver". El botón ya existía en el componente, solo que esta
+  // ruta nunca le pasaba el onVolver. Se intenta cerrar la pestaña (que es lo que uno quiere
+  // cuando vino del panel) y si el navegador no deja, se vuelve atrás en el historial.
+  const vinoDelPanel = params.has('desde_presupuesto') || params.has('desde_pendiente')
+  return (
+    <Presupuesto
+      token={params.get('t')}
+      onVolver={vinoDelPanel ? () => { window.close(); if (!window.closed) window.history.back() } : undefined}
+    />
+  )
 }

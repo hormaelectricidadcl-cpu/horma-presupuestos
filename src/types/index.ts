@@ -141,6 +141,10 @@ export interface ReporteSubcontratoDia {
   obra: string | null
   subcontrato: string
   monto: number
+  // La columna existía en la base y el Reporte Diario ya subía el comprobante, pero el tipo
+  // no lo declaraba, así que el detalle de la obra no podía mostrarlo: el archivo quedaba
+  // guardado e inalcanzable (reportado el 11/09 con el abono a Gabriel).
+  comprobante_url?: string | null
 }
 
 export interface ReporteTrabajoPuntualDia {

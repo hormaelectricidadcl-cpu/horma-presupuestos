@@ -341,10 +341,12 @@ const ESTADO_OBRA_LABELS: Record<EstadoObra, string> = {
   cerrada: 'Cerrada',
 }
 
-// Margen que Horma busca dejar en una obra que ejecuta un subcontratista: 25% del neto
-// (antes de IVA). Acordado con Alexandra el 09/09 -- ver decisiones.md. Es un objetivo, no
-// una regla de cálculo: el margen real sale de los costos que se van cargando.
-const MARGEN_OBJETIVO_PCT = 25
+// IVA que se le suma al material que sale de bodega hacia una obra. Pedido de Gustavo
+// (11/09) y la razón es buena: sin esto el MISMO material cuesta 19% menos si pasa por
+// bodega que si se compra directo contra la obra -- las compras directas se cargan por el
+// monto del documento, con IVA, y el precio del catálogo viene neto del desglose. Dos rutas
+// para lo mismo que daban costos distintos.
+const IVA_PCT = 19
 
 // Resumen por obra (cobrado, gastado, saldo, falta por cobrar) -- extraído de
 // PanelObras para que PanelConsultasIA (chat con IA) use exactamente el mismo
@@ -475,11 +477,27 @@ export function calcularResumenObras(
     // "Subcontratada" no es una marca que alguien tenga que mantener: la obra lo es si tiene
     // un contrato de subcontratista cargado. Así no hay un flag que se pueda olvidar.
     const esSubcontratada = contratosObra.length > 0
-    const margenObjetivo = neto != null ? Math.round(neto * MARGEN_OBJETIVO_PCT / 100) : null
+
+    // Lo que quedó para Horma al cerrar el trato con el subcontratista, antes de gastar en
+    // materiales. 11/09: reemplaza al "objetivo 25%", que era una constante inventada por mí.
+    // Los tratos reales de Gustavo no son un porcentaje fijo -- con Gabriel fue "75% de la
+    // mano de obra + 75% de los gastos operacionales, menos un ítem que el cliente cambió",
+    // y no se pudo reconstruir con ninguna fórmula. Intentar modelarlo daría un número que se
+    // ve preciso y está mal.
+    //
+    // Así que la referencia sale del monto que Gustavo escribe a mano, que es donde vive todo
+    // ese criterio: neto − contrato = la bolsa que le queda a Horma. Cada peso de materiales
+    // sale de ahí, y la distancia entre esa bolsa y el margen de hoy es exactamente cuánto se
+    // lleva gastado. Sin reglas que mantener: si el contrato está bien escrito, el número es
+    // correcto solo.
+    const margenAlPactar = neto != null && esSubcontratada ? neto - gastoSubcontratos : null
+    const margenAlPactarPct = margenAlPactar != null && neto && neto > 0
+      ? Math.round((margenAlPactar / neto) * 1000) / 10
+      : null
 
     return {
       obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar, subcontratosPorPagar,
-      neto, margen, margenPct, esSubcontratada, margenObjetivo,
+      neto, margen, margenPct, esSubcontratada, margenAlPactar, margenAlPactarPct,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
       tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoMaterialesBodega, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
@@ -957,21 +975,29 @@ export function PanelObras() {
                         <StatTile label="Materiales de bodega" valor={fmtMoney(o.gastoMaterialesBodega)} />
                       )}
                       <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
+                      {/* Pedido de Gustavo (11/09): se veía lo contratado y lo que falta, pero
+                          no cuánto se le lleva abonado, que es lo que él necesita saber antes
+                          de hacer la próxima transferencia. */}
+                      {o.pagadoSubcontratos > 0 && (
+                        <StatTile label="Abonado a subcontratistas" valor={fmtMoney(o.pagadoSubcontratos)} tono="positivo" />
+                      )}
                       {o.subcontratosPorPagar > 0 && (
                         <StatTile label="Falta pagar" valor={fmtMoney(o.subcontratosPorPagar)} tono="alerta" />
                       )}
                       {o.ivaApartar != null && (
                         <StatTile label="IVA a apartar" valor={fmtMoney(o.ivaApartar)} tono="alerta" />
                       )}
+                      {o.margenAlPactar != null && (
+                        <StatTile
+                          label="Quedaba al pactar"
+                          valor={`${fmtMoney(o.margenAlPactar)}${o.margenAlPactarPct != null ? ` · ${o.margenAlPactarPct}%` : ''}`}
+                        />
+                      )}
                       {o.margen != null && (
                         <StatTile
-                          label={o.esSubcontratada ? `Margen (objetivo ${MARGEN_OBJETIVO_PCT}%)` : 'Margen'}
+                          label="Margen"
                           valor={`${fmtMoney(o.margen)}${o.margenPct != null ? ` · ${o.margenPct}%` : ''}`}
-                          tono={
-                            o.margen < 0 ? 'negativo'
-                              : o.esSubcontratada && o.margenPct != null && o.margenPct < MARGEN_OBJETIVO_PCT ? 'alerta'
-                                : 'positivo'
-                          }
+                          tono={o.margen < 0 ? 'negativo' : 'positivo'}
                         />
                       )}
                       <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
@@ -2361,13 +2387,15 @@ const GUIA_OBRAS_PASOS = [
   { titulo: 'Mano de obra', texto: 'Lo que cuesta el trabajo de los trabajadores en esta obra: días trabajados × su tarifa diaria, más el viático de los días que corresponda.' },
   { titulo: 'Compras', texto: 'Materiales y otros gastos que la empresa pagó directamente para esta obra.' },
   { titulo: 'Subcontratos', texto: 'Lo CONTRATADO con subcontratistas externos, como un pintor, que no son parte del equipo fijo — el total comprometido, aunque todavía no se les haya pagado todo.' },
+  { titulo: 'Abonado a subcontratistas', texto: 'Cuánto se le lleva pagado al subcontratista de esta obra, sumando los abonos cargados en el Reporte Diario. Es lo que ya salió de la cuenta, no lo que se le debe — para eso está "Falta pagar".' },
   { titulo: 'Falta pagar', texto: 'De los subcontratos ya contratados, cuánto todavía no salió de la cuenta. Es plata que ya se debe: el saldo la descuenta como costo, pero el dinero sigue estando. Aparece solo si queda algo por pagar.' },
   { titulo: 'Abonado', texto: 'Lo que el cliente ya pagó por esta obra hasta ahora — puede venir del Reporte Diario o de una cuenta por cobrar manual. No es lo facturado: una factura es un documento aparte, que se carga en la ficha del cliente.' },
   { titulo: 'Por abonar', texto: 'Cuánto le queda debiendo el cliente por esta obra. Dice "sin presupuesto" si la obra todavía no tiene un presupuesto cargado.' },
   { titulo: 'Saldo', texto: 'Lo abonado menos lo que CUESTA la obra: mano de obra, compras, materiales entregados desde bodega y subcontratos contratados. Un costo cuenta cuando se incurre, no cuando se paga, así que un sobrecosto se ve apenas se contrata y no cuando llega la factura. No es la plata que queda en la cuenta: para eso mira "Falta pagar", que es lo comprometido que todavía no salió.' },
   { titulo: 'Materiales de bodega', texto: 'Material que salió de la bodega hacia esta obra, con su vale de entrega. Aparece cuando se compró en bloque (sin decidir la obra todavía) y después se entregó: el costo se le carga a la obra recién en ese momento, no al pagar la boleta. Cada salida queda valorizada con el precio que tenía cuando salió, así una compra nueva más cara no reescribe lo que costó una obra ya cerrada.' },
   { titulo: 'IVA a apartar', texto: 'Cuánto de lo presupuestado es IVA y hay que transferir a la cuenta de IVA — no es plata de la empresa. Aparece solo en las obras marcadas como "el precio incluye IVA".' },
-  { titulo: 'Margen', texto: 'Lo que queda del neto (el precio sin IVA) después de restar mano de obra, compras y subcontratos. En las obras que ejecuta un subcontratista dice además el objetivo —25% del neto— y se pone naranja si el margen real va por debajo. Si la obra está subcontratada pero no marcaste "incluye IVA", el porcentaje sale más alto de lo real y la app te lo avisa.' },
+  { titulo: 'Quedaba al pactar', texto: 'En las obras que ejecuta un subcontratista: el neto de la obra menos lo pactado con él. Es la bolsa que le quedó a Horma al cerrar el trato, antes de gastar un peso en materiales. Sale del monto que se escribe a mano al cargar el subcontrato, porque cada trato se negocia distinto y no hay fórmula que lo reproduzca.' },
+  { titulo: 'Margen', texto: 'Lo que queda del neto (el precio sin IVA) después de restar mano de obra, compras, materiales de bodega y subcontratos. En una obra subcontratada, la distancia entre "Quedaba al pactar" y este número es exactamente cuánto se lleva gastado en materiales. Si la obra no está marcada como "incluye IVA", el porcentaje sale más alto de lo real y la app te lo avisa.' },
   { titulo: 'Por reembolsar', texto: 'Compras que un trabajador pagó con su propia plata y que la empresa todavía le tiene que devolver.' },
 ]
 
@@ -4006,6 +4034,11 @@ function DetalleObraContenido({ diariosObra, comprasObra, cobrosObra, subcontrat
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                 <span style={{ color: 'var(--muted)', fontSize: 12, width: 78, flexShrink: 0 }}>{s.fecha.split('-').reverse().join('/')}</span>
                 <span style={{ flex: 1 }}>{s.subcontrato}</span>
+                {s.comprobante_url && (
+                  <a href={s.comprobante_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
+                    Ver comprobante
+                  </a>
+                )}
                 <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtMoney(s.monto)}</span>
               </div>
             ))}
@@ -6103,8 +6136,8 @@ export function PanelStock() {
           obra: vale.obra,
           receptor: vale.receptor.trim(),
           // Precio congelado al momento de salir: el costo de una obra ya cerrada no se
-          // reescribe cuando cambia el precio del material.
-          precio_unitario: m?.precio_unitario ?? null,
+          // reescribe cuando cambia el precio del material ni si mañana cambia el IVA.
+          precio_unitario: m?.precio_unitario != null ? Math.round(m.precio_unitario * (1 + IVA_PCT / 100)) : null,
         }
       })
       const { error } = await supabase.from('movimientos_stock').insert(filas)
@@ -6166,7 +6199,9 @@ export function PanelStock() {
                 <input type="number" min="0" value={alta.cantidad} onChange={e => setAlta(p => ({ ...p, cantidad: e.target.value }))} />
               </div>
               <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                <label>Precio por unidad</label>
+                {/* Tiene que decir "sin IVA": al entregarlo a una obra la app le suma el 19%,
+                    así que cargar acá un precio que ya lo trae lo contaría dos veces. */}
+                <label>Precio por unidad (sin IVA)</label>
                 <input type="number" min="0" value={alta.precio_unitario} onChange={e => setAlta(p => ({ ...p, precio_unitario: e.target.value }))} />
               </div>
             </div>
@@ -6182,7 +6217,8 @@ export function PanelStock() {
           <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Vale de entrega</p>
           <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.45 }}>
             Lo que sale de la bodega hacia una obra, y en manos de quién. Recién en este momento el material
-            se convierte en costo de esa obra — al comprarlo todavía no se sabía a cuál iba.
+            se convierte en costo de esa obra — al comprarlo todavía no se sabía a cuál iba. Se le suma el
+            IVA, para que cueste lo mismo que si se hubiera comprado directo para esa obra.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -6208,7 +6244,8 @@ export function PanelStock() {
 
             {vale.lineas.map((l, i) => {
               const m = materiales.find(x => x.id === l.materialId)
-              const subtotal = m && Number(l.cantidad) > 0 ? Number(l.cantidad) * (m.precio_unitario || 0) : 0
+              const neto = m && Number(l.cantidad) > 0 ? Number(l.cantidad) * (m.precio_unitario || 0) : 0
+              const subtotal = Math.round(neto * (1 + IVA_PCT / 100))
               return (
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                   <div className="field" style={{ flex: 1, minWidth: 180 }}>
@@ -6226,8 +6263,10 @@ export function PanelStock() {
                     <label>Cantidad</label>
                     <input type="number" min="0" value={l.cantidad} onChange={e => setVale(p => ({ ...p, lineas: p.lineas.map((x, j) => j === i ? { ...x, cantidad: e.target.value } : x) }))} />
                   </div>
-                  <span style={{ fontSize: 12.5, color: subtotal > 0 ? 'var(--text)' : 'var(--muted)', paddingBottom: 8, minWidth: 90 }}>
-                    {subtotal > 0 ? fmtMoney(subtotal) : m && !m.precio_unitario ? 'sin precio' : ''}
+                  <span style={{ fontSize: 12, color: subtotal > 0 ? 'var(--text)' : 'var(--muted)', paddingBottom: 8, minWidth: 150 }}>
+                    {subtotal > 0
+                      ? <>{fmtMoney(neto)} + IVA = <strong>{fmtMoney(subtotal)}</strong></>
+                      : m && !m.precio_unitario ? 'sin precio' : ''}
                   </span>
                   {vale.lineas.length > 1 && (
                     <button type="button" onClick={() => setVale(p => ({ ...p, lineas: p.lineas.filter((_, j) => j !== i) }))} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 13, paddingBottom: 8 }}>Quitar</button>
@@ -6258,7 +6297,7 @@ export function PanelStock() {
       ) : (
         <>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-            <StatTile label="Valor en bodega" valor={fmtMoney(valorBodega)} />
+            <StatTile label="Valor en bodega (sin IVA)" valor={fmtMoney(valorBodega)} />
             {sinPrecio.length > 0 && (
               <StatTile label="Sin precio cargado" valor={`${sinPrecio.length} material${sinPrecio.length !== 1 ? 'es' : ''}`} tono="alerta" />
             )}

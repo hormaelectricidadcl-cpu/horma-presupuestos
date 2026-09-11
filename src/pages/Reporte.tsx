@@ -146,6 +146,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   const trabajadorNombresRef = useRef<string[]>(TRABAJADORES)
   const [trabajadores, setTrabajadores] = useState<Record<string, TrabajadorState>>(defaultTrabajadores(TRABAJADORES))
   const [obras, setObras] = useState<string[]>(OBRAS_FALLBACK)
+  const [obrasConContrato, setObrasConContrato] = useState<Set<string>>(new Set())
   const [clientePorObra, setClientePorObra] = useState<Record<string, string>>({})
   const [obraGeneral, setObraGeneral] = useState('')
   const [compras, setCompras] = useState<CompraRow[]>([])
@@ -291,6 +292,12 @@ export default function Reporte({ token, embedded = false }: Props) {
     })
     supabase.from('materiales').select('id, nombre, stock_actual').order('nombre').then(({ data }) => {
       setMateriales(data || [])
+    })
+    // Qué obras ya tienen un trato cargado con su subcontratista: si no lo tienen, abonar acá
+    // no tiene contra qué descontarse y el abono termina leyéndose como el costo total de la
+    // obra. Es exactamente lo que pasó con Gabriel el 09/09.
+    supabase.from('subcontratos_master').select('obra').then(({ data }) => {
+      setObrasConContrato(new Set(((data as { obra: string }[]) || []).map(s => s.obra)))
     })
     // Trabajadores activos reales -- si alguien se archiva desde la card de Trabajadores,
     // deja de aparecer acá (aunque su historial de pagos pasado se mantenga intacto).
@@ -1397,8 +1404,16 @@ export default function Reporte({ token, embedded = false }: Props) {
               + Agregar cobro
             </button>
 
-            {/* Subcontratos */}
-            <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Subcontratos</h2>
+            {/* Abonos a subcontratistas. 11/09: antes decía "Subcontratos" a secas y Gustavo
+                cargó acá los $1.088.550 del trato completo con Gabriel creyendo que estaba
+                creando el contrato -- lo que hizo fue registrar que ya se lo había pagado
+                entero. El contrato se crea en Obras -> Detalle -> Subcontratistas; acá van
+                los abonos, uno por cada transferencia. */}
+            <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Abonos a subcontratistas</h2>
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.45 }}>
+              Cada transferencia que se le hace a un subcontratista. El trato completo no va acá: ese se carga
+              una sola vez en Obras → Detalle de la obra → Subcontratistas.
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
               {subcontratos.map((s, idx) => {
                 const colapsado = !!(s.id && subcontratosColapsados.has(s.id))
@@ -1450,6 +1465,13 @@ export default function Reporte({ token, embedded = false }: Props) {
                         </select>
                       </div>
                     </div>
+                    {s.obra && !obrasConContrato.has(s.obra) && (
+                      <p style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, lineHeight: 1.45, margin: 0 }}>
+                        Esta obra todavía no tiene cargado el trato con su subcontratista, así que este abono se
+                        va a leer como si fuera el costo total de la obra. Carga primero el trato en Obras →
+                        Detalle de la obra → Subcontratistas.
+                      </p>
+                    )}
                     <div>
                       <label className="btn btn-secondary" style={{ display: 'inline-block', fontSize: 13, cursor: subiendoComprobante === `subcontrato-${idx}` ? 'default' : 'pointer', opacity: subiendoComprobante === `subcontrato-${idx}` ? 0.6 : 1 }}>
                         {subiendoComprobante === `subcontrato-${idx}` ? 'Leyendo captura...' : s.comprobanteUrl ? 'Cambiar captura' : '+ Subir captura'}

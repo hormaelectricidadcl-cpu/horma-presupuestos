@@ -1,6 +1,55 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
+## POR DÓNDE SEGUIR — viernes 11/09/2026
+
+Sesión de Alexandra con Gustavo (cuatro audios) + una lista de pedidos. Se construyeron ocho cosas, todas
+verificadas en el navegador con TODA escritura interceptada; las dos que tocan plata además se calcularon a
+mano contra Supabase antes de creerle a la pantalla.
+
+**Lo que se arregló:** el comprobante del abono a un subcontratista quedaba guardado e inalcanzable (el tipo
+no declaraba la columna); falta la card de "Abonado a subcontratistas"; la sección del Reporte Diario se
+llamaba "Subcontratos" y por eso Gustavo cargó ahí el trato completo con Gabriel creyendo que creaba el
+contrato -- ahora se llama "Abonos a subcontratistas" y avisa si la obra no tiene trato cargado; traer un
+ítem al adicional forzaba cantidad 1 y duplicaba renglones; un adicional desde un presupuesto externo no
+precargaba la dirección y frenaba sin explicar; y el presupuestador no tenía botón "Volver" (el código lo
+tenía, la ruta no se lo pasaba). Más los dos de plata, en `decisiones.md` 2026-09-11: el IVA del material de
+bodega y el margen contra el contrato.
+
+### Lo que confirmó esta sesión
+- **El arreglo del guardado desde el teléfono funciona.** Gustavo creó un presupuesto desde su iPhone y quedó
+  guardado. Era lo único que faltaba verificar del 09/09.
+- **La bodega funciona de punta a punta**: 11 materiales, compra a Stock que carga precios sola, vale de
+  entrega con receptor, y el costo llegando a la obra.
+
+### Lo que falta cargar (datos, no código)
+1. **Presupuestos perdidos**: Gustavo dijo que hizo "bastantes" desde el teléfono antes del arreglo y no se
+   guardaron -- solo los tiene en PDF en su correo. La app tiene 9 en total. Pedirle la lista y subirlos con
+   "+ Cargar presupuesto externo", que ahora además permite engancharlos como adicional.
+2. **Contrato de Cristian** en la obra de Alexis. Sigue sin cargarse.
+3. **Precio a los 2 materiales viejos** del catálogo ("Filtro para Ale", "Cable 2.5"): sin precio no le suman
+   costo a ninguna obra.
+4. **Borrar los datos de prueba**: cliente "Gustavo prueba borrar" + sus 2 presupuestos + la obra "Gustavo
+   prueba", más los 3 clientes de prueba del 08/09.
+5. **Categoría en los ítems de las tres obras grandes** (66 ítems sin categoría, entrados como PDF externo).
+
+### Pedidos anotados y NO construidos, a propósito
+Alexandra puso el límite y es el correcto: *"no podemos sumar tantas vainas... si las opciones son infinitas,
+la gente va a pensar infinitamente"*. De los ~18 pedidos que salieron, quedaron fuera:
+- **PDF consolidado "original + adicionales = vigente"** — lo que Gustavo necesita para cobrar un adicional
+  sin discutir con el cliente. El más valioso de los que quedan.
+- **Compras pagadas por Gustavo y su reembolso** — él lo pidió ("si yo no cargo, no me transfieren"): hoy 43
+  de 44 compras figuran como de la empresa y su gasto con tarjeta no existe en la app.
+- **Gastos variables desde el Reporte Diario, con lectura por IA** — pedido de Gustavo. Necesita migración
+  (falta el campo del comprobante) y una función nueva. **Antes hay que decidir la regla de qué va dónde**:
+  hoy Combustible, Peaje y Herramientas están cargados como compras contra una obra mientras
+  `gastos_variables` tiene su propia categoría "Combustible". La regla ya existe escrita en la ayuda del
+  Estado de Resultados, solo que no se ve donde se carga.
+- Barra de avance por adicional · bitácora por obra/cliente · poder modificar un adicional · catálogo de
+  servicios (está comentado en el código esperando reconexión a BD) · duplicados de materiales por nombre
+  (ya hay dos brocas iguales de proveedores distintos) · el aviso de "+ Agregar cuenta" · "Crear adicionales"
+  en el detalle de la obra · correo al cliente desde la ficha (0 de 43 clientes tienen correo cargado).
+
 ## POR DÓNDE SEGUIR — miércoles 09/09/2026 (traspaso para sesión nueva)
 
 **Todo lo de esta sesión está en producción y verificado ahí**, no solo commiteado. Seis commits, del

@@ -45,6 +45,8 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
   // listar, pero SÍ pueden tener adicionales -- es el caso de Nicole/O'Higgins. Se guarda el
   // tipo para explicar por qué no hay lista que consultar, en vez de bloquear el flujo.
   const [origenTipo, setOrigenTipo] = useState<'simple' | 'etapas' | 'externo' | null>(null);
+  // Cuántos MÁS se hicieron de cada línea del original, por índice de la lista de consulta.
+  const [cantidadDesdeOriginal, setCantidadDesdeOriginal] = useState<Record<number, string>>({});
 
   // Fase 2 del "orden" (03/09/2026): si el link trae "desde_pendiente", los ítems que ya
   // generó la IA en el hilo de ese pendiente (Admin -> "Generar ítems con IA") se cargan
@@ -107,19 +109,46 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
         if (data.gg_pct != null) setOverheadPercentage(data.gg_pct);
         // Se guardan para MOSTRARLOS, no para cargarlos: el adicional empieza vacío.
         setOrigenItems((data.items || []) as Item[]);
+
+        // Los presupuestos que entraron como PDF externo no tienen dirección guardada
+        // (Nicole, Marcelo, Francisca: las tres en null), así que el adicional quedaba sin
+        // dirección y el presupuestador la exige para generar el PDF -- frenaba ahí sin
+        // explicar por qué. La obra que nació de ese presupuesto sí la tiene: su nombre ES
+        // la dirección ("Ohiggins 126 Limache"). Se usa esa como respaldo.
+        if (!data.cliente_direccion) {
+          supabase
+            .from('obras').select('nombre').eq('presupuesto_id', data.id).maybeSingle()
+            .then(({ data: obra }) => {
+              if (obra?.nombre) setClientData(prev => (prev.address ? prev : { ...prev, address: obra.nombre }));
+            });
+        }
       });
   }, []);
 
-  // Trae una línea del original al adicional, ya marcada como adicional y con la cantidad
-  // en 1 para que Gustavo ponga cuántos MÁS se hicieron (su caso del "4 que pasó a 6": pone 2).
-  const agregarDesdeOriginal = (item: Item) => {
+  // Trae una línea del original al adicional. La cantidad se escribe al lado del botón: son
+  // cuántos MÁS se hicieron (el caso de Gustavo del "4 que pasó a 6": pone 2).
+  //
+  // 11/09: antes esto forzaba cantidad 1 y cada clic agregaba una línea nueva. Para 10
+  // centros había que apretar diez veces y quedaban diez renglones iguales en el PDF del
+  // cliente -- lo reportaron con "Red desagüe", que salió dos veces en vez de una por dos.
+  // Ahora, si la línea ya está en el adicional, se le suma la cantidad en vez de duplicarla.
+  const agregarDesdeOriginal = (item: Item, cantidad: number) => {
+    const cant = Number.isFinite(cantidad) && cantidad > 0 ? cantidad : 1;
     const descripcion = /^adicional/i.test(item.description) ? item.description : `Adicional — ${item.description}`;
+    const yaEsta = items.find(x => x.description === descripcion && x.price === item.price);
+    if (yaEsta) {
+      const nuevaCantidad = yaEsta.quantity + cant;
+      setItems(items.map(x => x.id === yaEsta.id
+        ? { ...x, quantity: nuevaCantidad, total: nuevaCantidad * x.price }
+        : x));
+      return;
+    }
     addItem({
       categoria: item.categoria,
       description: descripcion,
       price: item.price,
-      quantity: 1,
-      total: item.price,
+      quantity: cant,
+      total: item.price * cant,
     });
   };
 
@@ -345,9 +374,20 @@ const Presupuesto: React.FC<Props> = ({ token, onVolver }) => {
                       {it.description} <span style={{ color: '#6b7280' }}>× {it.quantity}</span>
                     </span>
                     <span style={{ whiteSpace: 'nowrap', color: '#6b7280' }}>${it.price.toLocaleString('es-CL')} c/u</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={cantidadDesdeOriginal[i] ?? '1'}
+                      onChange={e => setCantidadDesdeOriginal(prev => ({ ...prev, [i]: e.target.value }))}
+                      title="Cuántos MÁS se hicieron de esta línea"
+                      style={{ flexShrink: 0, width: 58, padding: '3px 6px', fontSize: 12, textAlign: 'center' }}
+                    />
                     <button
                       type="button"
-                      onClick={() => agregarDesdeOriginal(it)}
+                      onClick={() => {
+                        agregarDesdeOriginal(it, Number(cantidadDesdeOriginal[i] ?? '1'));
+                        setCantidadDesdeOriginal(prev => ({ ...prev, [i]: '1' }));
+                      }}
                       style={{ flexShrink: 0, border: '1px solid #c1440e', background: 'transparent', color: '#c1440e', borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
                     >
                       + Agregar
