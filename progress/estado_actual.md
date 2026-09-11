@@ -1,10 +1,16 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
-## CIERRE DEL VIERNES 11/09/2026 — todo pusheado, y qué falta para llamarlo terminado
+## CIERRE DEL VIERNES 11/09/2026 — todo en producción · el LUNES se hace la seguridad
 
-**Todo está en producción.** 21 commits, del `585dcba` al `2d1057d`. Las dos migraciones corridas y
-verificadas. El plan de 6 bloques completo, más lo que salió de revisarlo con Alexandra en pantalla.
+**Todo está pusheado y desplegado.** 24 commits, del `585dcba` al `94c5235`. Las dos migraciones corridas y
+verificadas contra la base. El plan de 6 bloques completo, más todo lo que salió de que Alexandra revisara la
+app en pantalla — que fue la mitad del día y encontró cosas que ninguna revisión de código habría encontrado.
+
+### 👉 LO PRIMERO DEL LUNES: la seguridad
+Es lo único que impide decir que el proyecto está terminado, y ya está acordado hacerlo el lunes. El detalle
+verificado está más abajo en el punto 1. Conviene tener a Gustavo disponible: toca cómo entra cada persona a
+cada panel, así que hay que decidir roles, no solo escribir SQL.
 
 ### Lo que falta, en orden de lo que duele
 
@@ -23,7 +29,19 @@ verificadas. El plan de 6 bloques completo, más lo que salió de revisarlo con 
    presupuesto real de "Doctora Eloísa (5843)", unificar el nombre de "Doctora Eloísa - Obra 1", y confirmar
    el teléfono de `.env` (apunta al de la sociedad anterior desde el 14/08).
 
-### Lo que se construyó hoy por la tarde, después del plan
+### Lo que se construyó de noche, revisando la app juntos
+- **"Va a terminar dejando"** — la ganancia proyectada de verdad, investigando primero cómo se hace (WIP
+  report; ver `decisiones.md`). En Alexis: $841.450 (31,1%) contra $1.093.684 (40,4%) que mostraba antes.
+  Usa el 25% de recargo en materiales que consiguió Alexandra de Gustavo. **Ese 25% está sin validar** y la
+  constante lleva escrito cómo comprobarlo.
+- **Dos medidores de consumo**: materiales (67,5% usado en Alexis) y jornales. Avisan antes de pasarse.
+- **En obras de equipo propio no se proyecta nada**, a propósito: contar solo los jornales ya trabajados daría
+  un número optimista, y en plata ese es el error peligroso.
+- Las tarjetas de la obra en una sola grilla — 3 por fila en escritorio, 2 en el teléfono, sin huérfanas.
+- El detalle de obra con **encabezado y "← Volver"** fijos arriba.
+- Los textos del detalle **plegados**: de 763px a 267px en un iPhone. "A Gustavo no le gusta leer mucho".
+
+### Lo que se construyó por la tarde, después del plan
 Todo salió de Alexandra revisando la app en pantalla:
 - El detalle de obra entra en el teléfono (un solo scroll, secciones plegables).
 - "IVA de servicios" en vez de "ventas", y una card por obra en el desglose.
@@ -38,9 +56,15 @@ Todo salió de Alexandra revisando la app en pantalla:
 - Los dos medidores de consumo: materiales y jornales, cada uno avisa antes de pasarse.
 
 ### Tres correcciones de nombre sobre el mismo número, todas de Alexandra leyendo la pantalla
-"Margen" → "Te queda hoy" → "Ganancia proyectada" → **"Va quedando"** / **"Va a terminar dejando"**.
-Vale la lección: ese dato esconde supuestos que no son obvios mirando el número, y cada vez que se nombró
-corto se leyó mal. La investigación del WIP report está en `decisiones.md`.
+"Margen" → "Te queda hoy" → "Ganancia proyectada" → **"Va quedando"** / **"Va a terminar dejando"**. La
+lección quedó escrita en `decisiones.md` 2026-09-11 (noche): ese dato esconde dos supuestos que no son obvios
+mirando el número, así que nunca va solo — siempre con la línea que dice de qué parte y qué da por hecho.
+
+### El tamaño de lo que hay, medido el 11/09
+19.013 líneas · 38 archivos · 17 pantallas · 33 tablas · 54 migraciones · 16 funciones serverless ·
+241 commits desde el 25/03. Administra **$144.515.592** presupuestados, de los cuales **$58.135.284** ya
+pasaron por el sistema como cobros. 12 obras, 43 clientes, 7 personas, 195 días de trabajo registrados.
+Una agencia en España cotizaría algo así entre 35.000 y 60.000 €, con 6 a 10 meses de plazo.
 
 ## POR DÓNDE SEGUIR — viernes 11/09/2026, sesión de la tarde
 

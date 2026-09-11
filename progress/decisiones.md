@@ -1,6 +1,73 @@
 # Decisiones ya tomadas — no re-litigar
 > Cada entrada: qué se decidió, por qué, y fecha. Si algo cambia, se agrega una entrada nueva con la fecha del cambio — no se borra la vieja.
 
+## 2026-09-11 (noche) — Cómo se mide de verdad si una obra va a dejar plata (investigado, no inventado)
+Alexandra, después de que le cambiara el nombre al mismo número tres veces: *"necesito que investigues cómo
+los grandes hacen esto porque a mí no me queda claro y tú andas dando palos de ciego"*. Tenía razón: le venía
+poniendo nombres por intuición.
+
+**Lo que se investigó:** el estándar del rubro es el **WIP report** (Work in Progress). Sus términos y
+fórmulas, que conviene no volver a discutir:
+
+| Término | Fórmula |
+|---|---|
+| Costo final estimado | costos a la fecha **+ lo que falta gastar** |
+| % de avance (cost-to-cost) | costos a la fecha ÷ costo final estimado |
+| Ingresos reconocidos | contrato × % de avance |
+| Ganancia bruta a la fecha | ingresos reconocidos − costos a la fecha |
+| **Ganancia proyectada** | contrato − **costo final estimado** |
+
+**El hallazgo que importa:** lo que la app calculaba (precio − costos a la fecha) **no es una métrica
+reconocida**. La fuente lo dice sin vueltas: *"contract value menos cost to date carece de significado sin un
+presupuesto establecido"*, y comparar el contrato completo contra costos parciales *"exagera el avance,
+oculta márgenes reales y puede mostrar ganancias irrealistas"*. Era exactamente lo que pasaba: Camino
+turístico mostraba $7.762.353 con la obra recién empezada.
+
+**Lo que faltaba era un presupuesto de COSTOS, y resultó que ya existía.** Alexandra: *"pero para eso no está
+el presupuesto pues? en el presupuesto aparece materiales, mano de obra"*. Tenía razón y yo lo había
+descartado mal. El presupuesto guarda **precios al cliente**; para convertirlo en costos falta un solo dato
+por categoría:
+
+- **Materiales:** Gustavo carga **25%** encima del costo → costo = precio ÷ 1,25. Es un SUPUESTO, dicho por
+  él, sin medir. Vive en `RECARGO_MATERIALES_PCT` con la instrucción de cómo validarlo.
+- **Mano de obra subcontratada:** no hace falta supuesto — el costo es el contrato, que es un dato real.
+  (En Alexis: $1.088.550 contra $1.490.000 presupuestados = 73%, que calza con la regla del 75% ya conocida.)
+- **Mano de obra propia:** el costo se mide solo desde el Reporte Diario (días × tarifa), así que el
+  presupuesto de mano de obra es un **techo** con sentido: al llegar al 100% esa mano de obra dejó de dejar
+  plata. Lo que NO se puede estimar es cuántos días MÁS va a llevar el trabajo.
+
+**Decidido:**
+1. Se muestra **"Va a terminar dejando"** = neto − costo final estimado, solo cuando hay con qué estimarlo.
+2. En obras de equipo propio con trabajo pendiente **no se proyecta nada**, porque contar solo los jornales ya
+   trabajados daría un número demasiado optimista — y en una obra como la de Alexis la mano de obra es el 60%
+   del presupuesto. En una pantalla de plata, errar hacia el lado optimista es el error peligroso.
+3. Se agregan dos medidores de consumo (materiales y jornales) que avisan ANTES de pasarse.
+4. Verificado que la proyección **no depende de que Gustavo cargue las compras**: usa el presupuesto como
+   piso. Probado con cuatro escenarios — sin cargar nada, a medias, y pasándose. Solo cambia al pasarse.
+
+**Impacto en la obra de Alexis:** $841.450 (31,1%) contra los $1.093.684 (40,4%) que mostraba antes. Nueve
+puntos de margen que la app estaba escondiendo.
+
+**PENDIENTE DE VALIDAR:** el 25%. Cuando cierre una obra con todos sus materiales cargados, comparar el costo
+estimado contra el real. Si no da 25%, se corrige la constante y toda la app se actualiza sola.
+
+Fuentes: jobtread.com/blog/what-is-a-wip-report-in-construction · miter.com/resources/wip-report-construction
+
+## 2026-09-11 (noche) — Nombrar un número de plata: tres intentos fallidos y la lección
+El mismo dato se llamó **"Margen"** → **"Te queda hoy"** → **"Ganancia proyectada"** → **"Va quedando"** /
+**"Va a terminar dejando"**. Las tres correcciones salieron de Alexandra leyéndolo en la pantalla, no de una
+revisión mía:
+
+- *"Margen"* no decía nada a quien no es contador.
+- *"Te queda hoy"* → *"eso asume que ya me pagaron todo y no es así"*. Se leía como plata en la mano.
+- *"Ganancia proyectada"* → *"irá bajando a medida que suben los gastos, entonces no es proyectada"*. Prometía
+  un pronóstico que el número no hacía.
+
+**La lección, para no repetirla:** este dato esconde **dos supuestos que no son obvios mirando el número** —
+que el cliente va a pagar todo, y que no se va a gastar más. Un nombre corto siempre va a esconder uno de los
+dos. **Por eso el número va siempre con una línea abajo que dice de qué parte y qué da por hecho**, y por eso
+"Saldo de la obra" existe al lado: es el contrapeso que sí parte de la plata que entró.
+
 ## 2026-09-11 (tarde) — Un gasto va a la obra solo si esa obra lo consumió; lo demás es de la empresa
 Regla que decidió Alexandra, textual: *"Gustavo debe elegir, si va a una obra en concreto, si va a stock
 porque compró muchos materiales juntos y desde stock debe asignarla a una obra, si va gastos variables porque

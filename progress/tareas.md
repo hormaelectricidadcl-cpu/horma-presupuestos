@@ -4,6 +4,42 @@
 
 ---
 
+# PLAN DEL LUNES 15/09/2026 — SEGURIDAD
+
+> Acordado con Alexandra el viernes 11/09: *"ya el lunes hacemos lo de la seguridad"*. Es lo único que
+> impide dar el proyecto por terminado. **Conviene tener a Gustavo disponible**: no es solo SQL, hay que
+> decidir quién entra a qué.
+
+**El problema, verificado contra la base el 11/09:** la clave pública de Supabase está dentro del JavaScript
+del sitio — la ve cualquiera que abra el código de la página. Y con ella se puede leer y escribir:
+
+| Tabla | Política actual |
+|---|---|
+| `clientes`, `obras`, `presupuestos`, `cuentas_por_cobrar`, `reportes_compras`, `reportes_cobros` | `anon full access` |
+| `reportes_diarios`, `trabajadores`, `subcontratos_master` | `anon leer` + `anon insertar` + `anon actualizar` |
+| `tareas_clientes` | sin RLS |
+
+Los tokens de las URLs (`?t=...`) protegen la **pantalla**, no los datos. Abierto desde el 28/08.
+
+**Antes de escribir nada, decidir con Gustavo y Alexandra:**
+1. ¿Cuántos roles hay de verdad? (Gustavo dueño · Alexandra admin · trabajador que solo carga su día ·
+   subcontratista que solo ve sus obras)
+2. ¿Cómo entra cada uno? Hoy son links con token por WhatsApp. Pasar a usuario y contraseña cambia el hábito
+   de gente que no usa mucho el teléfono para esto — es la decisión más delicada, no la técnica.
+3. ¿Qué pasa con los links que ya están circulando?
+
+**Orden acordado desde el 28/08** (los dos primeros ya están):
+1. ~~Backups~~ — RESUELTO, plan Pro desde el 31/08. *Ojo: Storage (fotos/comprobantes) sigue sin backup.*
+2. Cerrar el `list` público del bucket `audio-notas`, manteniendo la lectura de un archivo puntual.
+3. Reemplazar `anon full access` por control de acceso real: usuarios de Supabase con sesión persistente,
+   políticas de `anon` a `authenticated`, reglas por rol.
+
+**Y dos de la misma familia que se pueden hacer de paso:**
+- `tareas_clientes` y `notas_rapidas`: activar RLS con política `anon using(true)` es seguro y de bajo riesgo.
+- Las 5 tablas `seo_*` NO son de esta app (Alexandra las migra a otro Supabase) — **no tocar**.
+
+---
+
 # ✅ PLAN EJECUTADO — 11/09/2026, sesión de la tarde
 
 > **Los 6 bloques están hechos**, en seis commits del `585dcba` al `17d8099`. `tsc` limpio, todo verificado
