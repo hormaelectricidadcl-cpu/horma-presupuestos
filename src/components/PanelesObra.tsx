@@ -4536,6 +4536,191 @@ function GaleriaObra({ obraId }: { obraId: string }) {
   )
 }
 
+/* ─── IVA del mes (la cuenta del F29) ───────────────── */
+// Pedido de Alexandra (11/09): "definitivamente tenemos que meter la parte fiscal y
+// contable... la card de IVA es de suma importancia", y con una condición que manda sobre
+// todo lo demás: "uno le da clic ahí y debe aparecer de dónde la app está tomando el IVA...
+// todo siempre debe tener su respectivo porqué, así es fácil ver cualquier error y no es
+// una caja negra". Por eso cada tarjeta de acá se abre y muestra documento por documento
+// de dónde salió su número, y lo que NO se está contando se dice, no se esconde.
+//
+// Cómo funciona en Chile, que es lo que replica esta pantalla (Formulario 29, mensual):
+//   * DÉBITO FISCAL: el IVA de lo que vendiste. Lo cobraste al cliente y no es tuyo -- se
+//     le debe al SII. Lo generan tanto las facturas como las boletas emitidas.
+//   * CRÉDITO FISCAL: el IVA de lo que compraste. Se descuenta del débito, pero SOLO si la
+//     compra está respaldada con FACTURA a nombre de la empresa: una boleta de compra no da
+//     derecho a crédito. Es la misma regla por la que el costo de materiales se cuenta neto
+//     (ver la explicación dentro de cada obra) y por la que el pago a un subcontratista que
+//     no factura se cuenta completo.
+//   * RESULTADO: débito − crédito. Si da positivo, es plata a pagar. Si da negativo, no se
+//     pierde: queda como remanente a favor para el mes siguiente.
+export function PanelIVA() {
+  const hoy = new Date()
+  const [mes, setMes] = useState(`${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`)
+  const [emitidas, setEmitidas] = useState<ClienteFactura[]>([])
+  const [compras, setCompras] = useState<ReporteCompraDia[]>([])
+  const [gastos, setGastos] = useState<GastoVariable[]>([])
+  const [loading, setLoading] = useState(true)
+  const [abierto, setAbierto] = useState<'ventas' | 'compras' | null>(null)
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from('cliente_facturas').select('*').order('fecha'),
+      supabase.from('reportes_compras').select('*').order('fecha'),
+      supabase.from('gastos_variables').select('*').order('fecha'),
+    ]).then(([f, c, g]) => {
+      setEmitidas((f.data as ClienteFactura[]) || [])
+      setCompras((c.data as ReporteCompraDia[]) || [])
+      setGastos((g.data as GastoVariable[]) || [])
+      setLoading(false)
+    })
+  }, [])
+
+  if (loading) return <div className="spinner" />
+
+  const delMes = (fecha: string) => fecha.slice(0, 7) === mes
+  // El IVA de un monto que ya lo trae adentro es 19/119, no el 19%. Es el mismo criterio
+  // que usa "IVA a apartar" en cada obra, y da exacto contra los presupuestos guardados.
+  const ivaDe = (montoConIva: number) => Math.round(montoConIva * 19 / 119)
+
+  const ventasMes = emitidas.filter(f => delMes(f.fecha))
+  const comprasMes = compras.filter(c => delMes(c.fecha))
+  const gastosMes = gastos.filter(g => delMes(g.fecha))
+
+  const debito = ventasMes.reduce((s, f) => s + ivaDe(f.monto), 0)
+  const credito = comprasMes.reduce((s, c) => s + ivaDe(c.monto), 0)
+  const resultado = debito - credito
+  const gastosSinContar = gastosMes.reduce((s, g) => s + g.monto, 0)
+
+  const fmtFecha = (f: string) => f.split('-').reverse().join('/')
+  const Fila = ({ izq, sub, bruto }: { izq: string; sub?: string; bruto: number }) => (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '8px 12px', fontSize: 12.5, flexWrap: 'wrap' }}>
+      <span style={{ flex: 1, minWidth: 150 }}>
+        {izq}
+        {sub && <span style={{ color: 'var(--muted)', fontSize: 11.5 }}> · {sub}</span>}
+      </span>
+      <span style={{ color: 'var(--muted)', fontSize: 11.5, flexShrink: 0 }}>total {fmtMoney(bruto)}</span>
+      <span style={{ color: 'var(--muted)', fontSize: 11.5, flexShrink: 0 }}>neto {fmtMoney(bruto - ivaDe(bruto))}</span>
+      <span style={{ fontWeight: 700, flexShrink: 0, minWidth: 80, textAlign: 'right' }}>{fmtMoney(ivaDe(bruto))}</span>
+    </div>
+  )
+
+  return (
+    <div>
+      <div className="field" style={{ maxWidth: 220, marginBottom: 18 }}>
+        <label>Mes</label>
+        <input type="month" value={mes} onChange={e => setMes(e.target.value)} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+        <button onClick={() => setAbierto(abierto === 'ventas' ? null : 'ventas')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+          <StatTile
+            label="IVA de ventas (débito)"
+            valor={fmtMoney(debito)}
+            nota={`${ventasMes.length} documento${ventasMes.length !== 1 ? 's' : ''} · ver de dónde sale ${abierto === 'ventas' ? '▲' : '▼'}`}
+          />
+        </button>
+        <button onClick={() => setAbierto(abierto === 'compras' ? null : 'compras')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+          <StatTile
+            label="IVA de compras (crédito)"
+            valor={fmtMoney(credito)}
+            nota={`${comprasMes.length} compra${comprasMes.length !== 1 ? 's' : ''} · ver de dónde sale ${abierto === 'compras' ? '▲' : '▼'}`}
+          />
+        </button>
+        <StatTile
+          label={resultado >= 0 ? 'A pagar al SII' : 'Remanente a favor'}
+          valor={fmtMoney(Math.abs(resultado))}
+          tono={resultado >= 0 ? 'alerta' : 'positivo'}
+          nota={resultado >= 0 ? 'débito − crédito' : 'queda para el mes siguiente'}
+        />
+      </div>
+
+      {abierto === 'ventas' && (
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>De dónde sale el IVA de ventas</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.45 }}>
+            Cada factura o boleta que se emitió este mes y está cargada en la app. El IVA de cada una es
+            19/119 de su total, porque el monto ya lo trae adentro.
+          </p>
+          {ventasMes.length === 0 ? (
+            <p style={{ fontSize: 12.5, color: 'var(--muted)' }}>No hay ninguna factura ni boleta cargada con fecha de este mes.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {ventasMes.map(f => (
+                <Fila key={f.id} izq={`${fmtFecha(f.fecha)} · ${f.cliente_nombre}`} sub={f.tipo === 'boleta' ? 'Boleta' : 'Factura'} bruto={f.monto} />
+              ))}
+            </div>
+          )}
+          {/* El agujero más grande de esta pantalla, dicho donde se ve y no escondido: la app
+              tiene 3 documentos emitidos cargados en total. Si Gustavo emitió facturas por
+              fuera, este número sale corto y el F29 real va a ser más alto. */}
+          <p style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, marginTop: 10, lineHeight: 1.45 }}>
+            Solo cuenta lo que está cargado en “Facturas”. Una factura emitida que no se subió acá no aparece
+            en este número, y el F29 real va a dar más. Lo cobrado a los clientes NO se usa para esta cuenta:
+            el IVA se declara cuando se emite el documento, no cuando el cliente paga.
+          </p>
+        </div>
+      )}
+
+      {abierto === 'compras' && (
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>De dónde sale el IVA de compras</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.45 }}>
+            Cada compra cargada este mes, agrupada por obra. Es el mismo IVA que en la pestaña Obras se
+            descuenta del costo — por eso el margen de una obra cuenta los materiales netos.
+          </p>
+          {comprasMes.length === 0 ? (
+            <p style={{ fontSize: 12.5, color: 'var(--muted)' }}>No hay compras cargadas con fecha de este mes.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {Array.from(comprasMes.reduce((mapa, c) => {
+                const k = c.obra || (c.destino === 'stock' ? 'Bodega (sin obra todavía)' : 'Sin obra')
+                mapa.set(k, [...(mapa.get(k) || []), c])
+                return mapa
+              }, new Map<string, ReporteCompraDia[]>())).sort((a, b) => a[0].localeCompare(b[0])).map(([obraNombre, suyas]) => (
+                <div key={obraNombre}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5, gap: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>{obraNombre}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700 }}>{fmtMoney(suyas.reduce((s, c) => s + ivaDe(c.monto), 0))}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {suyas.map(c => <Fila key={c.id} izq={`${fmtFecha(c.fecha)} · ${c.descripcion}`} bruto={c.monto} />)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, marginTop: 10, lineHeight: 1.45 }}>
+            Esta cuenta asume que todas las compras van con factura, que es lo que confirmó Gustavo. Una
+            compra hecha con boleta NO da derecho a crédito fiscal, así que si alguna entró con boleta este
+            número sale más alto de lo que el SII va a aceptar.
+            {gastosSinContar > 0 && (
+              <> Aparte hay {fmtMoney(gastosSinContar)} en gastos variables de la empresa este mes que no se
+              están contando acá, porque no se sabe cuáles tienen factura. Los que la tengan también dan crédito.</>
+            )}
+          </p>
+        </div>
+      )}
+
+      <div className="card" style={{ padding: '18px 20px' }}>
+        <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Cómo se lee esta pantalla</p>
+        <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.55 }}>
+          El IVA no es plata de la empresa: se cobra por cuenta del SII. Cada mes se declara la diferencia
+          entre el IVA que se le cobró a los clientes (débito) y el que se pagó a los proveedores con factura
+          (crédito). Si el débito es mayor, esa diferencia se paga. Si el crédito es mayor, no se pierde:
+          queda como remanente a favor y se descuenta el mes siguiente.
+        </p>
+        <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.55, marginTop: 8 }}>
+          Esta pantalla arma la cuenta del mes con lo que hay cargado en la app. No reemplaza al contador ni
+          al F29: no trae el remanente acumulado de los meses anteriores (empezó antes que este sistema), ni
+          el PPM, ni las retenciones. Sirve para saber con cuánto hay que contar y para encontrar un dato mal
+          cargado antes de que llegue a la declaración.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Bitácora: qué cambió en esta obra y cuándo ──── */
 // Idea de Alexandra (10/09): "hoy el único rastro de un cambio es que el número cambió, sin
 // decir cuándo ni por qué". Pasó tres veces esta semana -- el pago de Gabriel cargado como si

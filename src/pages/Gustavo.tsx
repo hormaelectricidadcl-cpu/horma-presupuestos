@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import Reporte from './Reporte'
 import Presupuesto from './Presupuesto'
 import PresupuestoEtapas from './PresupuestoEtapas'
-import { PanelEstadoResultados, PanelPagoSemanal, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido, PanelAvanceObras, PanelBancoContenido, PanelConsultasIA } from '../components/PanelesObra'
+import { PanelEstadoResultados, PanelPagoSemanal, PanelTrabajadores, PanelObras, PanelPresupuestos, PanelCalendario, PanelStock, PanelBoletas, PanelFacturas, PanelClientes, PanelIdeasContenido, PanelAvanceObras, PanelBancoContenido, PanelConsultasIA, PanelIVA } from '../components/PanelesObra'
 import { NotasRapidas } from '../components/NotasRapidas'
 import { NavIcon, type NavIconName } from '../components/NavIcon'
 import { GaleriaArchivos } from '../components/GaleriaArchivos'
@@ -509,7 +509,7 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas' | 'banco_contenido' | 'consultas_ia'
+  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas' | 'banco_contenido' | 'consultas_ia' | 'iva'
   const [seccion, setSeccion] = useState<SeccionGustavo | null>(null)
   const [modoPresupuestador, setModoPresupuestador] = useState<'simple' | 'etapas'>('simple')
 
@@ -534,6 +534,7 @@ export default function Gustavo({ token }: Props) {
     { key: 'clientes', label: 'Clientes', icon: 'clientes' },
     { key: 'stock', label: 'Stock', icon: 'stock' },
     { key: 'resultados', label: 'Estado de resultados', icon: 'resultados' },
+    { key: 'iva', label: 'IVA del mes', icon: 'facturas' },
   ]
   const seccionActual = SECCIONES.find(s => s.key === seccion)
 
@@ -678,6 +679,8 @@ export default function Gustavo({ token }: Props) {
               <PanelTrabajadores />
             ) : seccion === 'resultados' ? (
               <PanelEstadoResultados />
+            ) : seccion === 'iva' ? (
+              <PanelIVA />
             ) : seccion === 'banco_contenido' ? (
               <PanelBancoContenido />
             ) : seccion === 'ideas' ? (
