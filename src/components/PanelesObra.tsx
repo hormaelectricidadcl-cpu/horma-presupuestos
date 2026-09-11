@@ -1718,6 +1718,52 @@ export function PanelAvanceObra({ obraId, presupuestoTotal = null, presupuestoId
             </div>
           )}
 
+          {/* Avance por adicional. Pedido de Gustavo: "de los adicionales se te van tachando,
+              pero debería aparecer... el avance del presupuesto adicional". La barra de
+              arriba mezcla original y adicionales en un solo porcentaje, así que un adicional
+              recién empezado se esconde detrás de un original casi terminado -- y es
+              justamente el que hay que cobrar aparte. Los ítems ya vienen agrupados por fase
+              ("Adicional HRM-..."), o sea que el dato existía; faltaba mostrarlo. */}
+          {(() => {
+            const fasesAdicional = Array.from(new Set(
+              itemsTrabajo.map(it => it.fase || '').filter(f => f.startsWith('Adicional ')),
+            ))
+            if (fasesAdicional.length === 0) return null
+            const itemsOriginal = itemsTrabajo.filter(it => !(it.fase || '').startsWith('Adicional '))
+            const grupos = [
+              ...(itemsOriginal.length > 0 ? [{ nombre: 'Presupuesto original', items: itemsOriginal }] : []),
+              ...fasesAdicional.map(f => ({ nombre: f, items: itemsTrabajo.filter(it => (it.fase || '') === f) })),
+            ]
+            return (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+                  Avance por presupuesto
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {grupos.map(g => {
+                    const total = sumaTotal(g.items)
+                    const hecho = sumaHecho(g.items)
+                    const pctG = total > 0 ? Math.round((hecho / total) * 100) : 0
+                    return (
+                      <div key={g.nombre}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 10 }}>
+                          <span style={{ fontSize: 12.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.nombre}</span>
+                          <span className="font-display" style={{ fontSize: 13, fontWeight: 800, color: pctG >= 100 ? 'var(--success)' : 'var(--text)', flexShrink: 0 }}>{pctG}%</span>
+                        </div>
+                        <div style={{ height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pctG}%`, background: pctG >= 100 ? 'var(--success)' : 'var(--primary)', transition: 'width 0.2s' }} />
+                        </div>
+                        <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                          {fmtMoney(hecho)} de {fmtMoney(total)}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
           {!hayCategorias && (
             <p style={{ fontSize: 11.5, color: 'var(--primary)', fontWeight: 600, marginTop: 8, lineHeight: 1.45 }}>
               En esta obra los ítems no tienen categoría (el presupuesto entró como PDF externo), así que este
@@ -4490,6 +4536,116 @@ function GaleriaObra({ obraId }: { obraId: string }) {
   )
 }
 
+/* ─── Bitácora: qué cambió en esta obra y cuándo ──── */
+// Idea de Alexandra (10/09): "hoy el único rastro de un cambio es que el número cambió, sin
+// decir cuándo ni por qué". Pasó tres veces esta semana -- el pago de Gabriel cargado como si
+// fuera el contrato, el objetivo del 25% que se sacó, el IVA de bodega que se puso y se
+// revirtió -- y cada vez hubo que reconstruirlo a mano contra la base.
+//
+// Se DERIVA de los `created_at` que ya existen, sin tabla de auditoría ni escrituras nuevas.
+// Eso tiene un límite honesto y está escrito en pantalla: se ve cuándo se CARGÓ cada cosa,
+// no cuándo se editó una que ya estaba. Marcar una obra "con IVA" o corregirle el monto a un
+// contrato no deja rastro, porque nada lo registra. Para eso haría falta una tabla aparte.
+//
+// El eje es `created_at` (cuándo se cargó) y no `fecha` (el día del que habla el movimiento),
+// justamente porque la pregunta que esto responde es "¿cuándo entró este número?". Cuando las
+// dos no coinciden, se muestran las dos.
+function BitacoraObra({ obra, presupuestoId }: { obra: string; presupuestoId: string | null }) {
+  const [abierta, setAbierta] = useState(false)
+  const [cargando, setCargando] = useState(false)
+  const [eventos, setEventos] = useState<{ cuando: string; fecha: string | null; texto: string; monto: number | null }[] | null>(null)
+
+  async function alternar() {
+    if (abierta) { setAbierta(false); return }
+    setAbierta(true)
+    if (eventos) return
+    setCargando(true)
+    const [comprasR, cobrosR, subR, contratosR, salidasR, adicionalesR] = await Promise.all([
+      supabase.from('reportes_compras').select('created_at, fecha, descripcion, monto').eq('obra', obra),
+      supabase.from('reportes_cobros').select('created_at, fecha, cliente, monto').eq('obra', obra),
+      supabase.from('reportes_subcontratos').select('created_at, fecha, subcontrato, monto').eq('obra', obra),
+      supabase.from('subcontratos_master').select('created_at, subcontratista, trabajo, total_contrato').eq('obra', obra),
+      supabase.from('movimientos_stock').select('created_at, fecha, cantidad, precio_unitario, receptor, materiales(nombre)').eq('obra', obra).eq('tipo', 'salida'),
+      presupuestoId
+        ? supabase.from('presupuestos').select('created_at, referencia, total, estado').eq('origen_id', presupuestoId)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    const lista: { cuando: string; fecha: string | null; texto: string; monto: number | null }[] = []
+    const agregar = (cuando: string | null, fecha: string | null, texto: string, monto: number | null) => {
+      if (cuando) lista.push({ cuando, fecha, texto, monto })
+    }
+
+    for (const a of (adicionalesR.data || []) as { created_at: string; referencia: string | null; total: number | null; estado: string }[]) {
+      agregar(a.created_at, null, `Adicional ${a.referencia || 'sin referencia'}${a.estado === 'convertido' ? ', sumado a la obra' : ` (${ESTADO_PRESUPUESTO_LABELS[a.estado as EstadoPresupuesto] || a.estado})`}`, a.total)
+    }
+    for (const c of (contratosR.data || []) as { created_at: string; subcontratista: string; trabajo: string | null; total_contrato: number }[]) {
+      agregar(c.created_at, null, `Contrato con ${c.subcontratista}${c.trabajo ? ` — ${c.trabajo}` : ''}`, c.total_contrato)
+    }
+    for (const s of (subR.data || []) as { created_at: string; fecha: string; subcontrato: string | null; monto: number }[]) {
+      agregar(s.created_at, s.fecha, `Abono a ${s.subcontrato || 'un subcontratista'}`, s.monto)
+    }
+    for (const c of (cobrosR.data || []) as { created_at: string; fecha: string; cliente: string; monto: number }[]) {
+      agregar(c.created_at, c.fecha, `Cobro a ${c.cliente}`, c.monto)
+    }
+    for (const c of (comprasR.data || []) as { created_at: string; fecha: string; descripcion: string; monto: number }[]) {
+      agregar(c.created_at, c.fecha, `Compra: ${c.descripcion}`, c.monto)
+    }
+    type SalidaBitacora = { created_at: string; fecha: string; cantidad: number; precio_unitario: number | null; receptor: string | null; materiales: { nombre: string } | { nombre: string }[] | null }
+    for (const m of (salidasR.data || []) as unknown as SalidaBitacora[]) {
+      const mat = Array.isArray(m.materiales) ? m.materiales[0] : m.materiales
+      agregar(m.created_at, m.fecha, `Salió de bodega: ${m.cantidad} × ${mat?.nombre || 'material'}${m.receptor ? ` → ${m.receptor}` : ''}`, m.precio_unitario != null ? m.cantidad * m.precio_unitario : null)
+    }
+
+    lista.sort((a, b) => b.cuando.localeCompare(a.cuando))
+    setEventos(lista)
+    setCargando(false)
+  }
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button className="btn btn-ghost" onClick={alternar} style={{ fontSize: 12, padding: '4px 8px' }}>
+        {abierta ? 'Ocultar bitácora ▲' : 'Bitácora: qué cambió y cuándo ▼'}
+      </button>
+      {abierta && (
+        cargando ? <div className="spinner" /> : (
+          <div style={{ marginTop: 8 }}>
+            <p style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.45 }}>
+              Cuándo se cargó cada cosa en esta obra, de lo más nuevo a lo más viejo. No muestra ediciones de
+              algo que ya estaba (corregirle el monto a un contrato, marcar la obra con IVA): eso no queda
+              registrado en ningún lado todavía.
+            </p>
+            {eventos && eventos.length === 0 ? (
+              <p style={{ fontSize: 12.5, color: 'var(--muted)' }}>Todavía no hay nada cargado en esta obra.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {(eventos || []).map((e, i) => {
+                  const cuando = new Date(e.cuando)
+                  const dia = cuando.toLocaleDateString('es-CL', { timeZone: 'America/Santiago' })
+                  const hora = cuando.toLocaleTimeString('es-CL', { timeZone: 'America/Santiago', hour: '2-digit', minute: '2-digit' })
+                  const fechaMovimiento = e.fecha ? e.fecha.split('-').reverse().join('/') : null
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 10, background: 'var(--surface-alt)', borderRadius: 8, padding: '7px 11px', fontSize: 12.5, flexWrap: 'wrap' }}>
+                      <span style={{ color: 'var(--muted)', fontSize: 11.5, width: 104, flexShrink: 0 }}>{dia} {hora}</span>
+                      <span style={{ flex: 1, minWidth: 160 }}>
+                        {e.texto}
+                        {fechaMovimiento && fechaMovimiento !== dia && (
+                          <span style={{ color: 'var(--muted)', fontSize: 11.5 }}> · del día {fechaMovimiento}</span>
+                        )}
+                      </span>
+                      {e.monto != null && <span style={{ fontWeight: 700, flexShrink: 0 }}>{fmtMoney(e.monto)}</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
 export function HistorialObraModal({
   obra,
   obraId,
@@ -4571,6 +4727,10 @@ export function HistorialObraModal({
         <PresupuestoDeLaObra presupuestoId={presupuestoId} obraId={obraId} />
 
         <SubcontratosDeLaObra obra={obra} onCambio={onCambioSubcontratos} />
+
+        <div style={{ padding: '10px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <BitacoraObra obra={obra} presupuestoId={presupuestoId} />
+        </div>
 
         {obraId && <GaleriaObra obraId={obraId} />}
 
