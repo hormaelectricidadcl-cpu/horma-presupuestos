@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
-import { TRABAJADORES } from '../pages/Reporte'
 import { GaleriaArchivos } from './GaleriaArchivos'
 import { generatePDF } from '../utils/pdfGenerator'
 import { generatePDFEtapas } from '../utils/pdfGeneratorEtapas'
@@ -6522,7 +6521,9 @@ export function PanelPresupuestos() {
 }
 
 /* ─── Calendario compartido de disponibilidad ────────── */
-const PERSONAS_CALENDARIO = ['Gustavo', 'Alexandra', ...TRABAJADORES]
+// Quiénes pueden ocupar una hora. Los trabajadores salen de la base, no de una lista escrita
+// acá: la que había se quedó con Alejandro (archivado) y sin Yasmani.
+const PERSONAS_FIJAS_CALENDARIO = ['Gustavo', 'Alexandra']
 const DIAS_SEMANA_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
 function emptyEvento(fecha: string) {
@@ -6581,12 +6582,20 @@ function LinksDireccion({ direccion }: { direccion: string }) {
 
 export function PanelCalendario() {
   const [eventos, setEventos] = useState<EventoCalendario[]>([])
+  const [trabajadores, setTrabajadores] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [vista, setVista] = useState<'dia' | 'semana' | 'mes'>('semana')
   const [fechaAncla, setFechaAncla] = useState(hoyISO())
   const [form, setForm] = useState(emptyEvento(hoyISO()))
   const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    supabase.from('trabajadores').select('nombre').eq('activo', true).order('nombre').then(({ data }) => {
+      setTrabajadores(((data as { nombre: string }[]) || []).map(t => t.nombre))
+    })
+  }, [])
+  const personas = [...PERSONAS_FIJAS_CALENDARIO, ...trabajadores]
 
   const rango = (() => {
     if (vista === 'dia') return { desde: fechaAncla, hasta: fechaAncla }
@@ -6755,7 +6764,7 @@ export function PanelCalendario() {
             <div className="field">
               <label>Ocupa la hora de</label>
               <select value={form.persona} onChange={e => setForm(f => ({ ...f, persona: e.target.value }))}>
-                {PERSONAS_CALENDARIO.map(p => <option key={p} value={p}>{p}</option>)}
+                {personas.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div className="field">

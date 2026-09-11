@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 
 const REPORTE_TOKEN = import.meta.env.VITE_REPORTE_TOKEN as string
 
 // Respaldo por si falla la carga desde Supabase (tabla `trabajadores`, fuente real de la
 // lista) -- la lista real, filtrada a los activos, se carga en un efecto más abajo.
-export const TRABAJADORES = ['Alejandro', 'Fabriel', 'Henry', 'Manuel', 'Misael', 'Samuel']
 const OBRA_LIMACHE = 'Ohiggins 126 Limache'
 // Respaldo por si falla la carga desde Supabase (tabla `obras`, fuente real de la lista).
 const OBRAS_FALLBACK = [
@@ -128,12 +127,6 @@ function todayISO() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
 }
 
-function defaultTrabajadores(nombres: string[]): Record<string, TrabajadorState> {
-  const base: Record<string, TrabajadorState> = {}
-  for (const nombre of nombres) base[nombre] = { ...DEFAULT_TRABAJADOR }
-  return base
-}
-
 // Una fila ya guardada de `reportes_diarios` traducida al estado del formulario. Se usa
 // desde los DOS lados que arman ese estado -- al cargar el día y al llegar la lista real de
 // trabajadores -- porque tenerla escrita dos veces fue justo lo que causó el bug del 11/09.
@@ -164,9 +157,12 @@ export default function Reporte({ token, embedded = false }: Props) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [trabajadorNombres, setTrabajadorNombres] = useState<string[]>(TRABAJADORES)
-  const trabajadorNombresRef = useRef<string[]>(TRABAJADORES)
-  const [trabajadores, setTrabajadores] = useState<Record<string, TrabajadorState>>(defaultTrabajadores(TRABAJADORES))
+  // Arranca vacía a propósito. Antes había una lista escrita en el código como respaldo y
+  // envejeció mal: tenía a Alejandro, que ya se archivó, y le faltaba Yasmani, que entró
+  // después. Eso rompió el guardado del día entero (ver decisiones.md 2026-09-11). Mostrar
+  // a nadie por medio segundo es mejor que mostrar a los equivocados.
+  const [trabajadorNombres, setTrabajadorNombres] = useState<string[]>([])
+  const [trabajadores, setTrabajadores] = useState<Record<string, TrabajadorState>>({})
   const [obras, setObras] = useState<string[]>(OBRAS_FALLBACK)
   const [obrasConContrato, setObrasConContrato] = useState<Set<string>>(new Set())
   const [clientePorObra, setClientePorObra] = useState<Record<string, string>>({})
@@ -191,7 +187,7 @@ export default function Reporte({ token, embedded = false }: Props) {
   // activo aunque nadie haya tocado su fila, incluso en una obra nueva sin gente trabajando aún.
   const [trabajadoresTocados, setTrabajadoresTocados] = useState<Set<string>>(new Set())
   // Las filas de asistencia del día tal como vinieron de la base. Ver `estadoDesdeFila`.
-  const filasDelDiaRef = useRef<FilaDiaria[]>([])
+  const [filasDelDia, setFilasDelDia] = useState<FilaDiaria[]>([])
   // Un sábado guardado ANTES de que existiera la regla del viático quedó con viatico=true en
   // la base. La pantalla ya lo muestra como "sin viático" (así se va a guardar), pero Pago
   // Semanal sigue leyendo el dato viejo hasta que se guarde el día -- si no se avisa, las dos
@@ -234,15 +230,11 @@ export default function Reporte({ token, embedded = false }: Props) {
       supabase.from('gastos_variables').select('*').eq('fecha', f).eq('origen', 'reporte_diario').order('created_at'),
     ])
 
-    // Se guardan crudas: si la lista real de trabajadores todavía no llegó, este `base` se
-    // arma con la lista de respaldo y el efecto que la carga después necesita estas filas
-    // para no pisar con "presente por defecto" a alguien que sí tenía su día cargado.
-    filasDelDiaRef.current = (dia || []) as FilaDiaria[]
-    const base = defaultTrabajadores(trabajadorNombresRef.current)
-    for (const row of dia || []) {
-      if (base[row.trabajador]) base[row.trabajador] = estadoDesdeFila(row as FilaDiaria)
-    }
-    setTrabajadores(base)
+    // Solo se dejan las filas crudas y se vacía el estado: armarlo es trabajo de un único
+    // efecto, más abajo. Tenerlo en dos lados (acá y al llegar la lista de trabajadores) fue
+    // exactamente lo que rompió el guardado el 11/09.
+    setFilasDelDia((dia || []) as FilaDiaria[])
+    setTrabajadores({})
     setTrabajadoresColapsados(new Set((dia || []).map(row => row.trabajador)))
     setTrabajadoresTocados(new Set((dia || []).map(row => row.trabajador)))
     setViaticoViejoEsteDia((dia || []).some(row => row.presente && row.viatico))
@@ -340,31 +332,41 @@ export default function Reporte({ token, embedded = false }: Props) {
     // deja de aparecer acá (aunque su historial de pagos pasado se mantenga intacto).
     supabase.from('trabajadores').select('nombre').eq('activo', true).order('nombre').then(({ data }) => {
       if (data && data.length) {
-        const nombres = data.map((t: { nombre: string }) => t.nombre)
-        trabajadorNombresRef.current = nombres
-        setTrabajadorNombres(nombres)
-        setTrabajadores(prev => {
-          const next = defaultTrabajadores(nombres)
-          for (const nombre of nombres) {
-            if (prev[nombre]) { next[nombre] = prev[nombre]; continue }
-            // Trabajador que la lista de respaldo no tenía (uno nuevo, como Yasmani): si ese
-            // día ya estaba cargado, su estado sale de lo guardado. Sin esto quedaba en
-            // "presente sin obra" y bloqueaba el guardado del día entero con "Falta indicar
-            // la obra de algún trabajador presente", aunque nadie hubiera tocado asistencia.
-            const fila = filasDelDiaRef.current.find(f => f.trabajador === nombre)
-            if (fila) next[nombre] = estadoDesdeFila(fila)
-          }
-          return next
-        })
+        setTrabajadorNombres(data.map((t: { nombre: string }) => t.nombre))
       }
     })
   }, [tokenValido])
+
+  // Quién va en la asistencia de ESTE día: los trabajadores activos, más cualquiera que ya
+  // tenga su fila guardada ese día aunque hoy esté archivado. Sin esa segunda mitad, abrir un
+  // día viejo escondía a quien realmente trabajó y no había forma de corregirlo -- y archivar
+  // a alguien le borraría de la vista su historial. Los archivados no aparecen en los días
+  // nuevos, que es justo lo que se busca al archivarlos.
+  const nombresDelDia = useMemo(
+    () => Array.from(new Set([...trabajadorNombres, ...filasDelDia.map(f => f.trabajador)])).sort(),
+    [trabajadorNombres, filasDelDia],
+  )
+
+  // El ÚNICO lugar donde se arma el estado de la asistencia. Respeta lo que el usuario ya
+  // tocó (`prev`), siembra desde la fila guardada a quien la tenga, y recién ahí cae al
+  // valor por defecto. `cargarDia` vacía el estado al cambiar de fecha, así que `prev` nunca
+  // arrastra ediciones de otro día.
+  useEffect(() => {
+    setTrabajadores(prev => {
+      const next: Record<string, TrabajadorState> = {}
+      for (const nombre of nombresDelDia) {
+        const fila = filasDelDia.find(f => f.trabajador === nombre)
+        next[nombre] = prev[nombre] ?? (fila ? estadoDesdeFila(fila) : { ...DEFAULT_TRABAJADOR })
+      }
+      return next
+    })
+  }, [nombresDelDia, filasDelDia])
 
   // Gustavo no tiene tarifa diaria (no está en la tabla `trabajadores`, cobra distinto por ser
   // el dueño) -- no puede sumarse a trabajadorNombres o aparecería en asistencia/pago semanal
   // por error. Se usa aparte solo donde tiene sentido que él sea la respuesta (ej: quién hizo
   // un trabajo puntual).
-  const quienLoHizo = [...trabajadorNombres, 'Gustavo']
+  const quienLoHizo = [...nombresDelDia, 'Gustavo']
 
   function actualizarTrabajador(nombre: string, patch: Partial<TrabajadorState>) {
     setTrabajadores(prev => ({ ...prev, [nombre]: { ...prev[nombre], ...patch } }))
@@ -377,7 +379,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     const nombresAfectados: string[] = []
     setTrabajadores(prev => {
       const next = { ...prev }
-      for (const nombre of trabajadorNombres) {
+      for (const nombre of nombresDelDia) {
         if (next[nombre]?.presente) {
           next[nombre] = { ...next[nombre], obra: obraGeneral, viatico: viaticoCorresponde(obraGeneral, fecha) }
           nombresAfectados.push(nombre)
@@ -588,7 +590,7 @@ export default function Reporte({ token, embedded = false }: Props) {
       return
     }
 
-    const filasDiarias = trabajadorNombres.filter(nombre => trabajadoresTocados.has(nombre)).map(nombre => {
+    const filasDiarias = nombresDelDia.filter(nombre => trabajadoresTocados.has(nombre)).map(nombre => {
       const t = trabajadores[nombre] || { ...DEFAULT_TRABAJADOR, presente: false }
       return {
         fecha,
@@ -1055,7 +1057,7 @@ export default function Reporte({ token, embedded = false }: Props) {
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-              {trabajadorNombres.map(nombre => {
+              {nombresDelDia.map(nombre => {
                 const t = trabajadores[nombre]
                 if (!t) return null
                 const esFabriel = nombre === 'Fabriel'
