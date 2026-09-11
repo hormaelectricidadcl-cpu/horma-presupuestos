@@ -941,7 +941,7 @@ export function PanelObras() {
               padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
               border: `1.5px solid ${vista === 'curso' ? 'var(--primary)' : 'var(--border)'}`,
               background: vista === 'curso' ? 'var(--primary)' : 'var(--white)',
-              color: vista === 'curso' ? '#fff' : 'var(--muted)',
+              color: vista === 'curso' ? '#fff' : 'var(--secondary)',
             }}
           >En curso ({enCurso.length})</button>
           <button
@@ -950,7 +950,7 @@ export function PanelObras() {
               padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 20, cursor: 'pointer',
               border: `1.5px solid ${vista === 'culminadas' ? 'var(--success)' : 'var(--border)'}`,
               background: vista === 'culminadas' ? 'var(--success)' : 'var(--white)',
-              color: vista === 'culminadas' ? '#fff' : 'var(--muted)',
+              color: vista === 'culminadas' ? '#fff' : 'var(--secondary)',
             }}
           >Culminadas ({culminadas.length})</button>
         </div>
@@ -1055,7 +1055,7 @@ export function PanelObras() {
                         pregunta. */}
                     {o.obraId && (
                       <details style={{ marginBottom: 12 }}>
-                        <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer', listStyle: 'revert' }}>
+                        <summary style={{ fontSize: 12, color: 'var(--secondary)', fontWeight: 600, cursor: 'pointer', listStyle: 'revert' }}>
                           {o.fechaInicio || o.fechaFin || o.garantiaHasta
                             ? [
                                 o.fechaInicio ? `Inicio ${o.fechaInicio.split('-').reverse().join('/')}` : null,
@@ -4688,10 +4688,10 @@ function SeccionPlegable({ titulo, resumen, abiertaPorDefecto = false, accion, c
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 1.5rem' }}>
         <button
           onClick={() => setAbierta(x => !x)}
-          style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', color: 'var(--text)' }}
+          style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', color: 'var(--secondary)' }}
         >
           <span style={{ color: 'var(--muted)', fontSize: 11, flexShrink: 0 }}>{abierta ? '▲' : '▼'}</span>
-          <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             {titulo}
           </span>
           {resumen && (
@@ -5217,7 +5217,7 @@ export function HistorialObraModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
             <button
               onClick={onClose}
-              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 20, padding: '7px 13px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--muted)', flexShrink: 0 }}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 20, padding: '7px 13px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--secondary)', flexShrink: 0 }}
             >← Volver</button>
             <h2 className="font-display" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--primary)' }}>
               Detalle de obra

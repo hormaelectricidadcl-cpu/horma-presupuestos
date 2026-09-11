@@ -128,7 +128,10 @@ body {
 .pendientes .btn-secondary:hover:not(:disabled) { background: var(--surface-alt); }
 .pendientes .btn-danger    { background: var(--danger-bg); color: var(--danger); border: 1px solid #f5c6c6; }
 .pendientes .btn-danger:hover:not(:disabled) { background: #fbe9e9; }
-.pendientes .btn-ghost     { background: transparent; color: var(--muted); }
+/* Azul marino, no gris: en gris (#8A8479 sobre card clara) Gustavo directamente no los
+   veía -- "hay que colocarlos en el color azul porque Gustavo no los ve" (Alexandra,
+   11/09). Son botones de verdad (Descargar PDF, Ver detalle, Quitar), no texto de apoyo. */
+.pendientes .btn-ghost     { background: transparent; color: var(--secondary); font-weight: 600; }
 .pendientes .btn-ghost:hover:not(:disabled) { background: var(--border); }
 
 .pendientes .btn-lg {
