@@ -1,6 +1,47 @@
 # Estado actual — Horma App
 > Actualizar al terminar cada sesión de trabajo en este proyecto
 
+## CIERRE DEL VIERNES 11/09/2026 — todo pusheado, y qué falta para llamarlo terminado
+
+**Todo está en producción.** 21 commits, del `585dcba` al `2d1057d`. Las dos migraciones corridas y
+verificadas. El plan de 6 bloques completo, más lo que salió de revisarlo con Alexandra en pantalla.
+
+### Lo que falta, en orden de lo que duele
+
+1. 🔴 **SEGURIDAD — es lo único que impide decir que está terminado.** Verificado hoy contra la base:
+   `clientes`, `obras`, `presupuestos`, `cuentas_por_cobrar`, `reportes_compras` y `reportes_cobros` siguen
+   con política `anon full access`, y `reportes_diarios`, `trabajadores` y `subcontratos_master` con
+   `anon leer/insertar/actualizar`. Con la clave pública —que está dentro del JS del sitio— cualquiera lee y
+   escribe los clientes, los presupuestos y la plata. `tareas_clientes` sigue sin RLS. Abierto desde el 28/08.
+2. **Bloque 0** — carga de datos, seis puntos, ninguno necesita código. El punto de las categorías ahora
+   además desbloquea los medidores nuevos en las tres obras grandes.
+3. **Validar el 25% de recargo en materiales** cuando cierre una obra con todos sus materiales cargados.
+   Está escrito en la constante `RECARGO_MATERIALES_PCT` con la instrucción de cómo comprobarlo.
+4. **Nunca probado en producción:** el sync a Google Sheets (`sync-*.js`), y "Archivar todos los Listo" en
+   Admin. Ninguna Cloudflare Function se puede probar en local.
+5. Pendientes chicos de antes: el cobro de $700 mal tipeado en Camino turístico, archivar a Alejandro, el
+   presupuesto real de "Doctora Eloísa (5843)", unificar el nombre de "Doctora Eloísa - Obra 1", y confirmar
+   el teléfono de `.env` (apunta al de la sociedad anterior desde el 14/08).
+
+### Lo que se construyó hoy por la tarde, después del plan
+Todo salió de Alexandra revisando la app en pantalla:
+- El detalle de obra entra en el teléfono (un solo scroll, secciones plegables).
+- "IVA de servicios" en vez de "ventas", y una card por obra en el desglose.
+- Las tarjetas de obra reordenadas, con el IVA dentro del Presupuesto y los abonos a subcontratistas a la vista.
+- **Un bug de producción que bloqueaba el guardado del día entero** (la lista de trabajadores escrita a mano,
+  sin Yasmani). Arreglado de raíz: ahora sale de la base, y un archivado sigue apareciendo en los días que
+  trabajó.
+- Color de marca en las cuatro pantallas del día a día; "Más herramientas" agrupa cinco secciones.
+- **"Va a terminar dejando"** — la ganancia proyectada de verdad, con el 25% de recargo que consiguió
+  Alexandra. En la obra de Alexis: $841.450 (31,1%) contra los $1.093.684 (40,4%) que mostraba antes.
+  Verificado que NO depende de que Gustavo cargue las compras: usa el presupuesto como piso.
+- Los dos medidores de consumo: materiales y jornales, cada uno avisa antes de pasarse.
+
+### Tres correcciones de nombre sobre el mismo número, todas de Alexandra leyendo la pantalla
+"Margen" → "Te queda hoy" → "Ganancia proyectada" → **"Va quedando"** / **"Va a terminar dejando"**.
+Vale la lección: ese dato esconde supuestos que no son obvios mirando el número, y cada vez que se nombró
+corto se leyó mal. La investigación del WIP report está en `decisiones.md`.
+
 ## POR DÓNDE SEGUIR — viernes 11/09/2026, sesión de la tarde
 
 **Se ejecutó el "PLAN PARA LA PRÓXIMA SESIÓN" completo: los 6 bloques.** Seis commits, del `585dcba` al
