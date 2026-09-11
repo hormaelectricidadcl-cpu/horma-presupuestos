@@ -3945,17 +3945,18 @@ function PresupuestoDeLaObra({ presupuestoId, obraId }: { presupuestoId: string 
   }
 
   return (
-    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '30vh', overflowY: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          Presupuesto de esta obra
-        </p>
-        {presupuesto && presupuesto.tipo !== 'externo' && (
-          <button className="btn btn-ghost" onClick={() => descargarPdfPresupuesto(presupuesto)} style={{ fontSize: 12 }}>
-            Descargar PDF
-          </button>
-        )}
-      </div>
+    <SeccionPlegable
+      titulo="Presupuesto de esta obra"
+      abiertaPorDefecto
+      resumen={presupuesto
+        ? `${fmtMoney((presupuesto.total || 0) + sumaSumados)}${sumados.length > 0 ? ` · ${sumados.length} adicional${sumados.length !== 1 ? 'es' : ''}` : ''}`
+        : undefined}
+      accion={presupuesto && presupuesto.tipo !== 'externo' && (
+        <button className="btn btn-ghost" onClick={() => descargarPdfPresupuesto(presupuesto)} style={{ fontSize: 12, flexShrink: 0 }}>
+          Descargar PDF
+        </button>
+      )}
+    >
 
       {!presupuestoId ? (
         <p style={{ fontSize: 13, color: 'var(--muted)' }}>
@@ -4033,7 +4034,7 @@ function PresupuestoDeLaObra({ presupuestoId, obraId }: { presupuestoId: string 
           )}
         </>
       )}
-    </div>
+    </SeccionPlegable>
   )
 }
 
@@ -4079,15 +4080,17 @@ function SubcontratosDeLaObra({ obra, onCambio }: { obra: string; onCambio?: () 
   const totalContratado = filas.reduce((s, f) => s + Number(f.total_contrato), 0)
 
   return (
-    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          Subcontratistas de esta obra
-        </p>
-        <button className="btn btn-ghost" onClick={() => setMostrarNuevo(x => !x)} style={{ fontSize: 12 }}>
+    <SeccionPlegable
+      titulo="Subcontratistas"
+      resumen={filas.length > 0
+        ? `${filas.map(f => f.subcontratista).join(', ')} · ${fmtMoney(totalContratado)}`
+        : 'ninguno cargado'}
+      accion={
+        <button className="btn btn-ghost" onClick={() => setMostrarNuevo(x => !x)} style={{ fontSize: 12, flexShrink: 0 }}>
           {mostrarNuevo ? 'Cancelar' : '+ Agregar subcontrato'}
         </button>
-      </div>
+      }
+    >
 
       {mostrarNuevo && (
         <div className="card" style={{ padding: 14, marginBottom: 10 }}>
@@ -4135,7 +4138,7 @@ function SubcontratosDeLaObra({ obra, onCambio }: { obra: string; onCambio?: () 
           )}
         </div>
       )}
-    </div>
+    </SeccionPlegable>
   )
 }
 
@@ -4497,16 +4500,16 @@ function GaleriaObra({ obraId }: { obraId: string }) {
   }
 
   return (
-    <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '24vh', overflowY: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          Fotos y videos
-        </p>
-        <label className="btn btn-ghost" style={{ fontSize: 12, cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
+    <SeccionPlegable
+      titulo="Fotos y videos"
+      resumen={loading ? undefined : media.length === 0 ? 'ninguna' : `${media.length} archivo${media.length !== 1 ? 's' : ''}`}
+      accion={
+        <label className="btn btn-ghost" style={{ fontSize: 12, flexShrink: 0, cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
           {subiendo ? 'Subiendo...' : '+ Subir'}
           <input type="file" accept="image/*,video/*,.pdf" onChange={subirArchivo} disabled={subiendo} style={{ display: 'none' }} />
         </label>
-      </div>
+      }
+    >
       {loading ? (
         <div className="spinner" />
       ) : media.length === 0 ? (
@@ -4532,6 +4535,47 @@ function GaleriaObra({ obraId }: { obraId: string }) {
           ))}
         </div>
       )}
+    </SeccionPlegable>
+  )
+}
+
+/* ─── Sección plegable del detalle de obra ──── */
+// El detalle tenía seis secciones apiladas y cada una con su propio scroll interno
+// (maxHeight 24vh/28vh/30vh). En un notebook eso dejaba seis ventanitas de tres líneas y en
+// el teléfono directamente no se veía nada -- Alexandra, 11/09: "hay que arreglar la forma
+// en que se presentan los datos porque en pc no se puede ver todos y en móvil menos".
+//
+// Ahora el modal tiene UN solo scroll y cada sección se pliega, con el dato importante en el
+// título para no tener que abrirla: cuánto suma, cuántas hay. Se abren solas únicamente las
+// que casi siempre se van a mirar.
+function SeccionPlegable({ titulo, resumen, abiertaPorDefecto = false, accion, children }: {
+  titulo: string
+  resumen?: string
+  abiertaPorDefecto?: boolean
+  accion?: React.ReactNode
+  children: React.ReactNode
+}) {
+  const [abierta, setAbierta] = useState(abiertaPorDefecto)
+  return (
+    <div style={{ borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 1.5rem' }}>
+        <button
+          onClick={() => setAbierta(x => !x)}
+          style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', color: 'var(--text)' }}
+        >
+          <span style={{ color: 'var(--muted)', fontSize: 11, flexShrink: 0 }}>{abierta ? '▲' : '▼'}</span>
+          <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            {titulo}
+          </span>
+          {resumen && (
+            <span style={{ fontSize: 12.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {resumen}
+            </span>
+          )}
+        </button>
+        {abierta && accion}
+      </div>
+      {abierta && <div style={{ padding: '0 1.5rem 14px' }}>{children}</div>}
     </div>
   )
 }
@@ -4615,7 +4659,7 @@ export function PanelIVA() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
         <button onClick={() => setAbierto(abierto === 'ventas' ? null : 'ventas')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
           <StatTile
-            label="IVA de ventas (débito)"
+            label="IVA de servicios (débito)"
             valor={fmtMoney(debito)}
             nota={`${ventasMes.length} documento${ventasMes.length !== 1 ? 's' : ''} · ver de dónde sale ${abierto === 'ventas' ? '▲' : '▼'}`}
           />
@@ -4637,7 +4681,7 @@ export function PanelIVA() {
 
       {abierto === 'ventas' && (
         <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>De dónde sale el IVA de ventas</p>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>De dónde sale el IVA de servicios</p>
           <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.45 }}>
             Cada factura o boleta que se emitió este mes y está cargada en la app. El IVA de cada una es
             19/119 de su total, porque el monto ya lo trae adentro.
@@ -4672,16 +4716,24 @@ export function PanelIVA() {
           {comprasMes.length === 0 ? (
             <p style={{ fontSize: 12.5, color: 'var(--muted)' }}>No hay compras cargadas con fecha de este mes.</p>
           ) : (
+            /* Una card por obra (pedido de Alexandra, 11/09): en una lista corrida no se ve
+               dónde termina una obra y empieza la otra, y el número que importa -- cuánto
+               IVA aportó cada una -- se pierde entre las filas. */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {Array.from(comprasMes.reduce((mapa, c) => {
                 const k = c.obra || (c.destino === 'stock' ? 'Bodega (sin obra todavía)' : 'Sin obra')
                 mapa.set(k, [...(mapa.get(k) || []), c])
                 return mapa
               }, new Map<string, ReporteCompraDia[]>())).sort((a, b) => a[0].localeCompare(b[0])).map(([obraNombre, suyas]) => (
-                <div key={obraNombre}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5, gap: 10 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700 }}>{obraNombre}</span>
-                    <span style={{ fontSize: 12.5, fontWeight: 700 }}>{fmtMoney(suyas.reduce((s, c) => s + ivaDe(c.monto), 0))}</span>
+                <div key={obraNombre} className="card" style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, paddingBottom: 8, marginBottom: 10, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, minWidth: 0 }}>{obraNombre}</span>
+                    <span style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>
+                      {suyas.length} compra{suyas.length !== 1 ? 's' : ''} · total {fmtMoney(suyas.reduce((s, c) => s + c.monto, 0))}
+                    </span>
+                    <span className="font-display" style={{ fontSize: 17, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtMoney(suyas.reduce((s, c) => s + ivaDe(c.monto), 0))}
+                    </span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     {suyas.map(c => <Fila key={c.id} izq={`${fmtFecha(c.fecha)} · ${c.descripcion}`} bruto={c.monto} />)}
@@ -4889,10 +4941,10 @@ export function HistorialObraModal({
         zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
       }}
     >
-      {/* "Esto es muy grande, así no se ven casi las cosas" (Alexandra, conversación 3):
-          en pantalla chica el modal ocupaba casi todo el alto y cada sección se llevaba su
-          parte, así que no entraba nada. Ahora usa más alto disponible y las secciones de
-          arriba se achican, para que el contenido del período tenga lugar. */}
+      {/* Un solo scroll para todo el cuerpo, y cada sección plegable con su dato en el
+          título. Antes cada sección tenía su propio `maxHeight` + scroll interno: en un
+          notebook quedaban seis ventanitas de tres líneas y en el teléfono no se veía nada
+          (Alexandra, 11/09). */}
       <div style={{
         background: 'var(--white)', color: 'var(--text)', borderRadius: '16px 16px 0 0',
         width: '100%', maxWidth: 860, maxHeight: '92vh',
@@ -4909,28 +4961,31 @@ export function HistorialObraModal({
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1 }}>✕</button>
         </div>
 
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+
         <PresupuestoDeLaObra presupuestoId={presupuestoId} obraId={obraId} />
 
         <SubcontratosDeLaObra obra={obra} onCambio={onCambioSubcontratos} />
 
-        <div style={{ padding: '10px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ padding: '10px 1.5rem', borderBottom: '1px solid var(--border)' }}>
           <BitacoraObra obra={obra} presupuestoId={presupuestoId} />
         </div>
 
         {obraId && <GaleriaObra obraId={obraId} />}
 
         {onAgregarAbono && onEliminarAbono && onEliminarCuenta && (
-          <div style={{ padding: '14px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, maxHeight: '28vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Cuentas por cobrar de esta obra
-              </p>
-              {onCrearCuentaObra && (
-                <button className="btn btn-ghost" onClick={() => setMostrarNuevaCuenta(x => !x)} style={{ fontSize: 12 }}>
-                  {mostrarNuevaCuenta ? 'Cancelar' : '+ Agregar cuenta'}
-                </button>
-              )}
-            </div>
+          <SeccionPlegable
+            titulo="Cuentas por cobrar"
+            resumen={cuentasObra && cuentasObra.length > 0
+              ? `${cuentasObra.length} cuenta${cuentasObra.length !== 1 ? 's' : ''} · ${fmtMoney(cuentasObra.reduce((s, c) => s + c.total_presupuesto, 0))}`
+              : 'ninguna cargada'}
+            abiertaPorDefecto={(cuentasObra?.length ?? 0) > 0}
+            accion={onCrearCuentaObra && (
+              <button className="btn btn-ghost" onClick={() => setMostrarNuevaCuenta(x => !x)} style={{ fontSize: 12, flexShrink: 0 }}>
+                {mostrarNuevaCuenta ? 'Cancelar' : '+ Agregar cuenta'}
+              </button>
+            )}
+          >
             {mostrarNuevaCuenta && onCrearCuentaObra && (
               <div className="card" style={{ padding: 14, marginBottom: 10 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -4969,20 +5024,22 @@ export function HistorialObraModal({
                 ))}
               </div>
             )}
-          </div>
+          </SeccionPlegable>
         )}
 
-        <div style={{ padding: '12px 1.5rem', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Agrupar por</label>
-          <select value={vista} onChange={e => setVista(e.target.value as VistaPeriodo)} style={{ fontSize: 13, padding: '5px 10px', width: 'auto' }}>
-            <option value="dia">Día a día</option>
-            <option value="semana">Semana</option>
-            <option value="quincena">Quincena</option>
-            <option value="mes">Mes</option>
-          </select>
-        </div>
-
-        <div style={{ overflowY: 'auto', padding: '1.25rem 1.5rem', flex: 1 }}>
+        <SeccionPlegable
+          titulo="Movimientos del día a día"
+          resumen={`${diariosObra.length + comprasObra.length + cobrosObra.length + subcontratosObra.length} registros`}
+          abiertaPorDefecto
+          accion={
+            <select value={vista} onChange={e => setVista(e.target.value as VistaPeriodo)} style={{ fontSize: 13, padding: '5px 10px', width: 'auto', flexShrink: 0 }}>
+              <option value="dia">Día a día</option>
+              <option value="semana">Semana</option>
+              <option value="quincena">Quincena</option>
+              <option value="mes">Mes</option>
+            </select>
+          }
+        >
           {vista === 'dia' ? (
             <DetalleObraContenido
               diariosObra={diariosObra}
@@ -4997,6 +5054,8 @@ export function HistorialObraModal({
           ) : (
             periodos.map(p => <PeriodoRow key={p.key} periodo={p} tarifas={tarifas} onMarcarReembolsado={onMarcarReembolsado} />)
           )}
+        </SeccionPlegable>
+
         </div>
       </div>
     </div>

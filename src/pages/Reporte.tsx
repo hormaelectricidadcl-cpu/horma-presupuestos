@@ -972,7 +972,7 @@ export default function Reporte({ token, embedded = false }: Props) {
               ✓ Reporte guardado correctamente
             </p>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
-              Las compras ya guardadas quedaron cerraditas más abajo (✓). Para agregar otra boleta, tocá "+ Agregar compra".
+              Lo ya guardado quedó plegado más abajo (✓). Para agregar otra boleta, usa "+ Agregar compra o gasto".
             </p>
           </div>
         )}
@@ -1150,7 +1150,16 @@ export default function Reporte({ token, embedded = false }: Props) {
             </div>
 
             {/* Compras del día */}
-            <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Compras del día</h2>
+            {/* El nombre de la sección confundía: se leía como "solo materiales de una obra",
+                y por eso el combustible y los peajes terminaron cargados contra O'Higgins
+                mientras el Tag iba a gastos variables. Acá se dice de entrada que ésta es la
+                única puerta y que lo que cambia es el destino, no el lugar donde se carga. */}
+            <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Compras y gastos del día</h2>
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
+              Todo lo que se pagó hoy va acá: los materiales de una obra, los que se compran en bloque para
+              bodega, y los gastos de la empresa como combustible, peaje o herramientas. No hay que ir a otra
+              pantalla — lo que cambia es el destino que elijas en cada una, y la app la manda a donde va.
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
               {compras.map((c, idx) => {
                 const colapsada = !!(c.id && comprasColapsadas.has(c.id))
@@ -1316,7 +1325,7 @@ export default function Reporte({ token, embedded = false }: Props) {
               })}
             </div>
             <button type="button" className="btn btn-secondary" onClick={agregarCompra} style={{ width: '100%', marginBottom: 24 }}>
-              + Agregar compra
+              + Agregar compra o gasto
             </button>
 
             {/* Uso de stock del día */}
