@@ -523,23 +523,27 @@ export default function Gustavo({ token }: Props) {
     { key: 'calendario', label: 'Calendario', icon: 'calendario' },
     { key: 'ideas', label: 'Ideas de contenido', icon: 'ideas' },
     { key: 'banco_contenido', label: 'Banco de contenido', icon: 'banco_contenido' },
+    { key: 'resultados', label: 'Estado de resultados', icon: 'resultados' },
   ]
 
-  const SECCIONES: { key: SeccionGustavo; label: string; icon: NavIconName; destacado?: boolean }[] = [
+  // Las cuatro que se usan todos los días van en color, para encontrarlas sin leer
+  // (Alexandra, 11/09). Salen todas de la paleta de la marca, nada inventado: las dos de
+  // presupuestos comparten la familia naranja -- la de crear más viva que la de consultar --
+  // y el día a día se reparte entre el azul marino y el verde.
+  const SECCIONES: { key: SeccionGustavo; label: string; icon: NavIconName; color?: string }[] = [
     { key: 'pendientes', label: 'Mis tareas', icon: 'tareas' },
-    { key: 'reporte', label: 'Reporte diario', icon: 'reporte' },
-    { key: 'obras', label: 'Obras', icon: 'obras' },
+    { key: 'reporte', label: 'Reporte diario', icon: 'reporte', color: 'var(--secondary)' },
+    { key: 'obras', label: 'Obras', icon: 'obras', color: 'var(--success)' },
     { key: 'avance_obra', label: 'Avance de obra', icon: 'avance' },
     { key: 'pagos', label: 'Pago semanal', icon: 'pago' },
     { key: 'trabajadores', label: 'Trabajadores', icon: 'trabajadores' },
     { key: 'boletas', label: 'Boletas', icon: 'boletas' },
     { key: 'facturas', label: 'Facturas', icon: 'facturas' },
-    { key: 'presupuestos', label: 'Mis presupuestos', icon: 'presupuestos' },
-    { key: 'presupuestador', label: 'Hacer presupuesto', icon: 'presupuestador', destacado: true },
+    { key: 'presupuestos', label: 'Mis presupuestos', icon: 'presupuestos', color: 'var(--primary-dark)' },
+    { key: 'presupuestador', label: 'Hacer presupuesto', icon: 'presupuestador', color: 'var(--primary)' },
     { key: 'notas', label: 'Mis notas', icon: 'notas' },
     { key: 'clientes', label: 'Clientes', icon: 'clientes' },
     { key: 'stock', label: 'Stock', icon: 'stock' },
-    { key: 'resultados', label: 'Estado de resultados', icon: 'resultados' },
     { key: 'iva', label: 'IVA del mes', icon: 'facturas' },
     { key: 'mas', label: 'Más herramientas', icon: 'ideas' },
   ]
@@ -607,7 +611,7 @@ export default function Gustavo({ token }: Props) {
                   style={{
                     position: 'relative', padding: '18px 16px', border: 'none', cursor: 'pointer',
                     display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 16,
-                    textAlign: 'left', background: s.destacado ? 'var(--primary)' : 'var(--surface)',
+                    textAlign: 'left', background: s.color || 'var(--surface)',
                   }}
                 >
                   {badge > 0 && (
@@ -617,8 +621,8 @@ export default function Gustavo({ token }: Props) {
                       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px',
                     }}>{badge}</span>
                   )}
-                  <NavIcon name={s.icon} color={s.destacado ? '#FBFAF7' : '#14213D'} />
-                  <span style={{ fontSize: 13.5, fontWeight: 700, color: s.destacado ? '#FBFAF7' : 'var(--text)' }}>{s.label}</span>
+                  <NavIcon name={s.icon} color={s.color ? '#FBFAF7' : '#14213D'} />
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: s.color ? '#FBFAF7' : 'var(--text)' }}>{s.label}</span>
                 </button>
               )
             })}
