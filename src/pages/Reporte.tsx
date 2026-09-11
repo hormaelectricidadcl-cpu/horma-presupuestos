@@ -59,9 +59,16 @@ interface CompraRow {
   monto: string
   obra: string
   // Cuando la compra no es para ninguna obra, explica a propósito por qué -- 'stock'
-  // (material para tener a mano) o 'trabajo_puntual' (algo chico sin obra formal) -- en vez
-  // de dejarla sin etiqueta. No se guarda nada acá si `obra` sí tiene una obra real.
-  destino: '' | 'stock' | 'trabajo_puntual'
+  // (material para tener a mano), 'trabajo_puntual' (algo chico sin obra formal) o
+  // 'gasto_empresa' (no es material: combustible, peaje, herramientas) -- en vez de dejarla
+  // sin etiqueta. No se guarda nada acá si `obra` sí tiene una obra real.
+  //
+  // 'gasto_empresa' no es una compra: esa fila se guarda en `gastos_variables`, no en
+  // `reportes_compras`. Vive igual en este formulario porque la regla que decidió Alexandra
+  // (11/09) es que Gustavo elija el destino UNA vez, donde carga, y la app se encargue del
+  // resto. Antes tenía que acordarse de ir a otra pantalla, y por eso hay combustible
+  // cargado en los dos lados.
+  destino: '' | 'stock' | 'trabajo_puntual' | 'gasto_empresa'
   pagadoPor: string
   reembolsado: boolean
   fotoBoletaUrl: string
@@ -186,11 +193,15 @@ export default function Reporte({ token, embedded = false }: Props) {
   const [trabajosPuntuales, setTrabajosPuntuales] = useState<TrabajoPuntualRow[]>([])
   const [materiales, setMateriales] = useState<{ id: string; nombre: string; stock_actual: number }[]>([])
   const [usosStock, setUsosStock] = useState<UsoStockRow[]>([])
+  // Ids de los gastos de empresa que este día ya tenía guardados. Hace falta aparte de
+  // `compras` porque si el usuario borra la última fila de gasto, esa fila desaparece del
+  // estado y sin esto no habría cómo saber que hay algo que borrar en la base.
+  const [gastosEmpresaDelDia, setGastosEmpresaDelDia] = useState<string[]>([])
 
   const cargarDia = useCallback(async (f: string) => {
     setLoading(true)
     setError(null)
-    const [{ data: dia }, { data: compr }, { data: cobr }, { data: subc }, { data: punt }, { data: aboAquiDia }, { data: salidasDia }] = await Promise.all([
+    const [{ data: dia }, { data: compr }, { data: cobr }, { data: subc }, { data: punt }, { data: aboAquiDia }, { data: salidasDia }, gastosDia] = await Promise.all([
       supabase.from('reportes_diarios').select('*').eq('fecha', f),
       supabase.from('reportes_compras').select('*').eq('fecha', f).order('created_at'),
       supabase.from('reportes_cobros').select('*').eq('fecha', f).order('created_at'),
@@ -200,6 +211,10 @@ export default function Reporte({ token, embedded = false }: Props) {
       // unica) en vez de reportes_cobros — para que se sigan viendo/editando acá.
       supabase.from('abonos_cuenta').select('id, fecha, monto, cuentas_por_cobrar(obra, pagador)').eq('fecha', f),
       supabase.from('movimientos_stock').select('*').eq('fecha', f).eq('tipo', 'salida').order('created_at'),
+      // Gastos de la empresa cargados desde acá. Solo los de `origen = 'reporte_diario'`:
+      // los que Alexandra carga a mano desde Estado de resultados no se tocan desde esta
+      // pantalla, ni para mostrarlos ni para borrarlos.
+      supabase.from('gastos_variables').select('*').eq('fecha', f).eq('origen', 'reporte_diario').order('created_at'),
     ])
 
     const base = defaultTrabajadores(trabajadorNombresRef.current)
@@ -230,11 +245,21 @@ export default function Reporte({ token, embedded = false }: Props) {
         return acc
       }, {})
     }
-    setCompras(comprasDia.map(c => ({
-      id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', destino: c.destino || '', pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false, fotoBoletaUrl: c.foto_boleta_url || '',
-      items: itemsPorCompra[c.id] || [],
-    })))
-    setComprasColapsadas(new Set(comprasDia.map(c => c.id)))
+    // Si la migración todavía no se corrió, la columna `origen` no existe y el select falla:
+    // se muestra el día sin esos gastos antes que dejar el Reporte Diario sin cargar.
+    const gastosEmpresaDia = (gastosDia.error ? [] : (gastosDia.data || [])) as { id: string; descripcion: string | null; monto: number; foto_boleta_url: string | null }[]
+    setCompras([
+      ...comprasDia.map(c => ({
+        id: c.id, descripcion: c.descripcion, monto: String(c.monto), obra: c.obra || '', destino: (c.destino || '') as CompraRow['destino'], pagadoPor: c.pagado_por || '', reembolsado: c.reembolsado ?? false, fotoBoletaUrl: c.foto_boleta_url || '',
+        items: itemsPorCompra[c.id] || [],
+      })),
+      ...gastosEmpresaDia.map(g => ({
+        id: g.id, descripcion: g.descripcion || '', monto: String(g.monto), obra: '', destino: 'gasto_empresa' as const,
+        pagadoPor: '', reembolsado: false, fotoBoletaUrl: g.foto_boleta_url || '', items: [],
+      })),
+    ])
+    setComprasColapsadas(new Set([...comprasDia.map(c => c.id), ...gastosEmpresaDia.map(g => g.id)]))
+    setGastosEmpresaDelDia(gastosEmpresaDia.map(g => g.id))
     setUsosStock((salidasDia || []).map((s: { id: string; material_id: string; cantidad: number; obra: string | null }) => ({
       id: s.id, materialId: s.material_id, cantidad: String(s.cantidad), obra: s.obra || '',
     })))
@@ -637,7 +662,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     // cargada dos veces sin querer (ej: se subió de nuevo por las dudas de si había
     // guardado la primera vez).
     for (const c of comprasValidas) {
-      if (c.id) continue
+      if (c.id || c.destino === 'gasto_empresa') continue
       const { data: existentes } = await supabase.from('reportes_compras').select('id, descripcion').eq('fecha', fecha).eq('monto', Number(c.monto)).limit(1)
       if (existentes && existentes.length > 0) {
         if (!window.confirm(`Ya hay una compra de $${c.monto} cargada hoy ("${existentes[0].descripcion}"). ¿Es una compra distinta (Aceptar) o la misma boleta cargada dos veces (Cancelar)?`)) {
@@ -647,13 +672,54 @@ export default function Reporte({ token, embedded = false }: Props) {
       }
     }
 
+    // Las filas marcadas "Gasto de la empresa" no son compras: van a `gastos_variables`, que
+    // es lo que lee Estado de resultados. Se separan acá y no entran a `reportes_compras` --
+    // si entraran, le sumarían costo a una obra o quedarían como una compra sin destino.
+    const gastosEmpresa = comprasValidas.filter(c => c.destino === 'gasto_empresa')
+    const comprasDeVerdad = comprasValidas.filter(c => c.destino !== 'gasto_empresa')
+
+    // Mismo borrar-y-reinsertar que las compras, pero SOLO sobre lo que se cargó desde acá
+    // (`origen = 'reporte_diario'`). Sin ese filtro, guardar el día borraría los gastos
+    // variables que Alexandra carga a mano desde Estado de resultados con la misma fecha.
+    //
+    // Se toca `gastos_variables` únicamente si hay algo que escribir o algo que borrar. Si
+    // corriera siempre, mientras la migración no esté aplicada la columna `origen` no
+    // existe, el delete falla y NADIE podría guardar un reporte diario -- una pantalla que
+    // se usa todos los días caída por una función que quizá ni se está usando.
+    const tocaGastos = gastosEmpresa.length > 0 || gastosEmpresaDelDia.length > 0
+    if (tocaGastos) {
+      const { error: eBorrarGastos } = await supabase
+        .from('gastos_variables').delete().eq('fecha', fecha).eq('origen', 'reporte_diario')
+      if (eBorrarGastos) {
+        setError('No se pudieron guardar los gastos de la empresa. Puede que falte correr la migración sql/20260911_gastos_variables_desde_reporte.sql — avísale a Alexandra.')
+        setSaving(false)
+        return
+      }
+    }
+    if (gastosEmpresa.length) {
+      const { error: eGastos } = await supabase.from('gastos_variables').insert(
+        gastosEmpresa.map(c => ({
+          fecha,
+          descripcion: c.descripcion.trim(),
+          monto: Number(c.monto),
+          foto_boleta_url: c.fotoBoletaUrl || null,
+          origen: 'reporte_diario',
+        })),
+      )
+      if (eGastos) {
+        setError('No se pudieron guardar los gastos de la empresa. Intenta de nuevo.')
+        setSaving(false)
+        return
+      }
+    }
+
     // Borra las compras viejas del día -- el `on delete cascade` de `compra_items` limpia solo
     // el desglose de esas compras, no hace falta borrarlo aparte.
     await supabase.from('reportes_compras').delete().eq('fecha', fecha)
-    if (comprasValidas.length) {
+    if (comprasDeVerdad.length) {
       // Se inserta una por una (no en bloque) para poder vincular el desglose de ítems al ID
       // real de cada compra -- un insert en bloque no garantiza el orden de vuelta.
-      for (const c of comprasValidas) {
+      for (const c of comprasDeVerdad) {
         const { data: compraInsertada, error: e2 } = await supabase.from('reportes_compras').insert({
           fecha, descripcion: c.descripcion.trim(), monto: Number(c.monto), obra: c.obra || null, destino: c.obra ? null : (c.destino || null), pagado_por: c.pagadoPor || null, reembolsado: c.reembolsado, foto_boleta_url: c.fotoBoletaUrl || null,
         }).select('id').single()
@@ -1095,6 +1161,9 @@ export default function Reporte({ token, embedded = false }: Props) {
                         <span style={{ color: '#1f6b3f', fontWeight: 800, flexShrink: 0 }}>✓</span>
                         <span style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.descripcion}</span>
                         <span style={{ fontSize: 13, color: 'var(--muted)', flexShrink: 0 }}>${Number(c.monto).toLocaleString('es-CL')}</span>
+                        {c.destino === 'gasto_empresa' && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', flexShrink: 0 }}>Gasto de la empresa</span>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -1153,13 +1222,13 @@ export default function Reporte({ token, embedded = false }: Props) {
                         />
                       </div>
                       <div className="field" style={{ flex: 1 }}>
-                        <label>Obra</label>
+                        <label>¿A dónde va?</label>
                         <select
                           value={c.obra || (c.destino ? `__${c.destino}__` : '')}
                           onChange={e => {
                             const v = e.target.value
-                            if (v === '__stock__' || v === '__trabajo_puntual__') {
-                              actualizarCompra(idx, { obra: '', destino: v.replace(/^__|__$/g, '') as 'stock' | 'trabajo_puntual' })
+                            if (v.startsWith('__')) {
+                              actualizarCompra(idx, { obra: '', destino: v.replace(/^__|__$/g, '') as 'stock' | 'trabajo_puntual' | 'gasto_empresa' })
                             } else {
                               actualizarCompra(idx, { obra: v, destino: '' })
                             }
@@ -1168,10 +1237,23 @@ export default function Reporte({ token, embedded = false }: Props) {
                           <option value="">Selecciona...</option>
                           {obras.map(o => <option key={o} value={o}>{o}</option>)}
                           <option value="__stock__">Stock (sin obra todavía)</option>
+                          <option value="__gasto_empresa__">Gasto de la empresa (no es de una obra)</option>
                           <option value="__trabajo_puntual__">Trabajo puntual (sin obra)</option>
                         </select>
                       </div>
                     </div>
+
+                    {/* La regla, donde se carga. Estaba escrita solo en la ayuda del Estado de
+                        Resultados, que es justo donde Gustavo no entra -- y por eso hoy hay
+                        combustible cargado como compra de O'Higgins y también como gasto
+                        variable de la empresa, el mismo gasto en dos lados. */}
+                    <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: -4, lineHeight: 1.45 }}>
+                      {c.destino === 'gasto_empresa'
+                        ? 'Se guarda como gasto variable de la empresa, no como costo de ninguna obra. Aparece en Estado de resultados.'
+                        : c.destino === 'stock'
+                          ? 'Entra a bodega sin obra. El costo se le carga a una obra recién cuando el material sale con su vale de entrega.'
+                          : 'Si el gasto es de UNA obra, elige la obra. Si compraste materiales para varias, elige Stock. Si no es material de obra (combustible, peaje, herramientas), elige Gasto de la empresa.'}
+                    </p>
 
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
