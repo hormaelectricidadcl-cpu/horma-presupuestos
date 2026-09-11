@@ -236,7 +236,7 @@ function CargarPresupuestoObra({ obra, onGuardado }: { obra: { id: string; nombr
   )
 }
 
-export function StatTile({ label, valor, tono = 'neutral' }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' | 'alerta' }) {
+export function StatTile({ label, valor, tono = 'neutral', nota }: { label: string; valor: string; tono?: 'neutral' | 'positivo' | 'negativo' | 'alerta'; nota?: string }) {
   const color = tono === 'positivo' ? 'var(--success)' : tono === 'negativo' ? 'var(--danger)' : tono === 'alerta' ? 'var(--primary)' : 'var(--text)'
   return (
     <div style={{ padding: '14px 16px', background: 'var(--surface)', borderRadius: 14, minWidth: 100, boxShadow: 'var(--shadow)' }}>
@@ -246,6 +246,11 @@ export function StatTile({ label, valor, tono = 'neutral' }: { label: string; va
       <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
         {valor}
       </p>
+      {nota && (
+        <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 5, fontVariantNumeric: 'tabular-nums', lineHeight: 1.3 }}>
+          {nota}
+        </p>
+      )}
     </div>
   )
 }
@@ -341,12 +346,19 @@ const ESTADO_OBRA_LABELS: Record<EstadoObra, string> = {
   cerrada: 'Cerrada',
 }
 
-// IVA que se le suma al material que sale de bodega hacia una obra. Pedido de Gustavo
-// (11/09) y la razón es buena: sin esto el MISMO material cuesta 19% menos si pasa por
-// bodega que si se compra directo contra la obra -- las compras directas se cargan por el
-// monto del documento, con IVA, y el precio del catálogo viene neto del desglose. Dos rutas
-// para lo mismo que daban costos distintos.
+// IVA chileno. Se usa para bajar a NETO el monto de las compras, que se carga con el total
+// del documento. Gustavo confirmó el 11/09 que todas las compras de materiales van con
+// factura: ese IVA se recupera como crédito fiscal, así que no es costo real de la obra.
+// Verificado además contra los datos -- las compras con desglose cargado dan
+// monto/desglose = 1,19. Ver decisiones.md 2026-09-11 (revisado).
 const IVA_PCT = 19
+
+// Los subcontratistas NO facturan ni boletean (confirmado el 11/09), así que lo que se les
+// paga es costo completo y no pasa por acá. Si algún día empiezan a facturar, este es el
+// lugar donde habría que tratarlos igual que las compras.
+function aNeto(montoConIva: number) {
+  return Math.round(montoConIva / (1 + IVA_PCT / 100))
+}
 
 // Resumen por obra (cobrado, gastado, saldo, falta por cobrar) -- extraído de
 // PanelObras para que PanelConsultasIA (chat con IA) use exactamente el mismo
@@ -402,10 +414,19 @@ export function calcularResumenObras(
     // "Stock" no le suma costo a ninguna obra, porque al pagarla todavía no se sabe a cuál
     // va -- el costo se le carga a la obra recién cuando el material sale con su vale.
     // Sin esto, comprar a bodega haría desaparecer el costo de materiales de las obras y el
-    // margen se vería mejor de lo que es.
+    // margen se vería mejor de lo que es. Ya viene NETO: el precio del catálogo sale del
+    // desglose de la factura, que es sin IVA.
     const salidasObra = salidasStock.filter(m => m.tipo === 'salida' && m.obra === obra)
     const gastoMaterialesBodega = salidasObra.reduce((sum, m) => sum + m.cantidad * (m.precio_unitario || 0), 0)
+    // Dos números distintos a propósito, y la diferencia importa:
+    //   * `gastoCompras` es lo que salió del banco (el total del documento, con IVA). Sirve
+    //     para cuadrar caja y es lo que se muestra en la tarjeta "Compras".
+    //   * `gastoComprasNeto` es lo que la obra COSTÓ de verdad. El IVA de una compra con
+    //     factura se recupera como crédito fiscal, así que contarlo como costo hace ver la
+    //     obra peor de lo que es. Es el que entra en el saldo y en el margen.
     const gastoCompras = comprasObra.reduce((sum, c) => sum + c.monto, 0)
+    const gastoComprasNeto = aNeto(gastoCompras)
+    const ivaRecuperableCompras = gastoCompras - gastoComprasNeto
     const contratosObra = subcontratosMaster.filter(s => s.obra === obra)
     const gastoSubcontratos = contratosObra.length > 0
       ? contratosObra.reduce((sum, s) => sum + s.total_contrato, 0)
@@ -431,7 +452,7 @@ export function calcularResumenObras(
     // (Ohiggins tiene $3.615.000 de mano de obra y $1.595.000 cargados como pagos).
     // Es el criterio de "committed cost" que usan los sistemas de job costing: seguir solo
     // lo pagado te entera del sobrecosto cuando ya es tarde. Ver decisiones.md 2026-09-07.
-    const saldo = cobrado - gastoCompras - gastoMaterialesBodega - gastoSubcontratos - manoDeObra
+    const saldo = cobrado - gastoComprasNeto - gastoMaterialesBodega - gastoSubcontratos - manoDeObra
     // La otra mitad del mismo criterio: plata ya comprometida que todavía no salió. Sin esto
     // el saldo se lee como si fuera efectivo disponible, que es la confusión clásica entre
     // caja y margen -- una obra puede dejar plata y aun así no alcanzar para pagar el viernes.
@@ -464,7 +485,12 @@ export function calcularResumenObras(
     // Margen de la obra. Acordado con Alexandra el 09/09 (opción "b"): Horma compra los
     // materiales -- para aprovechar el IVA, criterio de Gustavo -- y le paga al
     // subcontratista su parte, así que el margen es lo que sobra del neto DESPUÉS de todos
-    // los costos, no una comisión fija. El objetivo es 25% del neto.
+    // los costos, no una comisión fija.
+    //
+    // 11/09: los dos lados de la resta van sin IVA. La venta por `neto` (19/119 del
+    // presupuesto) y los materiales por `gastoComprasNeto` / el precio de catálogo, que ya
+    // es neto. Los subcontratos van completos porque ellos no facturan: no hay IVA que
+    // recuperar ahí.
     //
     // El neto es el presupuesto sin IVA, con el mismo criterio que `ivaApartar` (19/119).
     // OJO: si la obra no está marcada como pactada con IVA, `ivaApartar` es null y el neto
@@ -472,7 +498,7 @@ export function calcularResumenObras(
     // avisa cuando una obra subcontratada no tiene la marca puesta, en vez de mostrar un
     // porcentaje lindo y falso.
     const neto = presupuestoTotal != null ? presupuestoTotal - (ivaApartar ?? 0) : null
-    const margen = neto != null ? neto - gastoCompras - gastoMaterialesBodega - gastoSubcontratos - manoDeObra : null
+    const margen = neto != null ? neto - gastoComprasNeto - gastoMaterialesBodega - gastoSubcontratos - manoDeObra : null
     const margenPct = neto != null && neto > 0 && margen != null ? Math.round((margen / neto) * 1000) / 10 : null
     // "Subcontratada" no es una marca que alguien tenga que mantener: la obra lo es si tiene
     // un contrato de subcontratista cargado. Así no hay un flag que se pueda olvidar.
@@ -499,7 +525,7 @@ export function calcularResumenObras(
       obra, obraId: maestro?.id, activa, estadoObra, conIva, ivaApartar, subcontratosPorPagar,
       neto, margen, margenPct, esSubcontratada, margenAlPactar, margenAlPactarPct,
       fechaInicio: maestro?.fecha_inicio ?? null, fechaFin: maestro?.fecha_fin ?? null, garantiaHasta: maestro?.garantia_hasta ?? null,
-      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoMaterialesBodega, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
+      tieneCuentas, cliente: maestro?.cliente ?? null, presupuestoTotal, presupuestoId: maestro?.presupuesto_id ?? null, gastoCompras, gastoComprasNeto, ivaRecuperableCompras, gastoMaterialesBodega, gastoSubcontratos, pagadoSubcontratos, manoDeObra, adelantos, pagosSemanales, porReembolsar, cobrado, cobradoManual, saldo, faltaPorCobrar,
     }
   })
 }
@@ -970,9 +996,16 @@ export function PanelObras() {
                         tono={o.faltaPorCobrar == null ? 'neutral' : o.faltaPorCobrar > 0 ? 'alerta' : 'positivo'}
                       />
                       <StatTile label="Mano de obra" valor={fmtMoney(o.manoDeObra)} />
-                      <StatTile label="Compras" valor={fmtMoney(o.gastoCompras)} />
+                      {/* Arriba lo que salió del banco, abajo lo que costó de verdad. Sin
+                          los dos números, cuadrar la caja contra el margen obliga a hacer
+                          la cuenta a mano y nadie sabe cuál de los dos está mirando. */}
+                      <StatTile
+                        label="Compras"
+                        valor={fmtMoney(o.gastoCompras)}
+                        nota={o.gastoCompras > 0 ? `Costo sin IVA: ${fmtMoney(o.gastoComprasNeto)}` : undefined}
+                      />
                       {o.gastoMaterialesBodega > 0 && (
-                        <StatTile label="Materiales de bodega" valor={fmtMoney(o.gastoMaterialesBodega)} />
+                        <StatTile label="Materiales de bodega" valor={fmtMoney(o.gastoMaterialesBodega)} nota="sin IVA" />
                       )}
                       <StatTile label="Subcontratos" valor={fmtMoney(o.gastoSubcontratos)} />
                       {/* Pedido de Gustavo (11/09): se veía lo contratado y lo que falta, pero
@@ -1002,6 +1035,24 @@ export function PanelObras() {
                       )}
                       <StatTile label="Saldo" valor={fmtMoney(o.saldo)} tono={o.saldo >= 0 ? 'positivo' : 'negativo'} />
                     </div>
+                    {/* Pedido de Alexandra (11/09): "definitivamente tenemos que meter la parte
+                        fiscal y contable". Sin esta línea, el margen usa un número de compras
+                        distinto al de la tarjeta de arriba y parece un error de la app. */}
+                    {(o.gastoCompras > 0 || o.gastoSubcontratos > 0) && (
+                      <details style={{ marginBottom: 12 }}>
+                        <summary style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>
+                          Por qué el margen no resta las compras completas
+                        </summary>
+                        <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5, marginTop: 6 }}>
+                          Los materiales se cuentan <strong>sin IVA</strong>: las compras van con factura y ese
+                          IVA vuelve como crédito fiscal, así que no es plata que la obra perdió.
+                          {o.ivaRecuperableCompras > 0 && <> En esta obra se compraron {fmtMoney(o.gastoCompras)} y {fmtMoney(o.ivaRecuperableCompras)} de eso es IVA recuperable, así que el costo real de materiales es {fmtMoney(o.gastoComprasNeto)}.</>}
+                          {' '}Los subcontratistas se cuentan <strong>completos</strong>, porque no facturan ni
+                          boletean: ahí no hay IVA que recuperar y lo que se les paga es costo entero.
+                          {' '}La tarjeta “Compras” muestra lo que salió del banco, para cuadrar caja.
+                        </p>
+                      </details>
+                    )}
                     <div style={{ fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {o.obraId ? (
                         <>
@@ -6136,8 +6187,10 @@ export function PanelStock() {
           obra: vale.obra,
           receptor: vale.receptor.trim(),
           // Precio congelado al momento de salir: el costo de una obra ya cerrada no se
-          // reescribe cuando cambia el precio del material ni si mañana cambia el IVA.
-          precio_unitario: m?.precio_unitario != null ? Math.round(m.precio_unitario * (1 + IVA_PCT / 100)) : null,
+          // reescribe cuando mañana se compre el mismo material más caro. Va NETO, tal cual
+          // el catálogo -- el IVA de la compra se recupera con la factura, así que sumarlo
+          // acá inventaría un costo que la obra no tuvo (revertido el 11/09).
+          precio_unitario: m?.precio_unitario ?? null,
         }
       })
       const { error } = await supabase.from('movimientos_stock').insert(filas)
@@ -6199,8 +6252,9 @@ export function PanelStock() {
                 <input type="number" min="0" value={alta.cantidad} onChange={e => setAlta(p => ({ ...p, cantidad: e.target.value }))} />
               </div>
               <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                {/* Tiene que decir "sin IVA": al entregarlo a una obra la app le suma el 19%,
-                    así que cargar acá un precio que ya lo trae lo contaría dos veces. */}
+                {/* Tiene que decir "sin IVA": este precio es el costo con el que el material
+                    entra a la obra, y los costos van netos. Cargar acá un precio con IVA
+                    haría ver la obra más cara de lo que fue. */}
                 <label>Precio por unidad (sin IVA)</label>
                 <input type="number" min="0" value={alta.precio_unitario} onChange={e => setAlta(p => ({ ...p, precio_unitario: e.target.value }))} />
               </div>
@@ -6217,8 +6271,8 @@ export function PanelStock() {
           <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Vale de entrega</p>
           <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.45 }}>
             Lo que sale de la bodega hacia una obra, y en manos de quién. Recién en este momento el material
-            se convierte en costo de esa obra — al comprarlo todavía no se sabía a cuál iba. Se le suma el
-            IVA, para que cueste lo mismo que si se hubiera comprado directo para esa obra.
+            se convierte en costo de esa obra — al comprarlo todavía no se sabía a cuál iba. Se valoriza sin
+            IVA, igual que las compras directas: ese IVA se recupera con la factura, así que no es costo.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -6244,8 +6298,7 @@ export function PanelStock() {
 
             {vale.lineas.map((l, i) => {
               const m = materiales.find(x => x.id === l.materialId)
-              const neto = m && Number(l.cantidad) > 0 ? Number(l.cantidad) * (m.precio_unitario || 0) : 0
-              const subtotal = Math.round(neto * (1 + IVA_PCT / 100))
+              const subtotal = m && Number(l.cantidad) > 0 ? Number(l.cantidad) * (m.precio_unitario || 0) : 0
               return (
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                   <div className="field" style={{ flex: 1, minWidth: 180 }}>
@@ -6265,7 +6318,7 @@ export function PanelStock() {
                   </div>
                   <span style={{ fontSize: 12, color: subtotal > 0 ? 'var(--text)' : 'var(--muted)', paddingBottom: 8, minWidth: 150 }}>
                     {subtotal > 0
-                      ? <>{fmtMoney(neto)} + IVA = <strong>{fmtMoney(subtotal)}</strong></>
+                      ? <><strong>{fmtMoney(subtotal)}</strong> <span style={{ color: 'var(--muted)' }}>sin IVA</span></>
                       : m && !m.precio_unitario ? 'sin precio' : ''}
                   </span>
                   {vale.lineas.length > 1 && (
@@ -7487,7 +7540,10 @@ export function PanelConsultasIA() {
       obras: resumenObras.filter(o => o.activa).map(o => ({
         nombre: o.obra, cliente: o.cliente, estado: o.estadoObra,
         presupuestoTotal: o.presupuestoTotal, cobrado: o.cobrado, faltaPorCobrar: o.faltaPorCobrar,
-        gastoCompras: o.gastoCompras, gastoSubcontratos: o.gastoSubcontratos, manoDeObra: o.manoDeObra, saldo: o.saldo,
+        // Los dos: sin el neto la IA rearma el saldo con el bruto y le da otro número al
+        // que muestra la pestaña Obras.
+        gastoComprasPagado: o.gastoCompras, gastoComprasCostoSinIva: o.gastoComprasNeto,
+        gastoSubcontratos: o.gastoSubcontratos, manoDeObra: o.manoDeObra, saldo: o.saldo,
         fechaInicio: o.fechaInicio, fechaFin: o.fechaFin, garantiaHasta: o.garantiaHasta,
       })),
       semanaPagoActual,
