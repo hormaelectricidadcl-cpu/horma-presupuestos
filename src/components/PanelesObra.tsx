@@ -5017,8 +5017,8 @@ function ComoVaLaPlata({ o }: { o: ResumenObra }) {
           tono={o.margen < 0 ? 'var(--danger)' : 'var(--success)'}
         />
         <Linea
-          etiqueta="Saldo de caja"
-          detalle="Esta sí es plata de verdad: lo que el cliente ya abonó menos lo que la obra lleva gastado. Lo de arriba es una proyección; esto es lo que pasó por la cuenta."
+          etiqueta="Saldo de la obra"
+          detalle={`Lo que el cliente ya abonó (${fmtMoney(o.cobrado)}) menos lo que la obra cuesta. A diferencia de la proyección de arriba, parte de la plata que de verdad entró.${o.subcontratosPorPagar > 0 ? ` Ojo: los subcontratos se descuentan por lo CONTRATADO, no por lo pagado, así que acá adentro hay ${fmtMoney(o.subcontratosPorPagar)} comprometidos que todavía no salieron de la cuenta.` : ''}`}
           valor={fmtMoney(o.saldo)}
           tono={o.saldo < 0 ? 'var(--danger)' : 'var(--success)'}
         />
