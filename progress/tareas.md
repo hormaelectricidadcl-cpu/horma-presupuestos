@@ -4,10 +4,12 @@
 
 ---
 
-# PLAN PARA LA PRÓXIMA SESIÓN — armado el 11/09/2026
+# PLAN PARA LA PRÓXIMA SESIÓN — armado el 11/09/2026, actualizado el mismo día tras confirmar con Gustavo
+que las compras van con factura y los subcontratistas no facturan ni boletean
 
-> Todo lo del 09 al 11/09 está en producción y verificado. Esto es lo que sigue, en orden.
-> El porqué de cada decisión está en `decisiones.md`, entradas 2026-09-09 y 2026-09-11.
+> Todo del 09 al 11/09 (los primeros 10 commits, hasta `ce16915`) está en producción y verificado.
+> Esto es lo que sigue, en el orden en que conviene hacerlo. El porqué de cada punto está en `decisiones.md`.
+> **Nada de este bloque se ejecutó todavía** -- es plan puro, para la próxima sesión.
 
 ## BLOQUE 0 — Datos, sin código. No depende de mí y son minutos
 Son los que hacen que los números de la app dejen de mentir.
@@ -28,7 +30,37 @@ Son los que hacen que los números de la app dejen de mentir.
    entrados como PDF externo, sin categoría). Mientras no la tengan, su avance mezcla trabajo y materiales.
    Hay un selector por ítem en Avance de obra.
 
-## BLOQUE 1 — Lo primero a construir: PDF consolidado del vigente
+## BLOQUE 1 — LA CORRECCIÓN FISCAL: costos en NETO, y REVERTIR el +19% de bodega de ayer
+Ver `decisiones.md` 2026-09-11 (revisado) para el detalle completo y los números verificados. Resumen:
+
+Gustavo confirmó que **todas las compras de materiales van con factura** (el IVA se recupera, no es costo
+real) y que **los subcontratistas no facturan ni boletean** (su pago sí es costo completo, sin ajuste).
+
+Eso significa que el arreglo de ayer ("sumarle 19% al material que sale de bodega") quedó al revés: igualaba
+la bodega hacia arriba, hacia el bruto de las compras directas, cuando el bruto era el número equivocado.
+Hay que:
+
+1. **Revertir el ×19% del vale de bodega** (`guardarVale` en `PanelesObra.tsx`, y su preview "neto + IVA =
+   subtotal"). El material vuelve a valorizarse a su precio neto tal cual está en el catálogo.
+2. **Dividir por 1,19 las compras directas** (`gastoCompras`) al calcular `saldo` y `margen` en
+   `calcularResumenObras`. `gastoSubcontratos` **no cambia** — ahí el monto completo ya es el costo real.
+3. **Separar "cuánto salió del banco" de "cuánto costó de verdad".** La tarjeta "Compras" debería seguir
+   mostrando el bruto (para cuadrar caja); margen y saldo usan el neto por dentro. Decidir en la ejecución si
+   se muestran los dos números o uno con una nota, como ya se hace con "IVA a apartar".
+4. **Agregar una explicación visible en la app** — pedido explícito de Alexandra: "definitivamente tenemos
+   que meter la parte fiscal y contable". Un texto breve cerca del margen: los materiales se cuentan sin IVA
+   porque se recuperan vía factura; los subcontratistas se cuentan completos porque no facturan. Mismo
+   patrón que la ayuda que ya existe para "IVA a apartar" y el tour de Avance de obra.
+5. **Verificar contra Supabase, obra por obra**, como todo lo de plata. Ya está precalculado el impacto sobre
+   los datos del 11/09 (antes de cargar nada nuevo): el margen sube en las 5 obras activas, **+$817.221** en
+   total — O'Higgins +$415.325, Camino turístico +$266.161, Pasaje rinconada +$97.684, Geronimo Alderete
+   +$38.051, Luis Carrera +$0. Esta plata no es nueva: ya la ganaron: la app la estaba contando como gastada.
+
+**Riesgo a revisar antes de aplicar:** se confirmó que las compras RECIENTES llevan IVA en el monto (razón
+monto/desglose = 1,19 casi exacta). No se revisó compra por compra las más viejas. Vale una pasada rápida
+por las 44 antes de aplicar el cambio, o aplicarlo y corregir la que aparezca rara.
+
+## BLOQUE 2 — PDF consolidado del vigente
 Un PDF que muestre **presupuesto original + adicionales = total vigente**.
 
 Es lo que Gustavo pidió y no tuvo respuesta: "en vez de 14 son 17... eso que se sumaron, ¿cómo se los muestro
@@ -36,9 +68,7 @@ al cliente?". Hoy el PDF de un adicional lleva solo el adicional, así que para 
 cliente de palabra cómo se llegó al total. **Es lo único que bloquea cobrar un adicional sin discusión.**
 Los datos ya están: original, adicionales enganchados por `origen_id`, y sus ítems.
 
-## BLOQUE 2 — Lo que hace que Gustavo cargue las compras
-**Compras pagadas por Gustavo y su reembolso.**
-
+## BLOQUE 3 — Compras pagadas por Gustavo y su reembolso
 Lo pidió él mismo y el mecanismo se impone solo: "si yo hago unas compras y yo no cargo, entonces no me van a
 transferir". Su ejemplo: gastó $2.100.000 con su tarjeta de crédito y le transfieren eso.
 
@@ -46,51 +76,64 @@ Existe a medias: `reportes_compras` ya tiene quién pagó y si fue reembolsada, 
 Pero **de 44 compras, 43 figuran como de la empresa** y solo 1 tiene pagador (Fabriel). Falta que sea fácil
 marcarlo al cargar, y una vista de cuánto se le debe a Gustavo esta semana.
 
-## BLOQUE 3 — Necesita una decisión ANTES de construir
-**Gastos variables desde el Reporte Diario, con lectura por IA.**
-
-Pedido de Gustavo: hoy solo se cargan desde el Estado de Resultados y él vive en el Reporte Diario ("es lo
-que más uso, yo estoy cargando toda vaina ahí"). El criterio es correcto: la herramienta va donde está el
-hábito.
+## BLOQUE 4 — Gastos variables desde el Reporte Diario, con lectura por IA
+Necesita una decisión ANTES de construir. Pedido de Gustavo: hoy solo se cargan desde el Estado de
+Resultados y él vive en el Reporte Diario ("es lo que más uso, yo estoy cargando toda vaina ahí"). El
+criterio es correcto: la herramienta va donde está el hábito.
 
 **Pero primero hay que decidir la regla de qué va dónde**, porque la confusión ya existe: Combustible, Peaje,
 Herramientas, Trompo y Cortadora de cerámica están cargados como **compras contra una obra**, mientras
 `gastos_variables` tiene su propia categoría "Combustible". Si se agrega el botón sin resolver esto, quedan
-dos botones al lado que hacen cosas parecidas y se elige mal.
+dos botones al lado que hacen cosas parecidas y se elige mal. La regla ya existe escrita en la ayuda del
+Estado de Resultados ("los gastos fijos y variables son de toda la empresa, no de una obra"), solo que no se
+ve donde se carga.
 
-La regla ya existe escrita en la ayuda del Estado de Resultados ("los gastos fijos y variables son de toda la
-empresa, no de una obra"), solo que no se ve donde se carga.
-
-Además necesita **migración** (`gastos_variables` no tiene campo para el comprobante) y una **función de
-Cloudflare nueva** para leer la boleta, que **no se puede probar en local** — queda sin verificar hasta
-producción.
+Lo que hay que construir, una vez decidida la regla:
+- **Sección en el Reporte Diario**, igual que Compras o Subcontratos — trabajo conocido, mismo patrón.
+- **Migración chica**: `gastos_variables` no tiene campo para el comprobante. Agregarlo, como ya lo tienen
+  las compras.
+- **Lector por IA**: hay patrón (`parse-comprobante.js` ya lee monto y fecha de un comprobante de
+  transferencia), pero una boleta de bencina no es lo mismo y necesita su propio prompt.
+- **Ojo**: las Cloudflare Functions no se pueden probar en local en este proyecto — la función nueva queda
+  sin verificar hasta que alguien la use en producción. Decirlo explícito al entregar, no asumir que
+  "probablemente funciona".
 
 *Arreglo barato que se puede hacer ya, sin decidir nada: poner esa frase de la regla donde se carga una
 compra, para frenar que sigan entrando peajes como materiales de obra.*
 
+## BLOQUE 5 — Bitácora de cambios por obra y por cliente
+Idea de Alexandra (10/09), pensada para cuando haya más volumen: una línea de tiempo por obra/cliente que
+diga qué cambió y cuándo (se sumó un adicional, se cargó un subcontrato, se marcó con IVA), con clic para ir
+a ese momento. Hoy el único rastro de un cambio es que el número cambió, sin decir cuándo ni por qué —
+encontrado varias veces esta semana (el pago mal cargado a Gabriel, el objetivo del 25% que se sacó).
+
+## BLOQUE 6 — Barra de avance por adicional
+Pedido de Gustavo: "de los adicionales se te van tachando, pero debería aparecer... el avance del presupuesto
+adicional". Hoy el avance del trabajo mezcla original y adicionales en un solo porcentaje. Los ítems ya están
+agrupados por fase ("Adicional HRM-..."), así que el dato existe — falta mostrar la barra por grupo. Barato.
+
 ## DECISIONES ABIERTAS (no son tareas, son preguntas a responder)
 
-- **¿Las compras se hacen con factura o con boleta?** Determina si el IVA de compra se recupera. Hoy la app
-  no lo distingue, y el margen compara **venta neta contra costos con IVA**. Es una asimetría real, anotada a
-  propósito el 11/09 y sin resolver. Si un día el margen parece bajo, viene de acá.
 - **¿Qué hacer con los materiales duplicados por nombre?** Ya hay dos brocas iguales de proveedores distintos
   ("BROCA SDS PLUS 4P 6 X 210MM HEMIC" y "BROCA SDS PLUS 6 X 260 KAVE"). Gustavo lo anticipó: "vamos a tener
   1.500 tipos de cables cuando usamos 10". El catálogo se llena con el nombre literal de la boleta.
 - **¿Qué quiso decir Gustavo con "no quiero que salga WhatsApp, web"?** Abierta desde el 08/09. Podría cambiar
   la prioridad de mandar presupuestos por correo.
+- ~~¿Las compras son con factura o con boleta?~~ **RESUELTA el 11/09: con factura, siempre.** Ver Bloque 1.
+- ~~¿Los subcontratistas facturan?~~ **RESUELTA el 11/09: no, ni factura ni boleta, por ahora.** Su costo no
+  se ajusta.
 
 ## ANOTADO, SIN PRIORIDAD (no construir salvo que se pida)
 
-Barra de avance por adicional · bitácora de cambios por obra y por cliente · poder **modificar** un adicional
-(hoy solo se borra) · catálogo de servicios en el presupuestador (el código está comentado esperando
-reconexión a BD) · aviso en "+ Agregar cuenta", que le reemplaza el presupuesto a una obra que va por el campo
-(Alexis, Camino turístico y Geronimo) · "Crear adicionales" también en el detalle de la obra · correo al
-cliente desde la ficha (**0 de 43 clientes tienen correo cargado** — capturar correos antes de construir el
-envío).
+Poder **modificar** un adicional (hoy solo se borra) · catálogo de servicios en el presupuestador (el código
+está comentado esperando reconexión a BD) · aviso en "+ Agregar cuenta", que le reemplaza el presupuesto a
+una obra que va por el campo (Alexis, Camino turístico y Geronimo) · "Crear adicionales" también en el
+detalle de la obra · correo al cliente desde la ficha (**0 de 43 clientes tienen correo cargado** — capturar
+correos antes de construir el envío).
 
 > **Límite que puso Alexandra el 11/09 y conviene respetar:** "no podemos sumar tantas vainas tampoco
-> nosotros... si las opciones son infinitas, la gente va a pensar infinitamente". De unos 18 pedidos se
-> construyeron 8. El resto está acá a propósito, sin construir.
+> nosotros... si las opciones son infinitas, la gente va a pensar infinitamente". De unos 20 pedidos se
+> construyeron 8 hasta ahora. El resto está acá a propósito, sin construir hasta que se pida.
 
 ---
 

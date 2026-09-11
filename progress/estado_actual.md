@@ -50,6 +50,19 @@ la gente va a pensar infinitamente"*. De los ~18 pedidos que salieron, quedaron 
   (ya hay dos brocas iguales de proveedores distintos) · el aviso de "+ Agregar cuenta" · "Crear adicionales"
   en el detalle de la obra · correo al cliente desde la ficha (0 de 43 clientes tienen correo cargado).
 
+### AGREGADO el mismo día, después de conversar sobre la mecánica del IVA — CAMBIA LA PRIORIDAD
+Gustavo confirmó dos cosas: **todas las compras van con factura** (el IVA se recupera, no es costo real) y
+**los subcontratistas no facturan ni boletean** (su pago sí es costo completo). Con eso:
+
+- **El arreglo de ayer sobre el IVA de bodega queda REVERTIDO, no vigente.** Ver `decisiones.md` 2026-09-11
+  (revisado). Igualaba las dos rutas de materiales hacia el bruto; con las compras confirmadas como factura,
+  el arreglo correcto es al revés — bajar todo a neto, no subir la bodega.
+- **Nuevo Bloque 1 del plan, antes del PDF consolidado**: pasar compras (no subcontratos) a neto en
+  saldo/margen, revertir el ×19% del vale, y agregar una explicación visible en la app de por qué se cuenta
+  así — pedido explícito: *"definitivamente tenemos que meter la parte fiscal y contable"*. Impacto ya
+  calculado contra Supabase: **+$817.221 de margen real en las 5 obras activas**, sin cargar nada nuevo.
+- El plan completo, reordenado en 6 bloques, está en `tareas.md` bajo "PLAN PARA LA PRÓXIMA SESIÓN".
+
 ## POR DÓNDE SEGUIR — miércoles 09/09/2026 (traspaso para sesión nueva)
 
 **Todo lo de esta sesión está en producción y verificado ahí**, no solo commiteado. Seis commits, del

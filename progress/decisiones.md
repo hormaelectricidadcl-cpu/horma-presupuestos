@@ -30,7 +30,50 @@ No hay ninguna regla que mantener: si el contrato está bien escrito, el número
 neto $2.706.000 − contrato $1.088.550 = **$1.617.450 (59,8%)** al pactar, y hoy el margen va en **$1.005.638
 (37,2%)** después de $611.812 en materiales.
 
-## 2026-09-11 — El material que sale de bodega a una obra se carga con IVA
+## 2026-09-11 (revisado) — Los costos de materiales van en NETO en toda la app; se revierte el +19% de bodega
+Gustavo confirmó dos cosas que cierran la pregunta que había quedado abierta:
+- **Todas las compras de materiales van con factura.** Verificado además contra los datos: las compras
+  recientes cargadas dan monto/desglose = 1,19 casi exacto (1,1896 a 1,1901), confirmando que el monto
+  guardado en `reportes_compras` es el TOTAL de la factura, con IVA incluido, y el desglose de ítems viene
+  neto. El IVA de esas compras se recupera vía crédito fiscal: no es costo real de la obra.
+- **Los subcontratistas (Gabriel, Endy, etc.) no facturan ni dan boleta, por ahora.** Su pago no tiene IVA
+  que recuperar -- el monto que se les paga ES el costo real completo. `gastoSubcontratos` no se toca.
+
+**Esto revierte la decisión de hoy más temprano** ("el material que sale de bodega se carga con IVA"). Esa
+corrección igualaba las dos rutas de materiales (compra directa vs. bodega) sumándole el 19% a la bodega para
+que calzara con la compra directa -- pero la compra directa estaba en BRUTO, que es el número equivocado.
+Con las compras confirmadas como factura, el arreglo correcto es el opuesto: bajar la compra directa a neto,
+no subir la bodega a bruto. Las dos rutas siguen coincidiendo, pero coinciden abajo.
+
+**Decidido, para ejecutar en la próxima sesión (sin código todavía):**
+1. Revertir el `× (1 + IVA_PCT/100)` en el vale de bodega (`guardarVale` en PanelesObra.tsx) y en su
+   preview ("neto + IVA = subtotal"). El material vuelve a valorizarse a su precio neto tal cual está en el
+   catálogo, sin multiplicar. Se puede borrar la constante `IVA_PCT` si no queda otro uso.
+2. En `calcularResumenObras`: `gastoCompras` usado en `saldo` y `margen` pasa a ser
+   `comprasObra.reduce(...) / 1.19` (neto) -- no el monto crudo. `gastoSubcontratos` NO cambia.
+3. **Separar "cuánto salió del banco" de "cuánto costó de verdad".** La tarjeta "Compras" debería seguir
+   mostrando el bruto (lo que realmente se transfirió/pagó, útil para cuadrar caja), mientras que margen y
+   saldo usan el neto por dentro. Falta decidir en la ejecución si se muestran los dos números o solo uno
+   con una nota aclaratoria -- mismo criterio que ya se usa con "IVA a apartar".
+4. Impacto verificado a mano contra Supabase el 11/09, sobre las 5 obras activas (antes de cargar nada
+   nuevo): margen sube en las 5, total **+$817.221** repartido así -- O'Higgins +$415.325, Camino turístico
+   +$266.161, Pasaje rinconada +$97.684, Geronimo Alderete +$38.051, Luis Carrera +$0 (sin compras cargadas
+   todavía). Esta plata no es nueva: ya la ganaron, la app solo la estaba contando como gastada.
+5. **Agregar una explicación visible en la app**, no solo el cálculo por dentro -- pedido explícito de
+   Alexandra ("definitivamente tenemos que meter la parte fiscal y contable"). Un texto breve cerca del
+   margen que diga algo como "El costo de materiales se cuenta sin IVA porque se recupera vía factura; el
+   de los subcontratistas se cuenta completo porque ellos no facturan" -- mismo patrón que el texto de ayuda
+   que ya existe para "IVA a apartar" y para el tour de Avance de obra.
+
+**Riesgo a revisar en la ejecución:** esto asume que TODAS las compras cargadas hasta hoy llevan IVA en el
+monto. Confirmado en las recientes (razón 1,19 exacta); no se revisaron las más viejas una por una. Si
+alguna vieja se cargó ya neta por error, para esa quedaría restando un 19% de más. Vale una pasada rápida
+por las 44 compras antes de aplicar el cambio, o aceptar el riesgo y corregir la que aparezca rara.
+
+## 2026-09-11 — El material que sale de bodega a una obra se carga con IVA *(REVERTIDO más abajo -- ver
+la entrada de arriba. Se deja completa para no perder el razonamiento: era correcta para el problema que
+resolvía en ese momento, "las dos rutas de bodega daban costos distintos", solo que se hizo antes de saber
+que las compras son con factura.)*
 Pedido de Gustavo, y la razón es mejor que la objeción que yo había puesto (que el IVA de compra es
 recuperable y sumarlo lo contaría dos veces). El punto real: **hoy el mismo material cuesta 19% menos si pasa
 por bodega que si se compra directo contra la obra.** Las compras directas se cargan por el monto del
