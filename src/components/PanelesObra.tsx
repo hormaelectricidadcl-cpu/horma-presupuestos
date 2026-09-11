@@ -4959,11 +4959,15 @@ export type ResumenObra = ReturnType<typeof calcularResumenObras>[number]
 function ComoVaLaPlata({ o }: { o: ResumenObra }) {
   if (o.margen == null || o.neto == null) return null
   const costoTotal = o.gastoComprasNeto + o.gastoMaterialesBodega + o.manoDeObra
+  // Las explicaciones vienen PLEGADAS. "A Gustavo no le gusta leer mucho" (Alexandra,
+  // 11/09): con los seis párrafos abiertos la cuenta quedaba enterrada en texto y había que
+  // scrollear tres pantallas para ver seis números. Abiertas solo si alguien las pide.
+  const [conDetalle, setConDetalle] = useState(false)
   const Linea = ({ etiqueta, valor, detalle, fuerte, tono }: { etiqueta: string; valor: string; detalle?: string; fuerte?: boolean; tono?: string }) => (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: fuerte ? 13.5 : 13, fontWeight: fuerte ? 700 : 500 }}>{etiqueta}</p>
-        {detalle && <p style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.4, marginTop: 2 }}>{detalle}</p>}
+        {conDetalle && detalle && <p style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.4, marginTop: 2 }}>{detalle}</p>}
       </div>
       <span className="font-display" style={{ fontSize: fuerte ? 18 : 14, fontWeight: fuerte ? 800 : 600, color: tono || 'var(--text)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
         {valor}
@@ -5024,8 +5028,15 @@ function ComoVaLaPlata({ o }: { o: ResumenObra }) {
         />
       </div>
 
-      {(o.gastoCompras > 0 || o.gastoSubcontratos > 0) && (
-        <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginTop: 12 }}>
+      <button
+        onClick={() => setConDetalle(x => !x)}
+        style={{ marginTop: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--primary)' }}
+      >
+        {conDetalle ? 'Ocultar qué significa cada número ▲' : '¿Qué significa cada número? ▼'}
+      </button>
+
+      {conDetalle && (o.gastoCompras > 0 || o.gastoSubcontratos > 0) && (
+        <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginTop: 10 }}>
           Los materiales se cuentan <strong>sin IVA</strong> porque las compras van con factura y ese IVA vuelve
           como crédito fiscal: no es plata que la obra perdió. Los subcontratistas se cuentan <strong>completos</strong>,
           porque no facturan ni boletean. La tarjeta “Compras” de la pestaña Obras muestra lo que salió del banco,
