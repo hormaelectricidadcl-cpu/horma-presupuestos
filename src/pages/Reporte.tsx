@@ -134,6 +134,21 @@ function defaultTrabajadores(nombres: string[]): Record<string, TrabajadorState>
   return base
 }
 
+// Una fila ya guardada de `reportes_diarios` traducida al estado del formulario. Se usa
+// desde los DOS lados que arman ese estado -- al cargar el día y al llegar la lista real de
+// trabajadores -- porque tenerla escrita dos veces fue justo lo que causó el bug del 11/09.
+type FilaDiaria = { trabajador: string; presente: boolean; obra: string | null; fraccion_jornada: number | null; viatico: boolean | null; adelanto_monto: number | null; tipo_pago: string | null }
+function estadoDesdeFila(row: FilaDiaria): TrabajadorState {
+  return {
+    presente: row.presente,
+    obra: row.obra || '',
+    fraccionJornada: row.fraccion_jornada ?? 1,
+    viatico: row.viatico ?? false,
+    adelanto: row.adelanto_monto != null ? String(row.adelanto_monto) : '',
+    tipoPago: row.tipo_pago === 'pago_semanal' ? 'pago_semanal' : 'adelanto',
+  }
+}
+
 /* ─── Reporte page ──────────────────────────────────── */
 interface Props {
   token: string | null
@@ -175,6 +190,8 @@ export default function Reporte({ token, embedded = false }: Props) {
   // CUALQUIER otra cosa (un cobro, una compra) exigiría completar la obra de cada trabajador
   // activo aunque nadie haya tocado su fila, incluso en una obra nueva sin gente trabajando aún.
   const [trabajadoresTocados, setTrabajadoresTocados] = useState<Set<string>>(new Set())
+  // Las filas de asistencia del día tal como vinieron de la base. Ver `estadoDesdeFila`.
+  const filasDelDiaRef = useRef<FilaDiaria[]>([])
   // Un sábado guardado ANTES de que existiera la regla del viático quedó con viatico=true en
   // la base. La pantalla ya lo muestra como "sin viático" (así se va a guardar), pero Pago
   // Semanal sigue leyendo el dato viejo hasta que se guarde el día -- si no se avisa, las dos
@@ -217,18 +234,13 @@ export default function Reporte({ token, embedded = false }: Props) {
       supabase.from('gastos_variables').select('*').eq('fecha', f).eq('origen', 'reporte_diario').order('created_at'),
     ])
 
+    // Se guardan crudas: si la lista real de trabajadores todavía no llegó, este `base` se
+    // arma con la lista de respaldo y el efecto que la carga después necesita estas filas
+    // para no pisar con "presente por defecto" a alguien que sí tenía su día cargado.
+    filasDelDiaRef.current = (dia || []) as FilaDiaria[]
     const base = defaultTrabajadores(trabajadorNombresRef.current)
     for (const row of dia || []) {
-      if (base[row.trabajador]) {
-        base[row.trabajador] = {
-          presente: row.presente,
-          obra: row.obra || '',
-          fraccionJornada: row.fraccion_jornada ?? 1,
-          viatico: row.viatico ?? false,
-          adelanto: row.adelanto_monto != null ? String(row.adelanto_monto) : '',
-          tipoPago: row.tipo_pago === 'pago_semanal' ? 'pago_semanal' : 'adelanto',
-        }
-      }
+      if (base[row.trabajador]) base[row.trabajador] = estadoDesdeFila(row as FilaDiaria)
     }
     setTrabajadores(base)
     setTrabajadoresColapsados(new Set((dia || []).map(row => row.trabajador)))
@@ -333,7 +345,15 @@ export default function Reporte({ token, embedded = false }: Props) {
         setTrabajadorNombres(nombres)
         setTrabajadores(prev => {
           const next = defaultTrabajadores(nombres)
-          for (const nombre of nombres) if (prev[nombre]) next[nombre] = prev[nombre]
+          for (const nombre of nombres) {
+            if (prev[nombre]) { next[nombre] = prev[nombre]; continue }
+            // Trabajador que la lista de respaldo no tenía (uno nuevo, como Yasmani): si ese
+            // día ya estaba cargado, su estado sale de lo guardado. Sin esto quedaba en
+            // "presente sin obra" y bloqueaba el guardado del día entero con "Falta indicar
+            // la obra de algún trabajador presente", aunque nadie hubiera tocado asistencia.
+            const fila = filasDelDiaRef.current.find(f => f.trabajador === nombre)
+            if (fila) next[nombre] = estadoDesdeFila(fila)
+          }
           return next
         })
       }
@@ -452,7 +472,7 @@ export default function Reporte({ token, embedded = false }: Props) {
     if (id) setCobrosColapsados(prev => { if (!prev.has(id)) return prev; const next = new Set(prev); next.delete(id); return next })
   }
   function quitarCobro(idx: number) {
-    if (!window.confirm('¿Seguro que quieres quitar este cobro?')) return
+    if (!window.confirm('¿Seguro que quieres quitar este abono?')) return
     setCobros(prev => prev.filter((_, i) => i !== idx))
   }
 
@@ -611,11 +631,11 @@ export default function Reporte({ token, embedded = false }: Props) {
 
     const cobrosValidos = cobros.filter(c => c.cliente.trim() || c.monto.trim())
     if (cobrosValidos.some(c => !c.cliente.trim() || !c.monto.trim())) {
-      alert('Cada cobro necesita cliente y monto.')
+      alert('Cada abono necesita cliente y monto.')
       return
     }
     if (cobrosValidos.some(c => montoInvalido(c.monto))) {
-      alert('El monto de algún cobro no es válido.')
+      alert('El monto de algún abono no es válido.')
       return
     }
 
@@ -851,7 +871,7 @@ export default function Reporte({ token, embedded = false }: Props) {
         supabase.from('abonos_cuenta').select('id').eq('fecha', fecha).eq('monto', Number(c.fila.monto)).eq('cuenta_id', c.cuentaId).limit(1),
       ])
       if ((enLegado && enLegado.length > 0) || (enMismaCuenta && enMismaCuenta.length > 0)) {
-        if (!window.confirm(`Ya hay un cobro de $${c.fila.monto} para "${c.fila.obra}" el ${fecha} cargado antes. ¿Es un pago distinto (seguir) o el mismo cargado dos veces (cancelar)?`)) {
+        if (!window.confirm(`Ya hay un abono de $${c.fila.monto} para "${c.fila.obra}" el ${fecha} cargado antes. ¿Es un pago distinto (seguir) o el mismo cargado dos veces (cancelar)?`)) {
           setSaving(false)
           return
         }
@@ -867,7 +887,7 @@ export default function Reporte({ token, embedded = false }: Props) {
           : Promise.resolve({ data: [] as { id: string }[] }),
       ])
       if ((enMismoLegado && enMismoLegado.length > 0) || (enCuenta && enCuenta.length > 0)) {
-        if (!window.confirm(`Ya hay un cobro de $${c.monto} para "${c.obra}" el ${fecha} cargado antes. ¿Es un pago distinto (seguir) o el mismo cargado dos veces (cancelar)?`)) {
+        if (!window.confirm(`Ya hay un abono de $${c.monto} para "${c.obra}" el ${fecha} cargado antes. ¿Es un pago distinto (seguir) o el mismo cargado dos veces (cancelar)?`)) {
           setSaving(false)
           return
         }
@@ -883,7 +903,7 @@ export default function Reporte({ token, embedded = false }: Props) {
         cobrosParaLegado.map(c => ({ fecha, obra: c.obra || null, cliente: c.cliente.trim(), monto: Number(c.monto), comprobante_url: c.comprobanteUrl || null }))
       )
       if (e3) {
-        setError('Error al guardar los cobros. Intenta de nuevo.')
+        setError('Error al guardar los abonos. Intenta de nuevo.')
         setSaving(false)
         return
       }
@@ -898,7 +918,7 @@ export default function Reporte({ token, embedded = false }: Props) {
         cobrosNuevosParaCuenta.map(c => ({ cuenta_id: c.cuentaId, fecha, monto: Number(c.fila.monto), comprobante_url: c.fila.comprobanteUrl || null }))
       )
       if (e3b) {
-        setError('Error al guardar los cobros. Intenta de nuevo.')
+        setError('Error al guardar los abonos. Intenta de nuevo.')
         setSaving(false)
         return
       }
@@ -1380,7 +1400,12 @@ export default function Reporte({ token, embedded = false }: Props) {
             )}
 
             {/* Cobros del día */}
-            <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Cobros del día</h2>
+            <h2 style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>Abonos del cliente</h2>
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
+              Cada pago que entra de un cliente por una obra. Se llama abono y no cobro porque casi nunca se
+              paga todo junto: en la pestaña Obras vas a ver estos mismos montos en “Abonado” y lo que queda
+              en “Por abonar”.
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
               {cobros.map((c, idx) => {
                 const colapsado = !!(c.id && c.origen !== 'abono_cuenta' && cobrosColapsados.has(c.id))
@@ -1407,7 +1432,7 @@ export default function Reporte({ token, embedded = false }: Props) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <span style={{ fontSize: 13 }}><strong>{c.cliente}</strong> — {c.obra}: {c.monto ? `$${Number(c.monto).toLocaleString('es-CL')}` : ''}</span>
                       <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        Este cobro ya vive en la cuenta por cobrar de esta obra — para corregirlo, hazlo desde la pestaña Obras → Detalle, no acá.
+                        Este abono ya vive en la cuenta por cobrar de esta obra — para corregirlo, hazlo desde la pestaña Obras → Detalle, no acá.
                       </span>
                     </div>
                   ) : (
@@ -1496,7 +1521,7 @@ export default function Reporte({ token, embedded = false }: Props) {
               })}
             </div>
             <button type="button" className="btn btn-secondary" onClick={agregarCobro} style={{ width: '100%', marginBottom: 28 }}>
-              + Agregar cobro
+              + Agregar abono
             </button>
 
             {/* Abonos a subcontratistas. 11/09: antes decía "Subcontratos" a secas y Gustavo

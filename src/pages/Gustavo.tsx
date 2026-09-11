@@ -509,17 +509,25 @@ interface Props {
 export default function Gustavo({ token }: Props) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
-  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas' | 'banco_contenido' | 'consultas_ia' | 'iva'
+  type SeccionGustavo = 'pendientes' | 'notas' | 'presupuestos' | 'reporte' | 'clientes' | 'obras' | 'avance_obra' | 'calendario' | 'stock' | 'pagos' | 'trabajadores' | 'resultados' | 'boletas' | 'facturas' | 'presupuestador' | 'ideas' | 'banco_contenido' | 'consultas_ia' | 'iva' | 'mas'
   const [seccion, setSeccion] = useState<SeccionGustavo | null>(null)
   const [modoPresupuestador, setModoPresupuestador] = useState<'simple' | 'etapas'>('simple')
 
   const tokenValido = token === GUSTAVO_TOKEN
 
+  // Estas cuatro viven dentro de "Más herramientas" y no sueltas en el menú: eran dieciocho
+  // tarjetas en una pantalla y encontrar la que se usa todos los días costaba más que
+  // abrirla (Alexandra, 11/09). Son justamente las que no se tocan a diario.
+  const SECCIONES_AGRUPADAS: { key: SeccionGustavo; label: string; icon: NavIconName }[] = [
+    { key: 'consultas_ia', label: 'Consultas IA', icon: 'consultas' },
+    { key: 'calendario', label: 'Calendario', icon: 'calendario' },
+    { key: 'ideas', label: 'Ideas de contenido', icon: 'ideas' },
+    { key: 'banco_contenido', label: 'Banco de contenido', icon: 'banco_contenido' },
+  ]
+
   const SECCIONES: { key: SeccionGustavo; label: string; icon: NavIconName; destacado?: boolean }[] = [
     { key: 'pendientes', label: 'Mis tareas', icon: 'tareas' },
-    { key: 'consultas_ia', label: 'Consultas IA', icon: 'consultas' },
     { key: 'reporte', label: 'Reporte diario', icon: 'reporte' },
-    { key: 'calendario', label: 'Calendario', icon: 'calendario' },
     { key: 'obras', label: 'Obras', icon: 'obras' },
     { key: 'avance_obra', label: 'Avance de obra', icon: 'avance' },
     { key: 'pagos', label: 'Pago semanal', icon: 'pago' },
@@ -528,15 +536,14 @@ export default function Gustavo({ token }: Props) {
     { key: 'facturas', label: 'Facturas', icon: 'facturas' },
     { key: 'presupuestos', label: 'Mis presupuestos', icon: 'presupuestos' },
     { key: 'presupuestador', label: 'Hacer presupuesto', icon: 'presupuestador', destacado: true },
-    { key: 'ideas', label: 'Ideas de contenido', icon: 'ideas' },
-    { key: 'banco_contenido', label: 'Banco de contenido', icon: 'banco_contenido' },
     { key: 'notas', label: 'Mis notas', icon: 'notas' },
     { key: 'clientes', label: 'Clientes', icon: 'clientes' },
     { key: 'stock', label: 'Stock', icon: 'stock' },
     { key: 'resultados', label: 'Estado de resultados', icon: 'resultados' },
     { key: 'iva', label: 'IVA del mes', icon: 'facturas' },
+    { key: 'mas', label: 'Más herramientas', icon: 'ideas' },
   ]
-  const seccionActual = SECCIONES.find(s => s.key === seccion)
+  const seccionActual = [...SECCIONES, ...SECCIONES_AGRUPADAS].find(s => s.key === seccion)
 
   const loadPendientes = async () => {
     setLoading(true)
@@ -627,7 +634,26 @@ export default function Gustavo({ token }: Props) {
               <h2 className="font-display" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--primary)' }}>{seccionActual?.label}</h2>
             </div>
 
-            {seccion === 'notas' ? (
+            {seccion === 'mas' ? (
+              /* Submenú del grupo: las mismas tarjetas, una pantalla más adentro. */
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
+                {SECCIONES_AGRUPADAS.map(sub => (
+                  <button
+                    key={sub.key}
+                    onClick={() => setSeccion(sub.key)}
+                    className="card"
+                    style={{
+                      padding: '18px 16px', border: 'none', cursor: 'pointer',
+                      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 16,
+                      textAlign: 'left', background: 'var(--surface)',
+                    }}
+                  >
+                    <NavIcon name={sub.icon} color="#14213D" />
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{sub.label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : seccion === 'notas' ? (
               <NotasRapidas autor="gustavo" />
             ) : seccion === 'boletas' ? (
               <PanelBoletas />
